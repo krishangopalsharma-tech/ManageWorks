@@ -13,6 +13,19 @@ const fmtDateTime = (val) => {
   return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
+const fmtAmt = (val) => {
+  if (!val && val !== 0) return '—'
+  return '₹' + Number(val).toLocaleString('en-IN', { maximumFractionDigits: 2 })
+}
+
+// Roman-numeral ordinal: Ist, IInd, IIIrd, IVth …
+const romanOrdinal = (n) => {
+  const nums = ['I','II','III','IV','V','VI','VII','VIII','IX','X']
+  const suf  = ['st','nd','rd','th','th','th','th','th','th','th']
+  if (n >= 1 && n <= 10) return nums[n - 1] + suf[n - 1]
+  return `${n}th`
+}
+
 const progressPct = (item) => {
   const total = item.supplied_quantity || 0
   const req = item.qty || 0
@@ -21,22 +34,22 @@ const progressPct = (item) => {
 }
 
 // ── State ──────────────────────────────────────────────────────────────────
-const searchQuery   = ref('')
-const itemFilter    = ref('')
-const allWorks      = ref([])
-const selectedWork  = ref(null)
-const isLoading     = ref(true)
+const searchQuery  = ref('')
+const itemFilter   = ref('')
+const allWorks     = ref([])
+const selectedWork = ref(null)
+const isLoading    = ref(true)
 
 // Lot entry popup
-const lotPopupItem  = ref(null)
-const entryForm     = ref({ quantity: '', challan_no: '', udm_entry: '', isSubmitting: false, status: '' })
+const lotPopupItem = ref(null)
+const entryForm    = ref({ quantity: '', challan_no: '', udm_entry: '', isSubmitting: false, status: '' })
 
 // Edit-work modal
-const editingWork      = ref(null)
-const isSavingWork     = ref(false)
-const workSaveStatus   = ref('')
+const editingWork       = ref(null)
+const isSavingWork      = ref(false)
+const workSaveStatus    = ref('')
 const showDeleteConfirm = ref(false)
-const isDeletingWork   = ref(false)
+const isDeletingWork    = ref(false)
 
 // ── Load works ─────────────────────────────────────────────────────────────
 const loadWorks = async () => {
@@ -68,10 +81,7 @@ const filteredWorks = computed(() => {
 const selectWork = (work) => {
   itemFilter.value   = ''
   lotPopupItem.value = null
-  selectedWork.value = {
-    ...work,
-    items: work.items.map(i => ({ ...i }))
-  }
+  selectedWork.value = { ...work, items: work.items.map(i => ({ ...i })) }
 }
 
 // ── Item filtering ─────────────────────────────────────────────────────────
@@ -90,11 +100,8 @@ const openLotPopup = (item) => {
   lotPopupItem.value = item
   entryForm.value = { quantity: '', challan_no: '', udm_entry: '', isSubmitting: false, status: '' }
 }
-const closeLotPopup = () => {
-  lotPopupItem.value = null
-}
+const closeLotPopup = () => { lotPopupItem.value = null }
 
-// ── Submit a lot entry ─────────────────────────────────────────────────────
 const submitEntry = async () => {
   const item = lotPopupItem.value
   const form = entryForm.value
@@ -114,9 +121,7 @@ const submitEntry = async () => {
     if (!item.entries) item.entries = []
     item.entries.unshift(res.data)
     item.supplied_quantity = (item.supplied_quantity || 0) + parseFloat(form.quantity)
-    form.quantity   = ''
-    form.challan_no = ''
-    form.udm_entry  = ''
+    form.quantity = ''; form.challan_no = ''; form.udm_entry = ''
     form.status = 'ok'
     setTimeout(() => { form.status = '' }, 2500)
   } catch (e) {
@@ -129,9 +134,26 @@ const submitEntry = async () => {
 }
 
 // ── Edit-work modal ────────────────────────────────────────────────────────
+const editingWorkTotalAmount = computed(() => {
+  if (!editingWork.value) return 0
+  const work = allWorks.value.find(w => w.id === editingWork.value.id)
+  if (!work) return 0
+  return work.items.reduce((sum, i) => sum + (i.total_amount || 0), 0)
+})
+
+const editingBillsTotal = computed(() =>
+  (editingWork.value?.bills || []).reduce((sum, b) => sum + (parseFloat(b.bill_amount) || 0), 0)
+)
+
+const editingFinancialPct = computed(() => {
+  const total = editingWorkTotalAmount.value
+  if (!total) return 0
+  return Math.round(editingBillsTotal.value / total * 1000) / 10
+})
+
 const openEditWork = (work) => {
   editingWork.value = {
-    id: work.id,
+    id:                 work.id,
     loa_number:         work.loa_number         || '',
     tender_number:      work.tender_number      || '',
     date:               work.date               || '',
@@ -140,24 +162,58 @@ const openEditWork = (work) => {
     contractor_address: work.contractor_address || '',
     date_of_completion: work.date_of_completion || '',
     consignee:          work.consignee          || '',
+    extensions: (work.extensions || []).map(e => ({ ...e })),
+    bills:      (work.bills      || []).map(b => ({ ...b })),
   }
-  workSaveStatus.value   = ''
+  workSaveStatus.value    = ''
   showDeleteConfirm.value = false
 }
+
 const closeEditWork = () => {
   editingWork.value       = null
   showDeleteConfirm.value = false
   workSaveStatus.value    = ''
 }
+
+const addExtension = () => {
+  editingWork.value.extensions.push({ extension_date: '' })
+}
+const removeExtension = (idx) => {
+  editingWork.value.extensions.splice(idx, 1)
+}
+
+const addBill = () => {
+  editingWork.value.bills.push({ bill_amount: '' })
+}
+const removeBill = (idx) => {
+  editingWork.value.bills.splice(idx, 1)
+}
+
 const saveWork = async () => {
   isSavingWork.value   = true
   workSaveStatus.value = ''
   try {
-    const { id, ...payload } = editingWork.value
+    const { id, extensions, bills, ...fields } = editingWork.value
+    const payload = {
+      ...fields,
+      extensions: extensions
+        .filter(e => (e.extension_date || '').trim())
+        .map(e => ({ extension_date: e.extension_date.trim() })),
+      bills: bills
+        .filter(b => parseFloat(b.bill_amount) > 0)
+        .map(b => ({ bill_amount: parseFloat(b.bill_amount) })),
+    }
     await axios.patch(`/api/update-work/works/${id}/`, payload)
     const idx = allWorks.value.findIndex(w => w.id === id)
-    if (idx !== -1) allWorks.value[idx] = { ...allWorks.value[idx], ...editingWork.value }
-    if (selectedWork.value?.id === id) Object.assign(selectedWork.value, editingWork.value)
+    if (idx !== -1) {
+      allWorks.value[idx] = {
+        ...allWorks.value[idx],
+        ...fields,
+        extensions: payload.extensions,
+        bills:      payload.bills,
+      }
+    }
+    if (selectedWork.value?.id === id) Object.assign(selectedWork.value, fields)
     workSaveStatus.value = 'saved'
     setTimeout(closeEditWork, 900)
   } catch (e) {
@@ -167,6 +223,7 @@ const saveWork = async () => {
     isSavingWork.value = false
   }
 }
+
 const deleteWork = async () => {
   isDeletingWork.value = true
   try {
@@ -185,13 +242,11 @@ const deleteWork = async () => {
 <template>
   <div class="bg-white rounded-2xl soft-shadow min-h-full w-full flex flex-col overflow-hidden">
 
-    <!-- ══ WORK LIST VIEW ═══════════════════════════════════════════ -->
+    <!-- ══ WORK LIST VIEW ════════════════════════════════════════════ -->
     <template v-if="!selectedWork">
-
       <div class="px-8 pt-7 pb-5 border-b border-gray-100">
         <h1 class="text-2xl font-bold text-gray-900 tracking-tight mb-1">Update Work Database</h1>
         <p class="text-gray-400 text-sm font-medium mb-5">Search, then open a work to submit lot entries against its items.</p>
-
         <div class="flex items-center bg-gray-50 border border-gray-200 rounded-2xl px-5 py-3 focus-within:ring-2 focus-within:ring-[#0071e3]/20 focus-within:border-[#0071e3] focus-within:bg-white transition-all">
           <div class="i-carbon-search text-gray-400 text-base mr-3 flex-shrink-0"></div>
           <input v-model="searchQuery" type="text"
@@ -262,14 +317,11 @@ const deleteWork = async () => {
           </p>
         </div>
       </template>
-
     </template>
 
-    <!-- ══ ITEMS VIEW ══════════════════════════════════════════════ -->
+    <!-- ══ ITEMS VIEW ════════════════════════════════════════════════ -->
     <template v-else>
       <div class="flex flex-col h-full animate-fade-in">
-
-        <!-- Header -->
         <div class="px-8 pt-6 pb-5 border-b border-gray-100">
           <div class="flex items-start justify-between gap-6">
             <div class="flex items-start gap-4 min-w-0">
@@ -302,7 +354,6 @@ const deleteWork = async () => {
                 </div>
               </div>
             </div>
-            <!-- Item filter -->
             <div class="flex-shrink-0 flex items-center bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 w-56 focus-within:ring-2 focus-within:ring-[#0071e3]/20 focus-within:border-[#0071e3] transition-all">
               <div class="i-carbon-filter text-gray-400 mr-2 text-sm"></div>
               <input v-model="itemFilter" type="text" placeholder="Filter items..."
@@ -311,7 +362,6 @@ const deleteWork = async () => {
           </div>
         </div>
 
-        <!-- Items table -->
         <div class="overflow-y-auto flex-1">
           <table class="w-full border-collapse">
             <thead class="bg-gray-50 sticky top-0 z-10">
@@ -329,52 +379,33 @@ const deleteWork = async () => {
               <template v-if="filteredItems.length === 0">
                 <tr><td colspan="7" class="p-8 text-center text-gray-400 text-xs font-medium">No items match your filter.</td></tr>
               </template>
-
               <tr v-for="item in filteredItems" :key="item.id"
                 class="border-b border-gray-100 hover:bg-gray-50/60 transition-colors">
-
-                <!-- Schedule badge -->
                 <td class="px-4 py-3.5 text-center">
-                  <span class="rounded-md px-2 py-1 text-[10px] font-bold bg-gray-100 text-gray-600">
-                    {{ item.schedule }}
-                  </span>
+                  <span class="rounded-md px-2 py-1 text-[10px] font-bold bg-gray-100 text-gray-600">{{ item.schedule }}</span>
                 </td>
-
-                <!-- Serial number -->
-                <td class="px-4 py-3.5 text-center text-[11px] font-semibold text-gray-500">
-                  {{ item.serial_number }}
-                </td>
-
-                <!-- Description + lot count -->
+                <td class="px-4 py-3.5 text-center text-[11px] font-semibold text-gray-500">{{ item.serial_number }}</td>
                 <td class="px-4 py-3.5">
                   <p class="text-xs font-medium line-clamp-2 leading-relaxed text-gray-800">{{ item.item_desc }}</p>
                   <p class="text-[10px] mt-0.5 text-gray-400">
                     {{ (item.entries || []).length }} lot{{ (item.entries || []).length === 1 ? '' : 's' }} submitted
                   </p>
                 </td>
-
-                <!-- Required qty -->
                 <td class="px-4 py-3.5 text-right text-xs font-semibold text-gray-600">
                   {{ item.qty }} <span class="font-normal text-gray-400">{{ item.unit }}</span>
                 </td>
-
-                <!-- Submitted qty -->
                 <td class="px-4 py-3.5 text-right text-xs font-semibold"
                   :class="(item.supplied_quantity || 0) > (item.qty || 0) ? 'text-orange-500' : 'text-gray-800'">
                   {{ item.supplied_quantity || 0 }}
                   <span class="font-normal text-gray-400">{{ item.unit }}</span>
-                  <span v-if="(item.supplied_quantity || 0) > (item.qty || 0)"
-                    class="ml-1 text-[9px] text-orange-400 font-bold">OVER</span>
+                  <span v-if="(item.supplied_quantity || 0) > (item.qty || 0)" class="ml-1 text-[9px] text-orange-400 font-bold">OVER</span>
                 </td>
-
-                <!-- Progress bar -->
                 <td class="px-4 py-3.5">
                   <div class="flex items-center gap-2">
                     <div class="flex-1 h-1.5 rounded-full overflow-hidden bg-gray-100">
                       <div class="h-full rounded-full transition-all duration-500"
                         :class="progressPct(item) > 100 ? 'bg-orange-400' : 'bg-[#0071e3]'"
-                        :style="{ width: Math.min(progressPct(item), 100) + '%' }">
-                      </div>
+                        :style="{ width: Math.min(progressPct(item), 100) + '%' }"></div>
                     </div>
                     <span class="text-[10px] font-bold w-8 text-right"
                       :class="progressPct(item) > 100 ? 'text-orange-500' : 'text-gray-500'">
@@ -382,94 +413,166 @@ const deleteWork = async () => {
                     </span>
                   </div>
                 </td>
-
-                <!-- Action button -->
                 <td class="px-4 py-3.5 text-center">
                   <button @click="openLotPopup(item)"
                     class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-[#0071e3]/10 hover:bg-[#0071e3]/20 text-[#0071e3] text-[11px] font-semibold transition-all">
-                    <div class="i-carbon-add text-xs"></div>
-                    Add Lot
+                    <div class="i-carbon-add text-xs"></div> Add Lot
                   </button>
                 </td>
               </tr>
-
             </tbody>
           </table>
         </div>
-
       </div>
     </template>
 
-    <!-- ══ EDIT WORK MODAL ═══════════════════════════════════════════ -->
+    <!-- ══ EDIT WORK MODAL ════════════════════════════════════════════ -->
     <Teleport to="body">
       <div v-if="editingWork" class="fixed inset-0 z-50 flex items-center justify-center p-6"
         style="background:rgba(0,0,0,0.4);backdrop-filter:blur(8px);" @click.self="closeEditWork">
         <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto animate-modal">
 
-          <div class="flex items-center justify-between px-8 pt-7 pb-5 border-b border-gray-100">
-            <div>
-              <h2 class="text-lg font-semibold text-gray-900">Edit Work Details</h2>
-              <p class="text-xs text-gray-400 mt-0.5 font-medium">Update work-level information</p>
-            </div>
+          <!-- Header -->
+          <div class="flex items-center justify-between px-7 pt-5 pb-4 border-b border-gray-100">
+            <h2 class="text-base font-bold text-gray-900">Edit Work Details</h2>
             <button @click="closeEditWork"
-              class="w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-all">
+              class="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-all">
               <div class="i-carbon-close text-sm"></div>
             </button>
           </div>
 
-          <div class="px-8 py-6 flex flex-col gap-4">
-            <div class="grid grid-cols-2 gap-4">
-              <div class="flex flex-col gap-1.5">
-                <label class="text-xs font-semibold text-gray-500 tracking-wide">LOA Number</label>
-                <input v-model="editingWork.loa_number" type="text" placeholder="00890160138264"
-                  class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
+          <div class="px-7 py-5 flex flex-col gap-4">
+
+            <!-- Work fields -->
+            <div class="grid grid-cols-2 gap-3">
+              <div class="flex flex-col gap-1">
+                <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">LOA Number</label>
+                <input v-model="editingWork.loa_number" type="text"
+                  class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
               </div>
-              <div class="flex flex-col gap-1.5">
-                <label class="text-xs font-semibold text-gray-500 tracking-wide">Tender Number</label>
+              <div class="flex flex-col gap-1">
+                <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Tender Number</label>
                 <input v-model="editingWork.tender_number" type="text"
-                  class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
+                  class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
               </div>
-            </div>
-            <div class="grid grid-cols-2 gap-4">
-              <div class="flex flex-col gap-1.5">
-                <label class="text-xs font-semibold text-gray-500 tracking-wide">Date</label>
+              <div class="flex flex-col gap-1">
+                <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Date</label>
                 <input v-model="editingWork.date" type="text"
-                  class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
+                  class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
               </div>
-              <div class="flex flex-col gap-1.5">
-                <label class="text-xs font-semibold text-gray-500 tracking-wide">Contract Agreement</label>
+              <div class="flex flex-col gap-1">
+                <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Contract Agreement</label>
                 <input v-model="editingWork.contract_agreement" type="text"
-                  class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
+                  class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
               </div>
             </div>
-            <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-semibold text-gray-500 tracking-wide">Contractor Name</label>
+            <div class="flex flex-col gap-1">
+              <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Contractor Name</label>
               <input v-model="editingWork.contractor_name" type="text"
-                class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
+                class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
             </div>
-            <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-semibold text-gray-500 tracking-wide">Contractor Address</label>
+            <div class="flex flex-col gap-1">
+              <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Contractor Address</label>
               <textarea v-model="editingWork.contractor_address" rows="2"
-                class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all resize-none"></textarea>
+                class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all resize-none"></textarea>
             </div>
-            <div class="grid grid-cols-2 gap-4">
-              <div class="flex flex-col gap-1.5">
-                <label class="text-xs font-semibold text-gray-500 tracking-wide">Date of Completion</label>
+            <div class="grid grid-cols-2 gap-3">
+              <div class="flex flex-col gap-1">
+                <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Date of Completion</label>
                 <input v-model="editingWork.date_of_completion" type="text"
-                  class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
+                  class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
               </div>
-              <div class="flex flex-col gap-1.5">
-                <label class="text-xs font-semibold text-gray-500 tracking-wide">Consignee</label>
+              <div class="flex flex-col gap-1">
+                <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Consignee</label>
                 <input v-model="editingWork.consignee" type="text"
-                  class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
+                  class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
               </div>
             </div>
+
+            <!-- ── Extension Dates ── -->
+            <div class="rounded-2xl border border-gray-100 bg-gray-50/60 p-4">
+              <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2">
+                  <div class="i-carbon-calendar text-gray-400 text-sm"></div>
+                  <span class="text-xs font-bold text-gray-600 uppercase tracking-wide">Extension Dates</span>
+                </div>
+                <button @click="addExtension"
+                  class="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white border border-gray-200 hover:border-[#0071e3] hover:text-[#0071e3] text-gray-500 text-[11px] font-semibold transition-all shadow-sm">
+                  <div class="i-carbon-add text-xs"></div> Add
+                </button>
+              </div>
+              <div v-if="editingWork.extensions.length === 0"
+                class="text-center py-3 text-[11px] text-gray-400 font-medium">
+                No extensions yet. Click Add to record one.
+              </div>
+              <div v-else class="flex flex-col gap-2">
+                <div v-for="(ext, idx) in editingWork.extensions" :key="idx"
+                  class="flex items-center gap-2">
+                  <span class="text-[11px] font-bold text-gray-500 w-16 flex-shrink-0">
+                    {{ romanOrdinal(idx + 1) }} Ext.
+                  </span>
+                  <input v-model="ext.extension_date" type="text" placeholder="e.g. 2027-09-04"
+                    class="flex-1 bg-white border border-gray-200 rounded-xl px-3.5 py-2 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 transition-all">
+                  <button @click="removeExtension(idx)"
+                    class="flex-shrink-0 w-7 h-7 rounded-full bg-white border border-gray-200 hover:border-[#ff3b30]/50 hover:text-[#ff3b30] text-gray-400 flex items-center justify-center transition-all">
+                    <div class="i-carbon-close text-xs"></div>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- ── Bills Released ── -->
+            <div class="rounded-2xl border border-gray-100 bg-gray-50/60 p-4">
+              <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2">
+                  <div class="i-carbon-currency-rupee text-gray-400 text-sm"></div>
+                  <span class="text-xs font-bold text-gray-600 uppercase tracking-wide">Bills Released</span>
+                </div>
+                <button @click="addBill"
+                  class="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white border border-gray-200 hover:border-[#0071e3] hover:text-[#0071e3] text-gray-500 text-[11px] font-semibold transition-all shadow-sm">
+                  <div class="i-carbon-add text-xs"></div> Add
+                </button>
+              </div>
+              <div v-if="editingWork.bills.length === 0"
+                class="text-center py-3 text-[11px] text-gray-400 font-medium">
+                No bills yet. Click Add to record a released bill.
+              </div>
+              <div v-else class="flex flex-col gap-2">
+                <div v-for="(bill, idx) in editingWork.bills" :key="idx"
+                  class="flex items-center gap-2">
+                  <span class="text-[11px] font-bold text-gray-500 w-16 flex-shrink-0">Bill {{ idx + 1 }}</span>
+                  <div class="flex-1 relative">
+                    <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-semibold text-gray-400">₹</span>
+                    <input v-model="bill.bill_amount" type="number" min="0" step="0.01" placeholder="0.00"
+                      class="w-full bg-white border border-gray-200 rounded-xl pl-7 pr-3.5 py-2 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 transition-all">
+                  </div>
+                  <button @click="removeBill(idx)"
+                    class="flex-shrink-0 w-7 h-7 rounded-full bg-white border border-gray-200 hover:border-[#ff3b30]/50 hover:text-[#ff3b30] text-gray-400 flex items-center justify-center transition-all">
+                    <div class="i-carbon-close text-xs"></div>
+                  </button>
+                </div>
+                <!-- Bills summary -->
+                <div class="mt-1 pt-3 border-t border-gray-200 flex items-center justify-between">
+                  <span class="text-[11px] font-semibold text-gray-400">Total Released</span>
+                  <div class="flex items-center gap-3">
+                    <span class="text-sm font-bold text-gray-800">{{ fmtAmt(editingBillsTotal) }}</span>
+                    <span class="text-[10px] text-gray-400">of {{ fmtAmt(editingWorkTotalAmount) }}</span>
+                    <span class="text-xs font-bold px-2 py-0.5 rounded-full"
+                      :class="editingFinancialPct >= 100 ? 'bg-[#34c759]/15 text-[#34c759]' : 'bg-[#0071e3]/10 text-[#0071e3]'">
+                      {{ editingFinancialPct }}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
           </div>
 
-          <div class="px-8 pb-7 pt-4 flex items-center justify-between gap-3 border-t border-gray-100">
+          <!-- Footer -->
+          <div class="px-7 pb-6 pt-3 flex items-center justify-between gap-3 border-t border-gray-100">
             <div>
               <button v-if="!showDeleteConfirm" @click="showDeleteConfirm = true"
-                class="px-5 py-2.5 rounded-full border border-[#ff3b30]/30 text-[#ff3b30] text-xs font-semibold hover:bg-[#ff3b30]/8 transition-all flex items-center gap-1.5">
+                class="px-4 py-2 rounded-full border border-[#ff3b30]/30 text-[#ff3b30] text-xs font-semibold hover:bg-[#ff3b30]/8 transition-all flex items-center gap-1.5">
                 <div class="i-carbon-trash-can text-xs"></div> Delete Work
               </button>
               <div v-else class="flex items-center gap-2">
@@ -486,9 +589,9 @@ const deleteWork = async () => {
             <div class="flex items-center gap-3">
               <p v-if="workSaveStatus === 'error'" class="text-xs font-medium text-[#ff3b30]">Failed to save.</p>
               <button @click="closeEditWork"
-                class="px-6 py-2.5 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-800 text-sm font-semibold transition-all">Cancel</button>
+                class="px-5 py-2.5 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-800 text-sm font-semibold transition-all">Cancel</button>
               <button @click="saveWork" :disabled="isSavingWork"
-                class="px-6 py-2.5 rounded-full text-white text-sm font-semibold shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center gap-2"
+                class="px-5 py-2.5 rounded-full text-white text-sm font-semibold shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center gap-2"
                 :class="workSaveStatus === 'saved' ? 'bg-[#34c759] shadow-[#34c759]/30' : 'bg-dark-active shadow-black/20'">
                 <div v-if="isSavingWork" class="i-carbon-circle-dash animate-spin"></div>
                 <span>{{ workSaveStatus === 'saved' ? 'Saved!' : 'Save Changes' }}</span>
@@ -506,34 +609,24 @@ const deleteWork = async () => {
         style="background:rgba(0,0,0,0.45);backdrop-filter:blur(8px);" @click.self="closeLotPopup">
         <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col animate-modal">
 
-          <!-- Popup header: item info -->
           <div class="px-8 pt-7 pb-5 border-b border-gray-100 flex-shrink-0">
             <div class="flex items-start justify-between gap-4">
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2 mb-1.5">
-                  <span class="text-[10px] font-bold bg-[#0071e3]/10 text-[#0071e3] px-2 py-1 rounded-md">
-                    {{ lotPopupItem.schedule }}
-                  </span>
+                  <span class="text-[10px] font-bold bg-[#0071e3]/10 text-[#0071e3] px-2 py-1 rounded-md">{{ lotPopupItem.schedule }}</span>
                   <span class="text-[10px] font-semibold text-gray-400">S.No {{ lotPopupItem.serial_number }}</span>
                 </div>
-                <h2 class="text-sm font-semibold text-gray-900 leading-snug line-clamp-2">
-                  {{ lotPopupItem.item_desc }}
-                </h2>
-                <!-- Progress summary -->
+                <h2 class="text-sm font-semibold text-gray-900 leading-snug line-clamp-2">{{ lotPopupItem.item_desc }}</h2>
                 <div class="flex items-center gap-4 mt-3">
                   <div class="flex flex-col">
                     <span class="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Required</span>
-                    <span class="text-sm font-bold text-gray-800">
-                      {{ lotPopupItem.qty }} <span class="text-xs font-normal text-gray-400">{{ lotPopupItem.unit }}</span>
-                    </span>
+                    <span class="text-sm font-bold text-gray-800">{{ lotPopupItem.qty }} <span class="text-xs font-normal text-gray-400">{{ lotPopupItem.unit }}</span></span>
                   </div>
                   <div class="w-px h-8 bg-gray-100"></div>
                   <div class="flex flex-col">
                     <span class="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Submitted</span>
-                    <span class="text-sm font-bold"
-                      :class="(lotPopupItem.supplied_quantity || 0) > (lotPopupItem.qty || 0) ? 'text-orange-500' : 'text-[#0071e3]'">
-                      {{ lotPopupItem.supplied_quantity || 0 }}
-                      <span class="text-xs font-normal text-gray-400">{{ lotPopupItem.unit }}</span>
+                    <span class="text-sm font-bold" :class="(lotPopupItem.supplied_quantity || 0) > (lotPopupItem.qty || 0) ? 'text-orange-500' : 'text-[#0071e3]'">
+                      {{ lotPopupItem.supplied_quantity || 0 }} <span class="text-xs font-normal text-gray-400">{{ lotPopupItem.unit }}</span>
                     </span>
                   </div>
                   <div class="w-px h-8 bg-gray-100"></div>
@@ -543,11 +636,9 @@ const deleteWork = async () => {
                       <div class="flex-1 h-2 rounded-full overflow-hidden bg-gray-100">
                         <div class="h-full rounded-full transition-all duration-500"
                           :class="progressPct(lotPopupItem) > 100 ? 'bg-orange-400' : 'bg-[#0071e3]'"
-                          :style="{ width: Math.min(progressPct(lotPopupItem), 100) + '%' }">
-                        </div>
+                          :style="{ width: Math.min(progressPct(lotPopupItem), 100) + '%' }"></div>
                       </div>
-                      <span class="text-xs font-bold w-10 text-right"
-                        :class="progressPct(lotPopupItem) > 100 ? 'text-orange-500' : 'text-gray-600'">
+                      <span class="text-xs font-bold w-10 text-right" :class="progressPct(lotPopupItem) > 100 ? 'text-orange-500' : 'text-gray-600'">
                         {{ progressPct(lotPopupItem) }}%
                       </span>
                     </div>
@@ -561,51 +652,35 @@ const deleteWork = async () => {
             </div>
           </div>
 
-          <!-- Popup body: scrollable -->
           <div class="flex-1 overflow-y-auto px-8 py-6 flex flex-col gap-6">
-
-            <!-- Submit new lot form -->
             <div>
               <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                <div class="i-carbon-add-filled text-[#0071e3]"></div>
-                Submit New Lot
+                <div class="i-carbon-add-filled text-[#0071e3]"></div> Submit New Lot
               </h3>
               <div class="grid grid-cols-3 gap-3 mb-4">
                 <div class="flex flex-col gap-1.5">
-                  <label class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-                    Quantity <span class="text-red-400">*</span>
-                  </label>
-                  <input
-                    v-model="entryForm.quantity"
-                    type="number" step="0.01" min="0.01"
-                    placeholder="e.g. 20"
+                  <label class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Quantity <span class="text-red-400">*</span></label>
+                  <input v-model="entryForm.quantity" type="number" step="0.01" min="0.01" placeholder="e.g. 20"
                     class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-semibold text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
                 </div>
                 <div class="flex flex-col gap-1.5">
                   <label class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Challan No.</label>
-                  <input
-                    v-model="entryForm.challan_no"
-                    type="text" placeholder="RN.56091..."
+                  <input v-model="entryForm.challan_no" type="text" placeholder="RN.56091..."
                     class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
                 </div>
                 <div class="flex flex-col gap-1.5">
                   <label class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">UDM Entry</label>
-                  <input
-                    v-model="entryForm.udm_entry"
-                    type="text" placeholder="dt. 05-01..."
+                  <input v-model="entryForm.udm_entry" type="text" placeholder="dt. 05-01..."
                     class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
                 </div>
               </div>
-              <button
-                @click="submitEntry"
-                :disabled="entryForm.isSubmitting"
+              <button @click="submitEntry" :disabled="entryForm.isSubmitting"
                 class="w-full py-3 rounded-2xl text-white text-sm font-bold shadow shadow-black/15 hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center justify-center gap-2"
                 :class="{
                   'bg-dark-active':  !entryForm.status,
                   'bg-[#34c759]':    entryForm.status === 'ok',
                   'bg-[#ff3b30]':    ['error','denied','invalid'].includes(entryForm.status),
-                }"
-              >
+                }">
                 <div v-if="entryForm.isSubmitting" class="i-carbon-circle-dash animate-spin"></div>
                 <span v-else-if="entryForm.status === 'ok'">Lot Submitted Successfully!</span>
                 <span v-else-if="entryForm.status === 'denied'">Access Denied</span>
@@ -615,21 +690,17 @@ const deleteWork = async () => {
               </button>
             </div>
 
-            <!-- Lot history -->
             <div>
               <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-                <div class="i-carbon-list text-gray-400"></div>
-                Lot History
+                <div class="i-carbon-list text-gray-400"></div> Lot History
                 <span class="ml-1 text-[10px] font-bold bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
                   {{ (lotPopupItem.entries || []).length }}
                 </span>
               </h3>
-
               <div v-if="(lotPopupItem.entries || []).length === 0"
                 class="py-8 text-center text-xs text-gray-400 font-medium bg-gray-50 rounded-2xl border border-dashed border-gray-200">
-                No lots submitted yet. Use the form above to submit the first one.
+                No lots submitted yet.
               </div>
-
               <div v-else class="rounded-2xl border border-gray-100 overflow-hidden">
                 <table class="w-full text-xs">
                   <thead class="bg-gray-50 text-[10px] text-gray-400 font-bold uppercase tracking-widest border-b border-gray-100">
@@ -643,17 +714,14 @@ const deleteWork = async () => {
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-gray-50">
-                    <tr v-for="(entry, idx) in lotPopupItem.entries" :key="entry.id"
-                      class="hover:bg-gray-50/60 transition-colors">
+                    <tr v-for="(entry, idx) in lotPopupItem.entries" :key="entry.id" class="hover:bg-gray-50/60 transition-colors">
                       <td class="px-4 py-2.5 text-gray-400 font-semibold">{{ idx + 1 }}</td>
                       <td class="px-4 py-2.5 text-right font-bold text-gray-800">
                         {{ entry.quantity }} <span class="text-gray-400 font-normal">{{ lotPopupItem.unit }}</span>
                       </td>
                       <td class="px-4 py-2.5 text-gray-600 font-medium">{{ entry.challan_no || '—' }}</td>
                       <td class="px-4 py-2.5 text-gray-600 font-medium">{{ entry.udm_entry || '—' }}</td>
-                      <td class="px-4 py-2.5 text-gray-600 font-medium">
-                        {{ entry.submitted_by_user?.username || '—' }}
-                      </td>
+                      <td class="px-4 py-2.5 text-gray-600 font-medium">{{ entry.submitted_by_user?.username || '—' }}</td>
                       <td class="px-4 py-2.5 text-gray-400">{{ fmtDateTime(entry.submitted_at) }}</td>
                     </tr>
                   </tbody>
@@ -661,8 +729,7 @@ const deleteWork = async () => {
                     <tr>
                       <td class="px-4 py-2.5 text-[10px] font-bold text-gray-400 uppercase tracking-wide">Total</td>
                       <td class="px-4 py-2.5 text-right font-bold text-gray-800">
-                        {{ lotPopupItem.supplied_quantity || 0 }}
-                        <span class="text-gray-400 font-normal">{{ lotPopupItem.unit }}</span>
+                        {{ lotPopupItem.supplied_quantity || 0 }} <span class="text-gray-400 font-normal">{{ lotPopupItem.unit }}</span>
                       </td>
                       <td colspan="4"></td>
                     </tr>
@@ -670,7 +737,6 @@ const deleteWork = async () => {
                 </table>
               </div>
             </div>
-
           </div>
 
         </div>
@@ -681,8 +747,8 @@ const deleteWork = async () => {
 </template>
 
 <style scoped>
-@keyframes fade-in  { from { opacity:0; transform:translateY(6px);          } to { opacity:1; transform:translateY(0);        } }
-@keyframes modal-in { from { opacity:0; transform:scale(0.96)translateY(8px);} to { opacity:1; transform:scale(1)translateY(0); } }
+@keyframes fade-in  { from { opacity:0; transform:translateY(6px);           } to { opacity:1; transform:translateY(0);        } }
+@keyframes modal-in { from { opacity:0; transform:scale(0.96)translateY(8px); } to { opacity:1; transform:scale(1)translateY(0); } }
 .animate-fade-in { animation: fade-in  0.3s cubic-bezier(.4,0,.2,1); }
 .animate-modal   { animation: modal-in 0.25s cubic-bezier(.4,0,.2,1); }
 </style>

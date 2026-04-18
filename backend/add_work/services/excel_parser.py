@@ -19,6 +19,7 @@ def parse_and_save_work_excel(file_path):
     contractor_name = safe_val(4, 1)
     contractor_address = safe_val(5, 1)
     completion_date = safe_val(6, 1)
+    consignee = safe_val(7, 1)
 
     if loa_number and Work.objects.filter(loa_number=loa_number).exists():
         raise ValueError(f"A Work document with LOA '{loa_number}' has already been uploaded.")
@@ -31,6 +32,7 @@ def parse_and_save_work_excel(file_path):
         contractor_name=contractor_name,
         contractor_address=contractor_address,
         date_of_completion=completion_date,
+        consignee=consignee,
     )
 
     df_items = pd.read_excel(file_path, skiprows=7)

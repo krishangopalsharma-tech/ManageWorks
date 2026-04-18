@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework import status, generics
 from rest_framework.exceptions import PermissionDenied
 
-from works.models import Work, WorkItem, WorkItemEntry
+from works.models import Work, WorkItem, WorkItemEntry, WorkExtension, WorkBill
 from works.serializers import WorkItemEntrySerializer, WorkEditSerializer
 
 
@@ -21,9 +21,34 @@ class WorkUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Work.objects.all()
     serializer_class = WorkEditSerializer
 
-    def perform_update(self, serializer):
-        _check_not_observer(self.request.user)
+    def partial_update(self, request, *args, **kwargs):
+        _check_not_observer(request.user)
+        instance = self.get_object()
+
+        serializer = WorkEditSerializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
         serializer.save()
+
+        # Replace extensions if provided in payload
+        if 'extensions' in request.data:
+            instance.extensions.all().delete()
+            for ext in request.data.get('extensions', []):
+                date_val = (ext.get('extension_date') or '').strip()
+                if date_val:
+                    WorkExtension.objects.create(work=instance, extension_date=date_val)
+
+        # Replace bills if provided in payload
+        if 'bills' in request.data:
+            instance.bills.all().delete()
+            for bill in request.data.get('bills', []):
+                try:
+                    amt = float(bill.get('bill_amount') or 0)
+                    if amt > 0:
+                        WorkBill.objects.create(work=instance, bill_amount=amt)
+                except (ValueError, TypeError):
+                    pass
+
+        return Response(serializer.data)
 
     def perform_destroy(self, instance):
         _check_not_observer(self.request.user)

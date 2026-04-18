@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'add_work',
     'documents',
     'users',
+    'item_progress',
 ]
 
 MIDDLEWARE = [

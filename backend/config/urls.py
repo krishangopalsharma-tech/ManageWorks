@@ -14,4 +14,5 @@ urlpatterns = [
     path('api/add-work/', include('add_work.urls')),
     path('api/documents/', include('documents.urls')),
     path('api/users/', include('users.urls')),
+    path('api/item-progress/', include('item_progress.urls')),
 ]

@@ -1,6 +1,7 @@
+from django.db.models import Sum
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from works.models import Work, WorkItem
+from works.models import Work, WorkItem, WorkBill
 
 
 class DashboardStatsView(APIView):
@@ -16,13 +17,10 @@ class DashboardStatsView(APIView):
         supply_count = 0
         exec_progress_sum = 0
         exec_count = 0
-        total_supplied_value = 0
-        total_scheduled_value = 0
 
         for item in items:
             q = item.qty or 0
             sq = item.supplied_quantity or 0
-
             item_prog = (sq / q) if q > 0 else 0
 
             sch = str(item.schedule).upper().strip() if item.schedule else ''
@@ -33,16 +31,22 @@ class DashboardStatsView(APIView):
                 exec_progress_sum += item_prog
                 exec_count += 1
 
-            rate = item.unit_rate_rs or 0
-            if q > 0 and rate > 0:
-                total_scheduled_value += q * rate
-                total_supplied_value += sq * rate
-
         supply_avg = (supply_progress_sum / supply_count * 100) if supply_count > 0 else 0
         exec_avg = (exec_progress_sum / exec_count * 100) if exec_count > 0 else 0
         overall_count = supply_count + exec_count
         overall_avg = ((supply_progress_sum + exec_progress_sum) / overall_count * 100) if overall_count > 0 else 0
-        fin_prog = (total_supplied_value / total_scheduled_value * 100) if total_scheduled_value > 0 else 0
+
+        # Financial progress: sum of released bills / total contracted amount (col H)
+        if loa_id:
+            total_work_amount = WorkItem.objects.filter(work_id=loa_id).aggregate(
+                t=Sum('total_amount'))['t'] or 0
+            bills_total = WorkBill.objects.filter(work_id=loa_id).aggregate(
+                t=Sum('bill_amount'))['t'] or 0
+        else:
+            total_work_amount = WorkItem.objects.aggregate(t=Sum('total_amount'))['t'] or 0
+            bills_total = WorkBill.objects.aggregate(t=Sum('bill_amount'))['t'] or 0
+
+        fin_prog = (bills_total / total_work_amount * 100) if total_work_amount > 0 else 0
 
         loa_list = [
             {
