@@ -539,9 +539,9 @@ select.form-field {
 .page-leave-active { opacity: 0; transition: opacity 0.15s ease; }
 
 /* Fade transition used on router-view in App.vue */
-.fade-enter-active, .fade-leave-active { transition: opacity 0.18s ease, transform 0.18s ease; }
-.fade-enter-from { opacity: 0; transform: translateY(5px); }
-.fade-leave-to  { opacity: 0; transform: translateY(-3px); }
+.fade-enter-active, .fade-leave-active { transition: opacity 0.15s ease; }
+.fade-enter-from { opacity: 0; }
+.fade-leave-to  { opacity: 0; }
 
 /* Badge / pill tag */
 .badge {

@@ -2,22 +2,38 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import axios from 'axios'
 
-const allWorks     = ref([])
+const allWorks      = ref([])
 const searchResults = ref([])
 const isLoadingWorks = ref(true)
-const isSearching  = ref(false)
-const itemSearch   = ref('')
-const workSearch   = ref('')
-const selectedIds  = ref([])
-const dropdownOpen = ref(false)
-const dropdownRef  = ref(null)
+const isSearching   = ref(false)
+const itemSearch    = ref('')
+const workSearch    = ref('')
+const selectedIds   = ref([])
+const dropdownOpen  = ref(false)
+const dropdownRef   = ref(null)
 
-// ── Load lightweight works list for dropdown ───────────────────────────────
+// ── Hover tooltip ──────────────────────────────────────────────────────────
+const hoveredItem = ref(null)
+const tooltipPos  = ref({ x: 0, y: 0 })
+let hideTimer = null
+
+const showTooltip = (item, e) => { clearTimeout(hideTimer); hoveredItem.value = item; tooltipPos.value = { x: e.clientX, y: e.clientY } }
+const moveTooltip = (e) => { tooltipPos.value = { x: e.clientX, y: e.clientY } }
+const hideTooltip = () => { hideTimer = setTimeout(() => { hoveredItem.value = null }, 120) }
+const keepTooltip = () => { clearTimeout(hideTimer) }
+
+const fmtDateTime = (val) => {
+  if (!val) return '—'
+  const d = new Date(val)
+  return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+// ── Load works list ────────────────────────────────────────────────────────
 const loadWorks = async () => {
   isLoadingWorks.value = true
   try {
     const res = await axios.get('/api/item-progress/works/')
-    allWorks.value = res.data
+    allWorks.value    = res.data
     selectedIds.value = res.data.map(w => w.id)
   } catch (e) {
     console.error(e)
@@ -26,18 +42,16 @@ const loadWorks = async () => {
   }
 }
 
-// ── Item search — called on demand, never loads all items ──────────────────
+// ── Item search ────────────────────────────────────────────────────────────
 let debounceTimer = null
 const doSearch = async () => {
   const q = itemSearch.value.trim()
   if (!q) { searchResults.value = []; return }
-
   isSearching.value = true
   try {
     const params = { q }
-    if (selectedIds.value.length && selectedIds.value.length < allWorks.value.length) {
+    if (selectedIds.value.length && selectedIds.value.length < allWorks.value.length)
       params.work_ids = selectedIds.value.join(',')
-    }
     const res = await axios.get('/api/item-progress/search/', { params })
     searchResults.value = res.data
   } catch (e) {
@@ -52,18 +66,11 @@ watch(itemSearch, () => {
   if (!itemSearch.value.trim()) { searchResults.value = []; return }
   debounceTimer = setTimeout(doSearch, 350)
 })
-
-// Re-search when work selection changes (only if a search is active)
 watch(selectedIds, () => {
-  if (itemSearch.value.trim()) {
-    clearTimeout(debounceTimer)
-    debounceTimer = setTimeout(doSearch, 200)
-  }
+  if (itemSearch.value.trim()) { clearTimeout(debounceTimer); debounceTimer = setTimeout(doSearch, 200) }
 }, { deep: true })
 
-const closeDropdown = (e) => {
-  if (dropdownRef.value && !dropdownRef.value.contains(e.target)) dropdownOpen.value = false
-}
+const closeDropdown = (e) => { if (dropdownRef.value && !dropdownRef.value.contains(e.target)) dropdownOpen.value = false }
 onMounted(() => { loadWorks(); document.addEventListener('click', closeDropdown) })
 onBeforeUnmount(() => { document.removeEventListener('click', closeDropdown); clearTimeout(debounceTimer) })
 
@@ -77,53 +84,76 @@ const filteredWorksDropdown = computed(() => {
     (w.tender_number   && w.tender_number.toLowerCase().includes(q))
   )
 })
-
 const allSelected = computed(() => selectedIds.value.length === allWorks.value.length)
-
 const dropdownLabel = computed(() => {
   if (allSelected.value) return 'All Works'
   const n = selectedIds.value.length
   if (n === 0) return 'No works selected'
-  if (n === 1) {
-    const w = allWorks.value.find(w => w.id === selectedIds.value[0])
-    return w?.loa_number || w?.contractor_name || '1 work'
-  }
+  if (n === 1) { const w = allWorks.value.find(w => w.id === selectedIds.value[0]); return w?.loa_number || w?.contractor_name || '1 work' }
   return `${n} works selected`
 })
-
 const toggleWork = (id) => {
   const idx = selectedIds.value.indexOf(id)
   if (idx >= 0) selectedIds.value.splice(idx, 1)
   else selectedIds.value.push(id)
 }
 
-// ── Cumulative stats from search results ──────────────────────────────────
+// ── Progress helpers ───────────────────────────────────────────────────────
+const isSchB = (item) => String(item.schedule || '').toUpperCase().trim().startsWith('B')
+
+// Sch-A progress = supply entries; Sch-B progress = execution entries
+const progressPct = (item) => {
+  const req  = item.qty || 0
+  if (!req) return 0
+  const done = isSchB(item) ? (item.executed_quantity || 0) : (item.supplied_quantity || 0)
+  return Math.min(Math.round((done / req) * 100), 999)
+}
+
+// ── Cumulative stats ───────────────────────────────────────────────────────
 const stats = computed(() => {
   let supplyTotal = 0, supplyDone = 0, supplyCount = 0
   let execTotal   = 0, execDone   = 0, execCount   = 0
   for (const item of searchResults.value) {
-    const sch  = String(item.schedule || '').toUpperCase().trim()
-    const req  = item.qty || 0
-    const done = item.supplied_quantity || 0
-    if (sch.startsWith('A'))      { supplyTotal += req; supplyDone += done; supplyCount++ }
-    else if (sch.startsWith('B')) { execTotal   += req; execDone   += done; execCount++ }
+    const req = item.qty || 0
+    if (!isSchB(item)) {
+      supplyTotal += req; supplyDone += item.supplied_quantity || 0; supplyCount++
+    } else {
+      execTotal += req; execDone += item.executed_quantity || 0; execCount++
+    }
   }
   const pct = (d, t) => t > 0 ? Math.round(d / t * 100) : 0
   return { supplyPct: pct(supplyDone, supplyTotal), execPct: pct(execDone, execTotal), supplyCount, execCount }
 })
 
-const progressPct = (item) => {
-  const req = item.qty || 0
-  if (!req) return 0
-  return Math.min(Math.round(((item.supplied_quantity || 0) / req) * 100), 999)
+// ── Sorting ────────────────────────────────────────────────────────────────
+const sortKey = ref('')
+const sortDir = ref('desc')
+const toggleSort = (key) => {
+  if (sortKey.value === key) { sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc' }
+  else { sortKey.value = key; sortDir.value = 'desc' }
 }
+const sortIcon = (key) => {
+  if (sortKey.value !== key) return 'i-carbon-arrows-vertical'
+  return sortDir.value === 'asc' ? 'i-carbon-arrow-up' : 'i-carbon-arrow-down'
+}
+const sortedResults = computed(() => {
+  if (!sortKey.value) return searchResults.value
+  return [...searchResults.value].sort((a, b) => {
+    let av, bv
+    if      (sortKey.value === 'qty')       { av = a.qty || 0;               bv = b.qty || 0 }
+    else if (sortKey.value === 'submitted') { av = a.supplied_quantity || 0; bv = b.supplied_quantity || 0 }
+    else if (sortKey.value === 'progress')  { av = progressPct(a);           bv = progressPct(b) }
+    else if (sortKey.value === 'entries')   { av = (a.entries||[]).length;   bv = (b.entries||[]).length }
+    return sortDir.value === 'asc' ? av - bv : bv - av
+  })
+})
 </script>
 
 <template>
-  <div class="bg-white rounded-2xl soft-shadow min-h-full w-full flex flex-col overflow-hidden">
+  <div class="bg-white rounded-2xl soft-shadow h-full w-full flex flex-col overflow-hidden">
 
     <!-- Header -->
-    <div class="px-8 pt-7 pb-5 border-b border-gray-100">
+    <div class="flex-shrink-0 px-8 pt-7 pb-5 border-b border-gray-100">
       <h1 class="text-2xl font-bold text-gray-900 tracking-tight mb-1">Item Progress</h1>
       <p class="text-gray-400 text-sm font-medium mb-5">Search and filter individual item progress across works.</p>
 
@@ -182,7 +212,7 @@ const progressPct = (item) => {
         </div>
       </div>
 
-      <!-- Progress stats pills — only when results exist -->
+      <!-- Progress stats pills -->
       <div v-if="searchResults.length > 0" class="mt-4 flex flex-wrap gap-3">
         <div class="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-xl px-4 py-2">
           <div class="w-2 h-2 rounded-full bg-[#0071e3]"></div>
@@ -223,14 +253,22 @@ const progressPct = (item) => {
             <th class="px-4 py-3 text-center w-14">Sch</th>
             <th class="px-4 py-3 text-center w-14">S.No</th>
             <th class="px-4 py-3 text-left">Item Description</th>
-            <th class="px-4 py-3 text-right w-28">Required</th>
-            <th class="px-4 py-3 text-right w-28">Submitted</th>
-            <th class="px-4 py-3 w-36">Progress</th>
-            <th class="px-4 py-3 text-center w-20">Entries</th>
+            <th @click="toggleSort('qty')" class="px-4 py-3 text-right w-28 cursor-pointer select-none hover:text-gray-600 transition-colors">
+              <div class="flex items-center justify-end gap-1">Required <div :class="sortIcon('qty')" class="text-[9px]" :style="{ opacity: sortKey === 'qty' ? 1 : 0.35 }"></div></div>
+            </th>
+            <th @click="toggleSort('submitted')" class="px-4 py-3 text-right w-28 cursor-pointer select-none hover:text-gray-600 transition-colors">
+              <div class="flex items-center justify-end gap-1">Supplied <div :class="sortIcon('submitted')" class="text-[9px]" :style="{ opacity: sortKey === 'submitted' ? 1 : 0.35 }"></div></div>
+            </th>
+            <th @click="toggleSort('progress')" class="px-4 py-3 w-36 cursor-pointer select-none hover:text-gray-600 transition-colors">
+              <div class="flex items-center gap-1">Progress <div :class="sortIcon('progress')" class="text-[9px]" :style="{ opacity: sortKey === 'progress' ? 1 : 0.35 }"></div></div>
+            </th>
+            <th @click="toggleSort('entries')" class="px-4 py-3 text-center w-20 cursor-pointer select-none hover:text-gray-600 transition-colors">
+              <div class="flex items-center justify-center gap-1">Entries <div :class="sortIcon('entries')" class="text-[9px]" :style="{ opacity: sortKey === 'entries' ? 1 : 0.35 }"></div></div>
+            </th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="item in searchResults" :key="item.id"
+          <tr v-for="item in sortedResults" :key="item.id"
             class="border-b border-gray-100 hover:bg-gray-50/60 transition-colors">
             <td class="px-4 py-3">
               <span class="text-[11px] font-semibold text-[#0071e3] bg-[#0071e3]/10 px-2 py-0.5 rounded-full whitespace-nowrap">
@@ -238,7 +276,10 @@ const progressPct = (item) => {
               </span>
             </td>
             <td class="px-4 py-3 text-center">
-              <span class="bg-gray-100 text-gray-600 rounded-md px-2 py-1 text-[10px] font-bold">{{ item.schedule }}</span>
+              <span class="rounded-md px-2 py-1 text-[10px] font-bold"
+                :class="isSchB(item) ? 'bg-green-50 text-green-700' : 'bg-blue-50 text-blue-600'">
+                {{ item.schedule }}
+              </span>
             </td>
             <td class="px-4 py-3 text-center text-[11px] text-gray-500 font-semibold">{{ item.serial_number }}</td>
             <td class="px-4 py-3">
@@ -247,18 +288,19 @@ const progressPct = (item) => {
             <td class="px-4 py-3 text-right text-xs font-semibold text-gray-600">
               {{ item.qty }} <span class="text-gray-400 font-normal">{{ item.unit }}</span>
             </td>
-            <td class="px-4 py-3 text-right text-xs font-semibold"
-              :class="(item.supplied_quantity || 0) > (item.qty || 0) ? 'text-orange-500' : 'text-gray-800'">
+            <td class="px-4 py-3 text-right text-xs font-semibold cursor-help"
+              :class="(item.supplied_quantity || 0) > (item.qty || 0) ? 'text-orange-500' : 'text-gray-800'"
+              @mouseenter="showTooltip(item, $event)" @mousemove="moveTooltip($event)" @mouseleave="hideTooltip">
               {{ item.supplied_quantity || 0 }}
               <span class="text-gray-400 font-normal">{{ item.unit }}</span>
-              <span v-if="(item.supplied_quantity || 0) > (item.qty || 0)"
-                class="ml-1 text-[9px] text-orange-400 font-bold">OVER</span>
+              <span v-if="(item.supplied_quantity || 0) > (item.qty || 0)" class="ml-1 text-[9px] text-orange-400 font-bold">OVER</span>
             </td>
-            <td class="px-4 py-3">
+            <td class="px-4 py-3 cursor-help"
+              @mouseenter="showTooltip(item, $event)" @mousemove="moveTooltip($event)" @mouseleave="hideTooltip">
               <div class="flex items-center gap-2">
                 <div class="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                   <div class="h-full rounded-full transition-all duration-500"
-                    :class="progressPct(item) > 100 ? 'bg-orange-400' : 'bg-[#0071e3]'"
+                    :class="progressPct(item) > 100 ? 'bg-orange-400' : (isSchB(item) ? 'bg-[#34c759]' : 'bg-[#0071e3]')"
                     :style="{ width: Math.min(progressPct(item), 100) + '%' }">
                   </div>
                 </div>
@@ -268,7 +310,8 @@ const progressPct = (item) => {
                 </span>
               </div>
             </td>
-            <td class="px-4 py-3 text-center">
+            <td class="px-4 py-3 text-center cursor-help"
+              @mouseenter="showTooltip(item, $event)" @mousemove="moveTooltip($event)" @mouseleave="hideTooltip">
               <span class="text-[11px] font-bold"
                 :class="(item.entries||[]).length > 0 ? 'text-[#0071e3]' : 'text-gray-300'">
                 {{ (item.entries || []).length }}
@@ -287,5 +330,143 @@ const progressPct = (item) => {
       </p>
     </div>
 
+    <!-- ── Hover tooltip ── -->
+    <Teleport to="body">
+      <Transition name="tip">
+        <div v-if="hoveredItem"
+          class="fixed z-[9999] w-84 pointer-events-auto"
+          :style="{
+            left: (tooltipPos.x + 340 > (typeof window !== 'undefined' ? window.innerWidth : 1440))
+                    ? (tooltipPos.x - 344) + 'px'
+                    : (tooltipPos.x + 12) + 'px',
+            top: Math.min(tooltipPos.y - 16, (typeof window !== 'undefined' ? window.innerHeight : 900) - 380) + 'px',
+          }"
+          @mouseenter="keepTooltip"
+          @mouseleave="hideTooltip">
+
+          <div class="bg-white rounded-2xl border border-gray-200 shadow-[0_16px_40px_rgba(0,0,0,0.12)] overflow-hidden" style="width:336px;">
+
+            <!-- Tooltip header -->
+            <div class="px-4 py-3 border-b border-gray-100 bg-gray-50/80">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="rounded-md px-2 py-0.5 text-[10px] font-bold"
+                  :class="isSchB(hoveredItem) ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'">
+                  {{ hoveredItem.schedule }}
+                </span>
+                <span class="text-[10px] font-semibold text-gray-400">S.No {{ hoveredItem.serial_number }}</span>
+                <span class="ml-auto text-[10px] font-semibold text-[#0071e3] bg-[#0071e3]/10 px-2 py-0.5 rounded-full">
+                  {{ hoveredItem.loa_number }}
+                </span>
+              </div>
+              <p class="text-xs font-semibold text-gray-800 leading-snug line-clamp-2">{{ hoveredItem.item_desc }}</p>
+              <!-- Sch-B: show supply + execution totals -->
+              <div v-if="isSchB(hoveredItem)" class="mt-2 flex gap-3">
+                <span class="text-[10px] text-gray-500">
+                  Supplied: <strong class="text-blue-600">{{ hoveredItem.supplied_quantity || 0 }}</strong>
+                  <span class="text-gray-400"> {{ hoveredItem.unit }}</span>
+                </span>
+                <span class="text-gray-200">·</span>
+                <span class="text-[10px] text-gray-500">
+                  Executed: <strong class="text-[#34c759]">{{ hoveredItem.executed_quantity || 0 }}</strong>
+                  <span class="text-gray-400"> {{ hoveredItem.unit }}</span>
+                </span>
+              </div>
+            </div>
+
+            <!-- No entries -->
+            <div v-if="!(hoveredItem.entries || []).length"
+              class="px-4 py-6 text-center text-xs text-gray-400 font-medium">
+              No entries submitted yet.
+            </div>
+
+            <!-- Entry list -->
+            <div v-else class="max-h-64 overflow-y-auto" style="scrollbar-width: thin;">
+              <div v-for="(entry, idx) in [...(hoveredItem.entries || [])].reverse()" :key="entry.id"
+                class="px-4 py-2.5 border-b border-gray-50 last:border-0 hover:bg-gray-50/60 transition-colors">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="flex items-center gap-2 min-w-0">
+                    <!-- Index bubble + type badge -->
+                    <span class="flex-shrink-0 w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center"
+                      :class="entry.entry_type === 'supply' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-700'">
+                      {{ (hoveredItem.entries || []).length - idx }}
+                    </span>
+                    <span class="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide"
+                      :class="entry.entry_type === 'supply' ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-700'">
+                      {{ entry.entry_type === 'supply' ? 'Supply' : 'Exec' }}
+                    </span>
+                    <span class="text-xs font-bold text-gray-800">
+                      {{ entry.quantity }}
+                      <span class="text-gray-400 font-normal text-[10px]">{{ hoveredItem.unit }}</span>
+                    </span>
+                  </div>
+                  <span class="text-[10px] text-gray-400 font-medium flex-shrink-0">
+                    {{ fmtDateTime(entry.submitted_at) }}
+                  </span>
+                </div>
+                <div class="mt-1 pl-7 flex flex-col gap-0.5">
+                  <!-- Submitted by -->
+                  <span class="flex items-center gap-1 text-[10px] text-gray-500 font-medium">
+                    <div class="i-carbon-user text-gray-400" style="font-size:10px;"></div>
+                    {{ entry.submitted_by_user?.username || '—' }}
+                  </span>
+                  <!-- Supply fields -->
+                  <template v-if="entry.entry_type === 'supply'">
+                    <span v-if="entry.challan_no" class="flex items-center gap-1 text-[10px] text-gray-400 font-medium truncate">
+                      <div class="i-carbon-document text-gray-300" style="font-size:10px;"></div>
+                      {{ entry.challan_no }}
+                    </span>
+                    <span v-if="entry.udm_entry" class="flex items-center gap-1 text-[10px] text-gray-400 font-medium truncate">
+                      <div class="i-carbon-tag text-gray-300" style="font-size:10px;"></div>
+                      {{ entry.udm_entry }}
+                    </span>
+                  </template>
+                  <!-- Execution fields -->
+                  <template v-else>
+                    <span v-if="entry.location" class="flex items-center gap-1 text-[10px] text-green-600 font-medium truncate">
+                      <div class="i-carbon-location text-green-400" style="font-size:10px;"></div>
+                      {{ entry.location }}
+                    </span>
+                    <span v-if="entry.remarks" class="flex items-center gap-1 text-[10px] text-gray-500 font-medium line-clamp-1">
+                      <div class="i-carbon-chat text-gray-300" style="font-size:10px;"></div>
+                      {{ entry.remarks }}
+                    </span>
+                  </template>
+                </div>
+              </div>
+            </div>
+
+            <!-- Footer summary -->
+            <div v-if="(hoveredItem.entries || []).length"
+              class="px-4 py-2 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+              <span class="text-[10px] text-gray-400 font-medium">
+                {{ (hoveredItem.entries || []).length }} entr{{ (hoveredItem.entries || []).length === 1 ? 'y' : 'ies' }}
+              </span>
+              <div class="flex items-center gap-3">
+                <span class="text-[10px] font-bold text-blue-600">
+                  {{ hoveredItem.supplied_quantity || 0 }}
+                  <span class="text-gray-400 font-normal">{{ hoveredItem.unit }} sup</span>
+                </span>
+                <template v-if="isSchB(hoveredItem)">
+                  <span class="text-gray-200">·</span>
+                  <span class="text-[10px] font-bold text-[#34c759]">
+                    {{ hoveredItem.executed_quantity || 0 }}
+                    <span class="text-gray-400 font-normal">{{ hoveredItem.unit }} exe</span>
+                  </span>
+                </template>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
   </div>
 </template>
+
+<style scoped>
+.tip-enter-active { transition: opacity 0.12s ease, transform 0.12s ease; }
+.tip-leave-active { transition: opacity 0.08s ease; }
+.tip-enter-from  { opacity: 0; transform: translateY(4px) scale(0.98); }
+.tip-leave-to    { opacity: 0; }
+</style>

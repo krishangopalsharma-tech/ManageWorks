@@ -9,9 +9,25 @@ from works.serializers import WorkItemEntrySerializer, WorkEditSerializer
 
 
 def _check_not_observer(user):
-    """Raise PermissionDenied if the authenticated user is an Observer."""
     if user.is_authenticated and hasattr(user, 'profile') and user.profile.role == 'observer':
         raise PermissionDenied("Observers are not authorized to make changes.")
+
+
+def _sync_item_quantities(work_item):
+    """Recompute and save supplied_quantity and executed_quantity from current entries."""
+    supply_total = (
+        WorkItemEntry.objects
+        .filter(work_item=work_item, entry_type='supply')
+        .aggregate(t=Sum('quantity'))['t'] or 0
+    )
+    exec_total = (
+        WorkItemEntry.objects
+        .filter(work_item=work_item, entry_type='execution')
+        .aggregate(t=Sum('quantity'))['t'] or 0
+    )
+    work_item.supplied_quantity = supply_total
+    work_item.executed_quantity = exec_total
+    work_item.save(update_fields=['supplied_quantity', 'executed_quantity'])
 
 
 # ── Work-level edit / delete ──────────────────────────────────────────────────
@@ -29,7 +45,6 @@ class WorkUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
 
-        # Replace extensions if provided in payload
         if 'extensions' in request.data:
             instance.extensions.all().delete()
             for ext in request.data.get('extensions', []):
@@ -37,7 +52,6 @@ class WorkUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
                 if date_val:
                     WorkExtension.objects.create(work=instance, extension_date=date_val)
 
-        # Replace bills if provided in payload
         if 'bills' in request.data:
             instance.bills.all().delete()
             for bill in request.data.get('bills', []):
@@ -59,12 +73,12 @@ class WorkUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
 
 class WorkItemEntryView(APIView):
     """
-    GET  /api/update-work/items/<item_id>/entries/  – list all entries for an item
-    POST /api/update-work/items/<item_id>/entries/  – submit a new lot entry
+    GET  /api/update-work/items/<item_id>/entries/
+    POST /api/update-work/items/<item_id>/entries/
     """
 
     def get(self, request, item_id):
-        entries = WorkItemEntry.objects.filter(work_item_id=item_id).order_by('-submitted_at')
+        entries = WorkItemEntry.objects.filter(work_item_id=item_id).order_by('submitted_at')
         serializer = WorkItemEntrySerializer(entries, many=True)
         return Response(serializer.data)
 
@@ -76,10 +90,10 @@ class WorkItemEntryView(APIView):
         except WorkItem.DoesNotExist:
             return Response({'error': 'Item not found.'}, status=status.HTTP_404_NOT_FOUND)
 
+        # Validate quantity
         qty = request.data.get('quantity')
         if qty is None or qty == '':
             return Response({'error': 'quantity is required.'}, status=status.HTTP_400_BAD_REQUEST)
-
         try:
             qty = float(qty)
             if qty <= 0:
@@ -87,20 +101,58 @@ class WorkItemEntryView(APIView):
         except (ValueError, TypeError):
             return Response({'error': 'quantity must be a positive number.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        entry_type = request.data.get('entry_type', 'supply')
+        if entry_type not in ('supply', 'execution'):
+            entry_type = 'supply'
+
         entry = WorkItemEntry.objects.create(
             work_item=work_item,
+            entry_type=entry_type,
             quantity=qty,
             challan_no=request.data.get('challan_no', '') or '',
             udm_entry=request.data.get('udm_entry', '') or '',
+            location=request.data.get('location', '') or '',
+            remarks=request.data.get('remarks', '') or '',
             submitted_by=request.user if request.user.is_authenticated else None,
         )
 
-        # Keep WorkItem.supplied_quantity in sync (used by dashboard)
-        total = WorkItemEntry.objects.filter(work_item=work_item).aggregate(
-            total=Sum('quantity')
-        )['total'] or 0
-        work_item.supplied_quantity = total
-        work_item.save(update_fields=['supplied_quantity'])
+        _sync_item_quantities(work_item)
 
         serializer = WorkItemEntrySerializer(entry)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+# ── Entry edit (owner only) ───────────────────────────────────────────────────
+
+class WorkItemEntryUpdateView(APIView):
+    """PATCH /api/update-work/entries/<entry_id>/  – edit own submitted entry."""
+
+    def patch(self, request, entry_id):
+        try:
+            entry = WorkItemEntry.objects.select_related('work_item').get(pk=entry_id)
+        except WorkItemEntry.DoesNotExist:
+            return Response({'error': 'Entry not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if not request.user.is_authenticated or entry.submitted_by != request.user:
+            raise PermissionDenied("You can only edit entries that you submitted.")
+
+        # Update quantity
+        if 'quantity' in request.data:
+            try:
+                qty = float(request.data['quantity'])
+                if qty <= 0:
+                    raise ValueError
+                entry.quantity = qty
+            except (ValueError, TypeError):
+                return Response({'error': 'quantity must be a positive number.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Update type-specific fields
+        for field in ('challan_no', 'udm_entry', 'location', 'remarks'):
+            if field in request.data:
+                setattr(entry, field, request.data[field] or '')
+
+        entry.save()
+        _sync_item_quantities(entry.work_item)
+
+        serializer = WorkItemEntrySerializer(entry)
+        return Response(serializer.data)

@@ -44,6 +44,8 @@ class WorkItem(models.Model):
     challan_no = models.CharField(max_length=255, null=True, blank=True)
     udm_entry = models.CharField(max_length=255, null=True, blank=True)
     
+    executed_quantity = models.FloatField(null=True, blank=True, default=0)
+
     updated_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -54,13 +56,54 @@ class WorkItem(models.Model):
 class WorkItemEntry(models.Model):
     """
     A single lot submission for a WorkItem.
-    Contractors/executors may submit multiple lots against the same item.
-    The WorkItem.supplied_quantity is kept in sync as the running sum of all entries.
+    entry_type='supply'    → full inspection certificate data; updates WorkItem.supplied_quantity
+    entry_type='execution' → quantity + location + remarks; updates WorkItem.executed_quantity
+    Progress for Sch-A items uses supplied_quantity; Sch-B items use executed_quantity.
     """
-    work_item = models.ForeignKey(WorkItem, on_delete=models.CASCADE, related_name='entries')
-    quantity = models.FloatField()
+    ENTRY_TYPE_CHOICES = (
+        ('supply',    'Supply'),
+        ('execution', 'Execution'),
+    )
+    work_item  = models.ForeignKey(WorkItem, on_delete=models.CASCADE, related_name='entries')
+    entry_type = models.CharField(max_length=20, choices=ENTRY_TYPE_CHOICES, default='supply')
+    quantity   = models.FloatField()
+
+    # Supply — basic delivery details
     challan_no = models.CharField(max_length=255, blank=True, null=True)
-    udm_entry = models.CharField(max_length=255, blank=True, null=True)
+    udm_entry  = models.CharField(max_length=255, blank=True, null=True)
+
+    # Execution details
+    location = models.CharField(max_length=500, blank=True, null=True)
+    remarks  = models.TextField(blank=True, null=True)
+
+    # Supply — Section 1: Material Supply Details
+    specification_drawing_no = models.CharField(max_length=500, blank=True, null=True)
+    other_details            = models.TextField(blank=True, null=True)
+
+    # Supply — Section 2: Item Identification
+    manufacturer_oem    = models.CharField(max_length=500, blank=True, null=True)
+    trademark_batch_no  = models.CharField(max_length=500, blank=True, null=True)
+    item_serial_no      = models.CharField(max_length=500, blank=True, null=True)
+    manufacturing_date  = models.DateField(blank=True, null=True)
+    visual_condition    = models.CharField(max_length=50, blank=True, null=True, default='OK')
+    marking_on_material = models.CharField(max_length=500, blank=True, null=True)
+    other_parameters    = models.TextField(blank=True, null=True)
+
+    # Supply — Section 3: Technical Parameters (JSON list of {param, limit, result})
+    electrical_parameters = models.JSONField(blank=True, null=True, default=list)
+    mechanical_parameters = models.JSONField(blank=True, null=True, default=list)
+
+    # Supply — Section 4: Inspection Summary
+    total_offered            = models.FloatField(blank=True, null=True)
+    total_passed             = models.FloatField(blank=True, null=True)
+    total_rejected           = models.FloatField(blank=True, null=True)
+    deviations_deficiencies  = models.TextField(blank=True, null=True)
+
+    # Supply — Section 5: Declaration
+    inspection_status            = models.CharField(max_length=20, blank=True, null=True, default='accepted')
+    sample_test_officer_remarks  = models.TextField(blank=True, null=True)
+    date_of_inspection           = models.DateField(blank=True, null=True)
+
     submitted_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
     submitted_at = models.DateTimeField(auto_now_add=True)
 

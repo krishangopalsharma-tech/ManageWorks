@@ -89,9 +89,40 @@ const workStats = computed(() => {
   }
 })
 
+// ── Sorting ────────────────────────────────────────────────────────────────
+const sortKey = ref('')
+const sortDir = ref('desc')
+
+const toggleSort = (key) => {
+  if (sortKey.value === key) {
+    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortKey.value = key
+    sortDir.value = 'desc'
+  }
+}
+
+const sortIcon = (key) => {
+  if (sortKey.value !== key) return 'i-carbon-arrows-vertical'
+  return sortDir.value === 'asc' ? 'i-carbon-arrow-up' : 'i-carbon-arrow-down'
+}
+
+const sortedItems = computed(() => {
+  if (!sortKey.value) return filteredItems.value
+  return [...filteredItems.value].sort((a, b) => {
+    let av, bv
+    if      (sortKey.value === 'qty')       { av = a.qty || 0;               bv = b.qty || 0 }
+    else if (sortKey.value === 'submitted') { av = a.supplied_quantity || 0; bv = b.supplied_quantity || 0 }
+    else if (sortKey.value === 'progress')  { av = progressPct(a);           bv = progressPct(b) }
+    else if (sortKey.value === 'entries')   { av = (a.entries||[]).length;   bv = (b.entries||[]).length }
+    return sortDir.value === 'asc' ? av - bv : bv - av
+  })
+})
+
 const selectWork = (work) => {
-  itemFilter.value  = ''
-  expandedId.value  = null
+  itemFilter.value   = ''
+  expandedId.value   = null
+  sortKey.value      = ''
   selectedWork.value = work
 }
 
@@ -101,12 +132,12 @@ const toggleExpand = (itemId) => {
 </script>
 
 <template>
-  <div class="bg-white rounded-2xl soft-shadow min-h-full w-full flex flex-col overflow-hidden">
+  <div class="bg-white rounded-2xl soft-shadow h-full w-full flex flex-col overflow-hidden">
 
     <!-- ══ WORK LIST ══════════════════════════════════════════════════ -->
     <template v-if="!selectedWork">
 
-      <div class="px-8 pt-7 pb-5 border-b border-gray-100">
+      <div class="flex-shrink-0 px-8 pt-7 pb-5 border-b border-gray-100">
         <h1 class="text-2xl font-bold text-gray-900 tracking-tight mb-1">Work Details</h1>
         <p class="text-gray-400 text-sm font-medium mb-5">Browse all works and inspect item-level lot entry history.</p>
 
@@ -133,9 +164,9 @@ const toggleExpand = (itemId) => {
       </div>
 
       <template v-else>
-        <div class="flex-1 overflow-x-auto">
+        <div class="flex-1 overflow-auto">
           <table class="w-full text-left border-collapse">
-            <thead>
+            <thead class="sticky top-0 z-10">
               <tr class="bg-gray-50 text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100">
                 <th class="px-6 py-3">Contractor / LOA</th>
                 <th class="px-4 py-3">Tender</th>
@@ -241,10 +272,18 @@ const toggleExpand = (itemId) => {
                 <th class="px-4 py-3 text-center w-14">Sch</th>
                 <th class="px-4 py-3 text-center w-14">S.No</th>
                 <th class="px-4 py-3 text-left">Item Description</th>
-                <th class="px-4 py-3 text-right w-28">Required</th>
-                <th class="px-4 py-3 text-right w-28">Submitted</th>
-                <th class="px-4 py-3 w-36">Progress</th>
-                <th class="px-4 py-3 text-center w-24">Entries</th>
+                <th @click="toggleSort('qty')" class="px-4 py-3 text-right w-28 cursor-pointer select-none hover:text-gray-600 transition-colors">
+                  <div class="flex items-center justify-end gap-1">Required <div :class="sortIcon('qty')" class="text-[9px]" :style="{ opacity: sortKey === 'qty' ? 1 : 0.35 }"></div></div>
+                </th>
+                <th @click="toggleSort('submitted')" class="px-4 py-3 text-right w-28 cursor-pointer select-none hover:text-gray-600 transition-colors">
+                  <div class="flex items-center justify-end gap-1">Submitted <div :class="sortIcon('submitted')" class="text-[9px]" :style="{ opacity: sortKey === 'submitted' ? 1 : 0.35 }"></div></div>
+                </th>
+                <th @click="toggleSort('progress')" class="px-4 py-3 w-36 cursor-pointer select-none hover:text-gray-600 transition-colors">
+                  <div class="flex items-center gap-1">Progress <div :class="sortIcon('progress')" class="text-[9px]" :style="{ opacity: sortKey === 'progress' ? 1 : 0.35 }"></div></div>
+                </th>
+                <th @click="toggleSort('entries')" class="px-4 py-3 text-center w-24 cursor-pointer select-none hover:text-gray-600 transition-colors">
+                  <div class="flex items-center justify-center gap-1">Entries <div :class="sortIcon('entries')" class="text-[9px]" :style="{ opacity: sortKey === 'entries' ? 1 : 0.35 }"></div></div>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -252,7 +291,7 @@ const toggleExpand = (itemId) => {
                 <tr><td colspan="7" class="p-8 text-center text-gray-400 text-xs font-medium">No items match your filter.</td></tr>
               </template>
 
-              <template v-for="item in filteredItems" :key="item.id">
+              <template v-for="item in sortedItems" :key="item.id">
                 <!-- Main item row -->
                 <tr
                   class="border-b border-gray-100 hover:bg-gray-50/60 transition-colors cursor-pointer"
