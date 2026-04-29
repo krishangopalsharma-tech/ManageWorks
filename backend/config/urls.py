@@ -15,4 +15,5 @@ urlpatterns = [
     path('api/documents/', include('documents.urls')),
     path('api/users/', include('users.urls')),
     path('api/item-progress/', include('item_progress.urls')),
+    path('api/mb-details/', include('mb_details.urls')),
 ]

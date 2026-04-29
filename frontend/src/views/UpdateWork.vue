@@ -240,19 +240,6 @@ const saveEditEntry = async () => {
 }
 
 // ── Edit-work modal ────────────────────────────────────────────────────────
-const editingWorkTotalAmount = computed(() => {
-  if (!editingWork.value) return 0
-  const work = allWorks.value.find(w => w.id === editingWork.value.id)
-  return work ? work.items.reduce((s, i) => s + (i.total_amount || 0), 0) : 0
-})
-const editingBillsTotal = computed(() =>
-  (editingWork.value?.bills || []).reduce((s, b) => s + (parseFloat(b.bill_amount) || 0), 0)
-)
-const editingFinancialPct = computed(() => {
-  const total = editingWorkTotalAmount.value
-  return total ? Math.round(editingBillsTotal.value / total * 1000) / 10 : 0
-})
-
 const openEditWork = (work) => {
   editingWork.value = {
     id: work.id, loa_number: work.loa_number || '', tender_number: work.tender_number || '',
@@ -260,7 +247,6 @@ const openEditWork = (work) => {
     contractor_name: work.contractor_name || '', contractor_address: work.contractor_address || '',
     date_of_completion: work.date_of_completion || '', consignee: work.consignee || '',
     extensions: (work.extensions || []).map(e => ({ ...e })),
-    bills:      (work.bills      || []).map(b => ({ ...b })),
   }
   workSaveStatus.value    = ''
   showDeleteConfirm.value = false
@@ -269,22 +255,19 @@ const closeEditWork = () => { editingWork.value = null; showDeleteConfirm.value 
 
 const addExtension = () => { editingWork.value.extensions.push({ extension_date: '' }) }
 const removeExtension = (idx) => { editingWork.value.extensions.splice(idx, 1) }
-const addBill  = () => { editingWork.value.bills.push({ bill_amount: '' }) }
-const removeBill = (idx) => { editingWork.value.bills.splice(idx, 1) }
 
 const saveWork = async () => {
   isSavingWork.value   = true
   workSaveStatus.value = ''
   try {
-    const { id, extensions, bills, ...fields } = editingWork.value
+    const { id, extensions, ...fields } = editingWork.value
     const payload = {
       ...fields,
       extensions: extensions.filter(e => (e.extension_date || '').trim()).map(e => ({ extension_date: e.extension_date.trim() })),
-      bills:      bills.filter(b => parseFloat(b.bill_amount) > 0).map(b => ({ bill_amount: parseFloat(b.bill_amount) })),
     }
     await axios.patch(`/api/update-work/works/${id}/`, payload)
     const idx = allWorks.value.findIndex(w => w.id === id)
-    if (idx !== -1) allWorks.value[idx] = { ...allWorks.value[idx], ...fields, extensions: payload.extensions, bills: payload.bills }
+    if (idx !== -1) allWorks.value[idx] = { ...allWorks.value[idx], ...fields, extensions: payload.extensions }
     if (selectedWork.value?.id === id) Object.assign(selectedWork.value, fields)
     workSaveStatus.value = 'saved'
     setTimeout(closeEditWork, 900)
@@ -573,45 +556,6 @@ const deleteWork = async () => {
               </div>
             </div>
 
-            <!-- Bills Released -->
-            <div class="rounded-2xl border border-gray-100 bg-gray-50/60 p-4">
-              <div class="flex items-center justify-between mb-3">
-                <div class="flex items-center gap-2">
-                  <div class="i-carbon-currency-rupee text-gray-400 text-sm"></div>
-                  <span class="text-xs font-bold text-gray-600 uppercase tracking-wide">Bills Released</span>
-                </div>
-                <button @click="addBill"
-                  class="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white border border-gray-200 hover:border-[#0071e3] hover:text-[#0071e3] text-gray-500 text-[11px] font-semibold transition-all shadow-sm">
-                  <div class="i-carbon-add text-xs"></div> Add
-                </button>
-              </div>
-              <div v-if="editingWork.bills.length === 0" class="text-center py-3 text-[11px] text-gray-400 font-medium">No bills yet.</div>
-              <div v-else class="flex flex-col gap-2">
-                <div v-for="(bill, idx) in editingWork.bills" :key="idx" class="flex items-center gap-2">
-                  <span class="text-[11px] font-bold text-gray-500 w-16 flex-shrink-0">Bill {{ idx + 1 }}</span>
-                  <div class="flex-1 relative">
-                    <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-semibold text-gray-400">₹</span>
-                    <input v-model="bill.bill_amount" type="number" min="0" step="0.01" placeholder="0.00"
-                      class="w-full bg-white border border-gray-200 rounded-xl pl-7 pr-3.5 py-2 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 transition-all">
-                  </div>
-                  <button @click="removeBill(idx)"
-                    class="flex-shrink-0 w-7 h-7 rounded-full bg-white border border-gray-200 hover:border-[#ff3b30]/50 hover:text-[#ff3b30] text-gray-400 flex items-center justify-center transition-all">
-                    <div class="i-carbon-close text-xs"></div>
-                  </button>
-                </div>
-                <div class="mt-1 pt-3 border-t border-gray-200 flex items-center justify-between">
-                  <span class="text-[11px] font-semibold text-gray-400">Total Released</span>
-                  <div class="flex items-center gap-3">
-                    <span class="text-sm font-bold text-gray-800">{{ fmtAmt(editingBillsTotal) }}</span>
-                    <span class="text-[10px] text-gray-400">of {{ fmtAmt(editingWorkTotalAmount) }}</span>
-                    <span class="text-xs font-bold px-2 py-0.5 rounded-full"
-                      :class="editingFinancialPct >= 100 ? 'bg-[#34c759]/15 text-[#34c759]' : 'bg-[#0071e3]/10 text-[#0071e3]'">
-                      {{ editingFinancialPct }}%
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
 
           <div class="px-7 pb-6 pt-3 flex items-center justify-between gap-3 border-t border-gray-100">

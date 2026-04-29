@@ -4,7 +4,8 @@ from django.utils import timezone
 from datetime import timedelta
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from works.models import Work, WorkItem, WorkBill, WorkItemEntry
+from works.models import Work, WorkItem, WorkItemEntry
+from mb_details.models import MBItem
 
 
 class DashboardStatsView(APIView):
@@ -42,15 +43,15 @@ class DashboardStatsView(APIView):
         overall_cnt = supply_count + exec_count
         overall_avg = ((supply_progress_sum + exec_progress_sum) / overall_cnt * 100) if overall_cnt > 0 else 0
 
-        # Financial progress
+        # Financial progress — sourced from MB items
         if loa_id:
             total_work_amount = WorkItem.objects.filter(work_id=loa_id).aggregate(t=Sum('total_amount'))['t'] or 0
-            bills_total       = WorkBill.objects.filter(work_id=loa_id).aggregate(t=Sum('bill_amount'))['t']  or 0
+            mb_total          = MBItem.objects.filter(mb_record__work_id=loa_id).aggregate(t=Sum('amount'))['t'] or 0
         else:
             total_work_amount = WorkItem.objects.aggregate(t=Sum('total_amount'))['t'] or 0
-            bills_total       = WorkBill.objects.aggregate(t=Sum('bill_amount'))['t']  or 0
+            mb_total          = MBItem.objects.aggregate(t=Sum('amount'))['t'] or 0
 
-        fin_prog = (bills_total / total_work_amount * 100) if total_work_amount > 0 else 0
+        fin_prog = (mb_total / total_work_amount * 100) if total_work_amount > 0 else 0
 
         loa_list = [
             {

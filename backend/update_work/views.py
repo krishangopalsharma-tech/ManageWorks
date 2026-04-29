@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework import status, generics
 from rest_framework.exceptions import PermissionDenied
 
-from works.models import Work, WorkItem, WorkItemEntry, WorkExtension, WorkBill
+from works.models import Work, WorkItem, WorkItemEntry, WorkExtension
 from works.serializers import WorkItemEntrySerializer, WorkEditSerializer
 
 
@@ -51,16 +51,6 @@ class WorkUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
                 date_val = (ext.get('extension_date') or '').strip()
                 if date_val:
                     WorkExtension.objects.create(work=instance, extension_date=date_val)
-
-        if 'bills' in request.data:
-            instance.bills.all().delete()
-            for bill in request.data.get('bills', []):
-                try:
-                    amt = float(bill.get('bill_amount') or 0)
-                    if amt > 0:
-                        WorkBill.objects.create(work=instance, bill_amount=amt)
-                except (ValueError, TypeError):
-                    pass
 
         return Response(serializer.data)
 

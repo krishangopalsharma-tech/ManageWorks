@@ -10,6 +10,7 @@ const menuItems = ref([
   { name: 'Work Details', icon: 'i-carbon-catalog', path: '/work-details' },
   { name: 'Item Progress', icon: 'i-carbon-chart-bar', path: '/item-progress' },
   { name: 'Update Work', icon: 'i-carbon-edit', path: '/update-work' },
+  { name: 'MB Details', icon: 'i-carbon-receipt', path: '/mb-details' },
   { name: 'Document Generator', icon: 'i-carbon-document', path: '/document-generator' },
   { name: 'Add New Work', icon: 'i-carbon-add-alt', path: '/add-new-work' },
   { 

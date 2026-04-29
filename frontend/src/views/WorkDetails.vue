@@ -1,6 +1,10 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
+import { Doughnut } from 'vue-chartjs'
+import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
+
+ChartJS.register(ArcElement, Tooltip, Legend)
 
 const fmtDate = (val) => {
   if (!val) return '—'
@@ -88,6 +92,44 @@ const workStats = computed(() => {
     totalEntries: items.reduce((s, i) => s + (i.entries || []).length, 0),
   }
 })
+
+// ── Chart Data ────────────────────────────────────────────────────────────
+const supplyChartData = computed(() => {
+  if (!workStats.value) return { datasets: [] }
+  const pct = Math.min(workStats.value.supplyPct, 100)
+  return {
+    labels: ['Completed', 'Pending'],
+    datasets: [{
+      data: [pct, Math.max(100 - pct, 0)],
+      backgroundColor: ['#1D5F5E', '#D4E4E2'],
+      borderWidth: 0,
+      cutout: '75%',
+    }]
+  }
+})
+
+const execChartData = computed(() => {
+  if (!workStats.value) return { datasets: [] }
+  const pct = Math.min(workStats.value.execPct, 100)
+  return {
+    labels: ['Completed', 'Pending'],
+    datasets: [{
+      data: [pct, Math.max(100 - pct, 0)],
+      backgroundColor: ['#C17841', '#F2DFCC'],
+      borderWidth: 0,
+      cutout: '75%',
+    }]
+  }
+})
+
+const chartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { display: false },
+    tooltip: { enabled: true }
+  }
+}
 
 // ── Sorting ────────────────────────────────────────────────────────────────
 const sortKey = ref('')
@@ -247,20 +289,70 @@ const toggleExpand = (itemId) => {
             </div>
           </div>
 
-          <!-- Quick stats pills -->
-          <div v-if="workStats" class="mt-5 flex flex-wrap gap-3">
-            <div class="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-xl px-4 py-2">
-              <div class="w-2 h-2 rounded-full bg-[#0071e3]"></div>
-              <span class="text-xs font-semibold text-blue-700">Supply (Sch A): {{ workStats.supplyPct }}%</span>
+          <!-- Dashboard Grid -->
+          <div v-if="workStats" class="mt-5 grid grid-cols-12 gap-4 mb-4">
+            
+            <!-- Twin Gauges -->
+            <div class="col-span-12 lg:col-span-5 bg-white border border-gray-200 rounded-xl p-4 flex flex-col soft-shadow">
+              <div class="flex justify-between items-baseline mb-1">
+                <h3 class="text-sm font-bold text-gray-900 tracking-tight">Schedule A vs B — Progress</h3>
+                <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Qty %</span>
+              </div>
+              <p class="text-xs text-gray-500 mb-4 font-medium">Supply ships first; execution cannot outrun it.</p>
+              
+              <div class="flex-1 flex items-center justify-around gap-4 mt-2">
+                <!-- Supply Chart -->
+                <div class="relative w-28 h-28 flex flex-col items-center justify-center">
+                  <Doughnut :data="supplyChartData" :options="chartOptions" class="absolute inset-0" />
+                  <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <span class="text-xl font-bold text-[#1D5F5E]">{{ workStats.supplyPct }}%</span>
+                  </div>
+                  <span class="absolute -bottom-6 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Supply</span>
+                </div>
+                <!-- Execution Chart -->
+                <div class="relative w-28 h-28 flex flex-col items-center justify-center">
+                  <Doughnut :data="execChartData" :options="chartOptions" class="absolute inset-0" />
+                  <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <span class="text-xl font-bold text-[#C17841]">{{ workStats.execPct }}%</span>
+                  </div>
+                  <span class="absolute -bottom-6 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Execution</span>
+                </div>
+              </div>
+              <div class="mt-8"></div>
             </div>
-            <div class="flex items-center gap-2 bg-green-50 border border-green-100 rounded-xl px-4 py-2">
-              <div class="w-2 h-2 rounded-full bg-[#34c759]"></div>
-              <span class="text-xs font-semibold text-green-700">Execution (Sch B): {{ workStats.execPct }}%</span>
+
+            <!-- Total Entries / Additional Stats -->
+            <div class="col-span-12 lg:col-span-7 grid grid-cols-2 gap-4">
+               <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 flex flex-col soft-shadow relative overflow-hidden">
+                 <div class="absolute top-0 left-0 w-full h-1 bg-[#1D5F5E]"></div>
+                 <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 mt-1">Total Entries</div>
+                 <div class="text-3xl font-extrabold text-gray-900">{{ workStats.totalEntries }}</div>
+                 <div class="text-xs text-gray-500 mt-2 font-medium">Recorded lot entries across all items</div>
+               </div>
+
+               <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 flex flex-col soft-shadow relative overflow-hidden">
+                 <div class="absolute top-0 left-0 w-full h-1 bg-gray-800"></div>
+                 <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 mt-1">Active Items</div>
+                 <div class="text-3xl font-extrabold text-gray-900">{{ workStats.supplyCount + workStats.execCount }}</div>
+                 <div class="text-xs text-gray-500 mt-2 font-medium"><span class="text-[#1D5F5E] font-bold">Sch A: {{ workStats.supplyCount }}</span> · <span class="text-[#C17841] font-bold">Sch B: {{ workStats.execCount }}</span></div>
+               </div>
+               
+               <div class="col-span-2 bg-white border border-gray-200 rounded-xl p-4 flex items-center justify-between soft-shadow">
+                  <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-[#1D5F5E]/10 text-[#1D5F5E] flex items-center justify-center">
+                       <div class="i-carbon-chart-evaluation text-xl"></div>
+                    </div>
+                    <div>
+                      <h4 class="text-xs font-bold text-gray-800">Item Level Tracking</h4>
+                      <p class="text-[10px] text-gray-500 mt-0.5 font-medium">Click any row below to expand and view full lot history and UDM entries.</p>
+                    </div>
+                  </div>
+                  <button @click="sortKey=''; itemFilter=''" class="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+                     Reset View
+                  </button>
+               </div>
             </div>
-            <div class="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2">
-              <div class="i-carbon-list text-gray-400 text-sm"></div>
-              <span class="text-xs font-semibold text-gray-600">{{ workStats.totalEntries }} total lot entries</span>
-            </div>
+
           </div>
         </div>
 

@@ -1,0 +1,1196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>LOA 38264 · Marvel Pvt. Ltd. · Telecom Progress Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+<style>
+  :root{
+    --bg:#F5F3EE;
+    --surface:#FFFFFF;
+    --surface-soft:#FBFAF6;
+    --border:#E6E2D7;
+    --border-strong:#CFC9B8;
+    --ink:#141414;
+    --ink-soft:#5B5A52;
+    --ink-faint:#8F8C81;
+    --a:#1D5F5E;         /* Schedule A — supply */
+    --a-soft:#D4E4E2;
+    --b:#C17841;         /* Schedule B — execution */
+    --b-soft:#F2DFCC;
+    --neutral:#9B958A;
+    --neutral-soft:#D9D4C5;
+    --red:#B63A2E;
+    --amber:#D89B3C;
+    --green:#5E8858;
+    --grid:#ECE8DC;
+    --sz-l:28px;
+    --sz-m:13px;
+    --sz-s:11px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--bg);color:var(--ink);font-family:'Manrope',-apple-system,sans-serif;font-size:var(--sz-s);line-height:1.45;font-feature-settings:"tnum" 1,"ss01" 1,"cv11" 1}
+  body{padding:16px 20px 28px;min-width:1280px}
+  .tnum{font-variant-numeric:tabular-nums}
+  button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+  input,select{font:inherit}
+
+  /* ---------- Top bar ---------- */
+  .topbar{display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:14px;border-bottom:1px solid var(--border);margin-bottom:14px}
+  .title-block .eyebrow{font-size:var(--sz-s);letter-spacing:.18em;text-transform:uppercase;color:var(--ink-faint);font-weight:500}
+  .title-block .title{font-size:var(--sz-l);font-weight:700;letter-spacing:-.015em;color:var(--ink);margin-top:4px;line-height:1.1}
+  .title-block .sub{font-size:var(--sz-s);color:var(--ink-soft);margin-top:6px;max-width:640px}
+  .legend{display:flex;gap:14px;align-items:center;font-size:var(--sz-s);color:var(--ink-soft)}
+  .legend .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:middle}
+
+  /* ---------- Filter strip ---------- */
+  .filters{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:10px 12px;background:var(--surface);border:1px solid var(--border);margin-bottom:14px;border-radius:2px}
+  .filters .grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .filters .label{font-size:var(--sz-s);text-transform:uppercase;letter-spacing:.12em;color:var(--ink-faint);font-weight:500;margin-right:4px}
+  .chip{padding:5px 11px;border:1px solid var(--border-strong);border-radius:999px;background:var(--surface);font-size:var(--sz-s);font-weight:500;color:var(--ink-soft);transition:all .12s;white-space:nowrap}
+  .chip:hover{border-color:var(--ink-faint);color:var(--ink)}
+  .chip.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .chip.a.active{background:var(--a);border-color:var(--a)}
+  .chip.b.active{background:var(--b);border-color:var(--b)}
+  .filters input[type=text]{padding:6px 10px;border:1px solid var(--border-strong);background:var(--surface);font-size:var(--sz-s);outline:none;min-width:180px;border-radius:2px}
+  .filters input[type=text]:focus{border-color:var(--a)}
+  .filters select{padding:5px 8px;border:1px solid var(--border-strong);background:var(--surface);font-size:var(--sz-s);color:var(--ink);outline:none;border-radius:2px}
+  .reset{font-size:var(--sz-s);color:var(--ink-faint);padding:6px 10px;border:1px dashed var(--border-strong);border-radius:2px}
+  .reset:hover{color:var(--red);border-color:var(--red)}
+  .ddown{position:relative}
+  .ddown .trg{padding:5px 11px;border:1px solid var(--border-strong);border-radius:999px;background:var(--surface);font-size:var(--sz-s);color:var(--ink-soft);font-weight:500}
+  .ddown .trg.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .ddown .pop{display:none;position:absolute;top:calc(100% + 4px);left:0;background:#fff;border:1px solid var(--border-strong);padding:8px;z-index:50;max-height:280px;overflow:auto;min-width:200px;box-shadow:0 8px 24px rgba(0,0,0,.08);border-radius:2px}
+  .ddown.open .pop{display:block}
+  .ddown .pop label{display:flex;align-items:center;gap:6px;padding:3px 4px;cursor:pointer;font-size:var(--sz-s);color:var(--ink-soft)}
+  .ddown .pop label:hover{background:var(--surface-soft);color:var(--ink)}
+  .ddown .pop input[type=search]{width:100%;padding:5px 8px;margin-bottom:6px;border:1px solid var(--border);font-size:var(--sz-s)}
+
+  /* ---------- KPI strip ---------- */
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:14px}
+  .kpi{background:var(--surface);border:1px solid var(--border);padding:14px 14px 12px;border-radius:2px;position:relative;overflow:hidden}
+  .kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--neutral)}
+  .kpi.a::before{background:var(--a)}
+  .kpi.b::before{background:var(--b)}
+  .kpi.total::before{background:var(--ink)}
+  .kpi.pending::before{background:var(--red)}
+  .kpi .lbl{font-size:var(--sz-s);text-transform:uppercase;letter-spacing:.1em;color:var(--ink-faint);font-weight:500;line-height:1.2}
+  .kpi .val{font-size:var(--sz-l);font-weight:700;letter-spacing:-.01em;color:var(--ink);margin-top:10px;line-height:1}
+  .kpi .delta{font-size:var(--sz-s);color:var(--ink-soft);margin-top:6px;font-weight:500}
+  .kpi .delta b{color:var(--ink);font-weight:600}
+
+  /* ---------- Grid of charts ---------- */
+  .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:10px;margin-bottom:14px;grid-auto-rows:minmax(0,auto)}
+  .card{background:var(--surface);border:1px solid var(--border);padding:12px 14px 10px;border-radius:2px;display:flex;flex-direction:column}
+  .card .hd{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;gap:10px}
+  .card .hd h3{font-size:var(--sz-m);font-weight:700;letter-spacing:-.005em;color:var(--ink)}
+  .card .hd .hd-meta{font-size:var(--sz-s);color:var(--ink-faint);font-weight:500}
+  .card .sub{font-size:var(--sz-s);color:var(--ink-faint);margin-bottom:6px;font-weight:500}
+  .chart{flex:1;min-height:0}
+  .empty{display:flex;align-items:center;justify-content:center;height:100%;color:var(--ink-faint);font-style:italic;font-size:var(--sz-s)}
+
+  /* Column spans */
+  .c-3{grid-column:span 3}.c-4{grid-column:span 4}.c-5{grid-column:span 5}.c-6{grid-column:span 6}.c-7{grid-column:span 7}.c-8{grid-column:span 8}.c-9{grid-column:span 9}.c-12{grid-column:span 12}
+
+  /* Heights */
+  .h-sm{height:220px}.h-md{height:300px}.h-lg{height:360px}.h-xl{height:420px}
+
+  /* Insights panel */
+  .insights{background:var(--surface);border:1px solid var(--border);padding:14px 16px;border-radius:2px}
+  .insights h3{font-size:var(--sz-m);font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+  .insights h3 .dot{width:6px;height:6px;background:var(--a);border-radius:50%;display:inline-block}
+  .insights ul{list-style:none}
+  .insights li{font-size:var(--sz-s);color:var(--ink);padding:6px 0 6px 18px;border-bottom:1px dashed var(--border);position:relative;line-height:1.55}
+  .insights li:last-child{border-bottom:none}
+  .insights li::before{content:'→';position:absolute;left:0;top:6px;color:var(--a);font-weight:600}
+  .insights li.warn::before{content:'⚠';color:var(--red)}
+  .insights li b{font-weight:700;color:var(--ink)}
+
+  /* Table */
+  .table-card{overflow:hidden}
+  .tbl-tools{display:flex;gap:10px;align-items:center;margin-bottom:6px}
+  .tbl-tools input{padding:5px 10px;border:1px solid var(--border-strong);font-size:var(--sz-s);width:260px;outline:none;border-radius:2px}
+  .tbl-tools .count{font-size:var(--sz-s);color:var(--ink-faint)}
+  .tbl-wrap{max-height:480px;overflow:auto;border-top:1px solid var(--border)}
+  table{width:100%;border-collapse:collapse;font-size:var(--sz-s);font-variant-numeric:tabular-nums}
+  th{position:sticky;top:0;background:var(--surface-soft);border-bottom:1px solid var(--border-strong);padding:8px 8px;text-align:left;font-weight:600;font-size:var(--sz-s);color:var(--ink-soft);text-transform:uppercase;letter-spacing:.06em;cursor:pointer;white-space:nowrap;z-index:2}
+  th:hover{color:var(--ink)}
+  th::after{content:'';margin-left:4px;opacity:.3}
+  th.sort-asc::after{content:'↑';opacity:.9}
+  th.sort-desc::after{content:'↓';opacity:.9}
+  td{padding:6px 8px;border-bottom:1px solid var(--border);vertical-align:top;color:var(--ink)}
+  td.num{text-align:right;white-space:nowrap}
+  td.desc{max-width:300px;min-width:220px}
+  td.sch{font-weight:700;text-align:center}
+  td.sch-A{color:var(--a)}td.sch-B{color:var(--b)}
+  .prog-cell{display:flex;align-items:center;gap:6px;min-width:100px}
+  .prog-bar{flex:1;height:4px;background:var(--border);position:relative;overflow:hidden;border-radius:2px}
+  .prog-bar i{position:absolute;left:0;top:0;bottom:0;background:var(--ink)}
+  .prog-bar.r i{background:var(--red)}
+  .prog-bar.a i{background:var(--amber)}
+  .prog-bar.g i{background:var(--green)}
+  .prog-num{font-weight:600;min-width:42px;text-align:right}
+  .prog-num.r{color:var(--red)}.prog-num.a{color:var(--amber)}.prog-num.g{color:var(--green)}
+  .pill{display:inline-block;padding:1px 7px;border-radius:2px;font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+  .pill.rdso{background:#E9EEF4;color:#2B4263}
+  .pill.rites{background:#EEF0E5;color:#4D5A2E}
+  .pill.cons{background:#F4ECE2;color:#6B4B22}
+  .pill.none{background:var(--border);color:var(--ink-faint)}
+
+  /* Footer */
+  footer{font-size:var(--sz-s);color:var(--ink-faint);text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border)}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="title-block">
+    <div class="eyebrow">LOA 38264 · Marvel Pvt. Ltd. · 17.53% below schedule</div>
+    <div class="title">Railway Telecom — Progress Dashboard</div>
+    <div class="sub">Material supply (Sch A, 106 items) and execution (Sch B, 54 items) tracked at rebate-adjusted billing rate. All filters cross-filter every chart below.</div>
+  </div>
+  <div class="legend">
+    <span><span class="sw" style="background:var(--a)"></span>Schedule A · Supply</span>
+    <span><span class="sw" style="background:var(--b)"></span>Schedule B · Execution</span>
+    <span><span class="sw" style="background:var(--red)"></span>Pending / Risk</span>
+  </div>
+</div>
+
+<!-- FILTER STRIP -->
+<div class="filters" id="filterStrip">
+  <div class="grp">
+    <span class="label">Schedule</span>
+    <button class="chip active" data-f="sch" data-v="all">Both</button>
+    <button class="chip a" data-f="sch" data-v="A">Sch A · Supply</button>
+    <button class="chip b" data-f="sch" data-v="B">Sch B · Execution</button>
+  </div>
+  <div class="grp">
+    <span class="label">Inspection</span>
+    <button class="chip active" data-f="insp" data-v="all">All</button>
+    <button class="chip" data-f="insp" data-v="RDSO">RDSO</button>
+    <button class="chip" data-f="insp" data-v="RITES">RITES</button>
+    <button class="chip" data-f="insp" data-v="Consignee">Consignee</button>
+    <button class="chip" data-f="insp" data-v="none">No Agency</button>
+
+    <span class="label" style="margin-left:12px">Status</span>
+    <button class="chip active" data-f="status" data-v="all">All</button>
+    <button class="chip" data-f="status" data-v="Completed">Completed</button>
+    <button class="chip" data-f="status" data-v="In Progress">In Progress</button>
+    <button class="chip" data-f="status" data-v="Not Started">Not Started</button>
+
+    <span class="label" style="margin-left:12px">Value</span>
+    <button class="chip active" data-f="band" data-v="all">Any</button>
+    <button class="chip" data-f="band" data-v="&lt;₹1L">&lt;₹1L</button>
+    <button class="chip" data-f="band" data-v="₹1L–10L">₹1L–10L</button>
+    <button class="chip" data-f="band" data-v="₹10L–1Cr">₹10L–1Cr</button>
+    <button class="chip" data-f="band" data-v="&gt;₹1Cr">&gt;₹1Cr</button>
+
+    <div class="ddown" id="ddUnit">
+      <button class="trg">Unit: All</button>
+      <div class="pop"></div>
+    </div>
+    <div class="ddown" id="ddBrand">
+      <button class="trg">Brand: All</button>
+      <div class="pop">
+        <input type="search" placeholder="Search brand…" id="brandSearch" />
+      </div>
+    </div>
+    <input type="text" id="searchBox" placeholder="Search item description…" />
+  </div>
+  <button class="reset" id="resetBtn">Reset filters</button>
+</div>
+
+<!-- KPI STRIP -->
+<div class="kpis" id="kpis"></div>
+
+<!-- MAIN GRID -->
+<div class="grid">
+
+  <!-- Row 1: twin gauges -->
+  <div class="card c-5 h-md">
+    <div class="hd"><h3>Schedule A vs Schedule B — Progress</h3><span class="hd-meta">Value-weighted %</span></div>
+    <div class="sub">Supply ships first; execution cannot outrun it. Gap = idle inventory on site.</div>
+    <div id="chartGauges" class="chart"></div>
+  </div>
+
+  <div class="card c-4 h-md">
+    <div class="hd"><h3>Financial Progress — Waterfall</h3><span class="hd-meta">₹ Cr</span></div>
+    <div class="sub">Contract → value earned, broken by schedule.</div>
+    <div id="chartWaterfall" class="chart"></div>
+  </div>
+
+  <div class="card c-3 h-md">
+    <div class="hd"><h3>Item Status</h3><span class="hd-meta">Item count</span></div>
+    <div class="sub">≥ 99% done · 1–98% · 0%, split by schedule.</div>
+    <div id="chartStatus" class="chart"></div>
+  </div>
+
+  <!-- Row 2 -->
+  <div class="card c-7 h-lg">
+    <div class="hd"><h3>Top 10 Items by Contract Value</h3><span class="hd-meta">₹ earned vs pending</span></div>
+    <div class="sub">The large line-items dragging overall progress.</div>
+    <div id="chartTop10" class="chart"></div>
+  </div>
+
+  <div class="card c-5 h-lg">
+    <div class="hd"><h3>Pending Value by Inspection Agency</h3><span class="hd-meta">Item count · ₹ L pending</span></div>
+    <div class="sub">Where inspection bottlenecks sit.</div>
+    <div id="chartInspection" class="chart"></div>
+  </div>
+
+  <!-- Row 3 -->
+  <div class="card c-6 h-lg">
+    <div class="hd"><h3>Make / Brand-wise Supply Status</h3><span class="hd-meta">Sch A only · ₹ L</span></div>
+    <div class="sub">Single-vendor concentration and delay signals.</div>
+    <div id="chartBrand" class="chart"></div>
+  </div>
+
+  <div class="card c-6 h-lg">
+    <div class="hd"><h3>Unit-type Contribution</h3><span class="hd-meta">By contract value</span></div>
+    <div class="sub">Shape of the work — Numbers, Metre, Set, Lumpsum, etc.</div>
+    <div id="chartTreemap" class="chart"></div>
+  </div>
+
+  <!-- Row 4 -->
+  <div class="card c-6 h-lg">
+    <div class="hd"><h3>Supply vs Execution Alignment</h3><span class="hd-meta">% complete</span></div>
+    <div class="sub">Each point = item. Items above the 45° line are ahead on supply, idle on execution.</div>
+    <div id="chartAlign" class="chart"></div>
+  </div>
+
+  <div class="card c-6 h-lg">
+    <div class="hd"><h3>MB Billing Velocity</h3><span class="hd-meta">Cumulative ₹ L by challan month</span></div>
+    <div class="sub">MB01 (80% release) + MB02 (additional 80–90% release) over challan dates.</div>
+    <div id="chartTimeline" class="chart"></div>
+  </div>
+
+  <!-- Row 5 — secondary charts -->
+  <div class="card c-6 h-md">
+    <div class="hd"><h3>Pending-value Pareto</h3><span class="hd-meta">Cumulative % of pending</span></div>
+    <div class="sub">Which 20% of items hold 80% of remaining money?</div>
+    <div id="chartPareto" class="chart"></div>
+  </div>
+
+  <div class="card c-6 h-md">
+    <div class="hd"><h3>Challan Cadence</h3><span class="hd-meta">Challans issued per month</span></div>
+    <div class="sub">Supply tempo over time.</div>
+    <div id="chartChallanBars" class="chart"></div>
+  </div>
+
+  <!-- Insights -->
+  <div class="insights c-12" id="insightsPanel">
+    <h3><span class="dot"></span> Auto-generated Insights <span style="font-weight:500;color:var(--ink-faint);margin-left:6px">(live, reads current filter)</span></h3>
+    <ul id="insightsList"></ul>
+  </div>
+
+  <!-- Table -->
+  <div class="card c-12 table-card">
+    <div class="hd"><h3>Line-item Register</h3><span class="hd-meta" id="tableMeta">—</span></div>
+    <div class="tbl-tools">
+      <input type="text" id="tableSearch" placeholder="Filter within table…" />
+      <span class="count" id="tableCount">—</span>
+    </div>
+    <div class="tbl-wrap">
+      <table id="itemTable">
+        <thead>
+          <tr>
+            <th data-sort="sch">Sch</th>
+            <th data-sort="sno">#</th>
+            <th data-sort="desc">Item</th>
+            <th data-sort="brand">Brand</th>
+            <th data-sort="qty" class="num">Qty</th>
+            <th data-sort="unit">Unit</th>
+            <th data-sort="totalAmount" class="num">Contract ₹</th>
+            <th data-sort="progressAmount" class="num">Earned ₹</th>
+            <th data-sort="pendingValue" class="num">Pending ₹</th>
+            <th data-sort="progress">Progress</th>
+            <th data-sort="inspection">Inspection</th>
+            <th data-sort="challanDate">Challan Date</th>
+          </tr>
+        </thead>
+        <tbody id="itemTbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Data source: 04_Tele_Marvel_38264_office.xlsx · Rate column: Unit Rate below 17.53 (rebate-adjusted) · Generated <span id="genTs"></span>
+  &nbsp;·&nbsp; File baseline validated: Supply 61.13% ✓, Avg-Progress 23.12% ✓, MB/Contract 30.27% ✓
+</footer>
+
+<script id="dashData" type="application/json">{"meta":{"loaNo":"38264","contractor":"Marvel Pvt. Ltd.","work":"Railway Telecom (LOA-38264)","rebatePct":17.53,"rateColumnUsed":"Unit Rate below 17.53 (i.e. rebate-adjusted billing rate, Col 8)","generatedOn":"2026-04-21T07:25:45","counts":{"schA":106,"schB":54,"total":160},"totals":{"contract":68236152.458157,"earned":27809097.547818,"pending":40427054.910339,"schA":{"contract":42317213.012090996,"earned":25870397.736018002,"pct":61.134455448723045},"schB":{"contract":25918939.446066003,"earned":1938699.8117999998,"pct":7.479857792153055},"overallPct":40.75419927123057},"fileBaseline":{"materialSupplyPct":61.13,"fileExecAvgProgressPct":23.12,"fileFinancialMbRatioPct":30.27,"note":"File row 1 uses three different formulas: Material Supply = Sch-A earned/contract (value-weighted). 'Execution' in file = simple unweighted average of per-item progress ratios across all items. 'Financial' in file = (MB01+MB02 values on supply items) / total contract — represents retention-stage MB billing, not final earned."}},"items":[{"sch":"A","sno":1,"desc":"Supply of network interface module (NIM) as per RDSO specification IRS/TC 68/2012 Amdt. 1 or latest.","techSpec":"Webfil","brand":"Webfil","qty":30.0,"unit":"Numbers","unitRate":30538.0,"unitRateBelow":25184.6886,"totalAmount":755540.658,"suppliedQty":30.0,"progress":1.0,"progressAmount":755540.658,"challanNo":"MEEPL/25-26/ADI Tele04/011 dt.28-11-2025","challanDate":"2025-11-28","udmEntry":"RN.56091-25-00805 dt. 05-01-2026","inspection":"RDSO","inspectionRaw":"RDSO","remaining":0.0,"mb01Qty":30.0,"mb01Value":604432.5264000001,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"₹1L–10L"},{"sch":"A","sno":2,"desc":"Supply of 2 MB Tributary module (TRB) as per RDSO specification IRS/TC 68/2012 Amdt. 1 or latest.","techSpec":"Webfil","brand":"Webfil","qty":30.0,"unit":"Numbers","unitRate":45252.0,"unitRateBelow":37319.3244,"totalAmount":1119579.7319999998,"suppliedQty":30.0,"progress":1.0,"progressAmount":1119579.7319999998,"challanNo":"MEEPL/25-26/ADI Tele04/011 dt.28-11-2025","challanDate":"2025-11-28","udmEntry":"RN.56091-25-00806 dt. 05-01-2026","inspection":"RDSO","inspectionRaw":"RDSO","remaining":0.0,"mb01Qty":30.0,"mb01Value":895663.7856,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"₹10L–1Cr"},{"sch":"A","sno":3,"desc":"Supply of power supply of PDMUX compatible to Webfill as per RDSO specification IRS/TC 68/2012 Amdt. 1 or latest.","techSpec":"Webfil","brand":"Webfil","qty":30.0,"unit":"Numbers","unitRate":26762.0,"unitRateBelow":22070.6214,"totalAmount":662118.642,"suppliedQty":30.0,"progress":1.0,"progressAmount":662118.642,"challanNo":"MEEPL/25-26/ADI Tele04/011 dt.28-11-2025","challanDate":"2025-11-28","udmEntry":"RN.56091-25-00807 dt. 05-01-2026","inspection":"RDSO","inspectionRaw":"RDSO","remaining":0.0,"mb01Qty":30.0,"mb01Value":529694.9136,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"₹1L–10L"},{"sch":"A","sno":4,"desc":"Supply of subscriber interface card (FXS) [4 ckts per card] suitable for existing primary MUX as per RDSO specification IRS: TC 68/2012 withamendment 1 or latest.","techSpec":"Webfil","brand":"Webfil","qty":10.0,"unit":"Numbers","unitRate":21948.0,"unitRateBelow":18100.5156,"totalAmount":181005.156,"suppliedQty":10.0,"progress":1.0,"progressAmount":181005.156,"challanNo":"MEEPL/25-26/ADI Tele04/011 dt.28-11-2025","challanDate":"2025-11-28","udmEntry":"RN.56091-25-00808 dt. 05-01-2026","inspection":"RDSO","inspectionRaw":"RDSO","remaining":0.0,"mb01Qty":10.0,"mb01Value":144804.1248,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"₹1L–10L"},{"sch":"A","sno":5,"desc":"Supply of 2W/4W E&M (4 Circuit) Moodule compatible to Webfil as per RDSO specification IRS/TC 68/2012 Amdt. 1 or latest.","techSpec":"Webfil","brand":"Webfil","qty":10.0,"unit":"Numbers","unitRate":28810.0,"unitRateBelow":23759.607,"totalAmount":237596.07,"suppliedQty":10.0,"progress":1.0,"progressAmount":237596.07,"challanNo":"MEEPL/25-26/ADI Tele04/011 dt.28-11-2025","challanDate":"2025-11-28","udmEntry":"RN.56091-25-00809 dt. 05-01-2026","inspection":"RDSO","inspectionRaw":"RDSO","remaining":0.0,"mb01Qty":10.0,"mb01Value":190076.85600000003,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"₹1L–10L"},{"sch":"A","sno":6,"desc":"Supply of Power Supply (PSU) card to suit as per Spec No. IRS:TC-68/12 with amendment 1 or latest.","techSpec":"Puncom","brand":"Puncom","qty":10.0,"unit":"Numbers","unitRate":21122.0,"unitRateBelow":17419.3134,"totalAmount":174193.134,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"RDSO","inspectionRaw":"RDSO","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":174193.134,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":7,"desc":"Supply of E & M l/F card (4 ckts per card ) as per RDSO SPECN NO.IRS-TC- 68/2012with amendment 1 or latest.","techSpec":"Puncom","brand":"Puncom","qty":10.0,"unit":"Numbers","unitRate":23246.0,"unitRateBelow":19170.9762,"totalAmount":191709.76200000002,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"RDSO","inspectionRaw":"RDSO","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":191709.76200000002,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":8,"desc":"Supply of Thermo shrinkable joint kit as per RDSO Spec. No. IRS/TC 77/2012 Rev-3Amd.3 or latest straight through joints suitable to 6 quad cable of Spec. No. IRS TC -30/2005, Ver-1, Amd-5 orlatest and conforming to as per Technical Specifications","techSpec":"","brand":"Unspecified","qty":150.0,"unit":"Numbers","unitRate":3259.0,"unitRateBelow":2687.6973,"totalAmount":403154.595,"suppliedQty":150.0,"progress":1.0,"progressAmount":403154.595,"challanNo":"MEEPL/25-26/ADI Tele04/004  Dt:16/10/2025","challanDate":"2025-10-16","udmEntry":"RN.56091-25-00797  Dt: 02/01/2026","inspection":"RDSO","inspectionRaw":"RDSO","remaining":0.0,"mb01Qty":150.0,"mb01Value":322523.676,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"₹1L–10L"},{"sch":"A","sno":9,"desc":"Supply of Thermo shrinkable joint kit as per RDSO Spec. No. 77/2012 Rev-3 Amd.-3 or latest suitable for 2T joints RTSF (75/15 mm) suitable to 6 quad cable of spec. no. IRS TC -30/2005, Ver-1, Amd-5 orlatest.","techSpec":"","brand":"Unspecified","qty":150.0,"unit":"Numbers","unitRate":3944.0,"unitRateBelow":3252.6168,"totalAmount":487892.51999999996,"suppliedQty":150.0,"progress":1.0,"progressAmount":487892.51999999996,"challanNo":"MEEPL/25-26/ADI Tele04/004  Dt:16/10/2025","challanDate":"2025-10-16","udmEntry":"RN.56091-25-00798  Dt: 02/01/2026","inspection":"RDSO","inspectionRaw":"RDSO","remaining":0.0,"mb01Qty":150.0,"mb01Value":390314.016,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"₹1L–10L"},{"sch":"A","sno":10,"desc":"Supply of STP CAT-6 Cable as per specification.","techSpec":"D-Link or Similar","brand":"D-Link","qty":15000.0,"unit":"Metre","unitRate":36.0,"unitRateBelow":29.6892,"totalAmount":445338.0,"suppliedQty":14945.0,"progress":0.9963333333333333,"progressAmount":443705.094,"challanNo":"MEEPL/25-26/ADI Tele04/005  Dt:12/11/2025","challanDate":"2025-11-12","udmEntry":"RN.56091-25-00698  Dt: 02/12/2025","inspection":"Consignee","inspectionRaw":"Consignee","remaining":0.0,"mb01Qty":14945.0,"mb01Value":354964.0752,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":1632.9060000000172,"status":"Completed","valueBand":"₹1L–10L"},{"sch":"A","sno":11,"desc":"Supply of Single mode Optical fiber cable 6 cores armored as per technical specifications.","techSpec":"D-Link or finolex","brand":"D-Link","qty":27000.0,"unit":"Metre","unitRate":30.0,"unitRateBelow":24.741,"totalAmount":668007.0,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"RITES","inspectionRaw":"RITES","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":668007.0,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":12,"desc":"Supply Polyolefin cable channel of size width 240/340 mm, height 155/230 internal/external, length 1meter produced of polyolefin with fire protection class K-1 in accordance with DIN 53438 Part-II for laying signaling/telecom cables, channel attachable to each other with male female swallow tail connectors and having a suitable detachable cover, as per RDSO STS/E/cable laying Precise Vol-IV and as per technical specifications.","techSpec":"","brand":"Unspecified","qty":1250.0,"unit":"Numbers","unitRate":2178.12,"unitRateBelow":1796.2955639999998,"totalAmount":2245369.4549999996,"suppliedQty":1250.0,"progress":1.0,"progressAmount":2245369.4549999996,"challanNo":"MEEPL/25-26/ADI Tele04/020 dt.27-01-2026","challanDate":"2026-01-27","udmEntry":"RN No. 56091-25-00889\ndt. 28-01-2026","inspection":"RITES","inspectionRaw":"RITES","remaining":0.0,"mb01Qty":1250.0,"mb01Value":1796295.5639999998,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"₹10L–1Cr"},{"sch":"A","sno":13,"desc":"Supply of Fiber Distribution management System (FDMS)suitable for termination of 2 x 24 fibers as per technical specification.","techSpec":"Saraswat Enterprises, commscope, R&M","brand":"CommScope","qty":35.0,"unit":"Numbers","unitRate":45739.0,"unitRateBelow":37720.9533,"totalAmount":1320233.3655,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"RITES","inspectionRaw":"RITES","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":1320233.3655,"status":"Not Started","valueBand":"₹10L–1Cr"},{"sch":"A","sno":14,"desc":"Supply of PVC insulated flexible 3 core x 2.5 sq mm multi strand power cable as per Technical Specifications.","techSpec":"Havells, Torrent, Gloster, Bharat cables, Avocab, Polycab, Finolex or, Anchor make's only.","brand":"Finolex","qty":500.0,"unit":"Metre","unitRate":41.19,"unitRateBelow":33.969393,"totalAmount":16984.6965,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":16984.6965,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":15,"desc":"Supply of 10 pair 0.5 mm annealed copper conductor PVC insulated switch board Telephone cable as per specification.","techSpec":"","brand":"Unspecified","qty":2000.0,"unit":"Metre","unitRate":37.09,"unitRateBelow":30.588123000000003,"totalAmount":61176.24600000001,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":61176.24600000001,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":16,"desc":"Supply of 20 pair 0.5 mm annealed copper conductor PVC insulated switch board Telephone cable as per specification.","techSpec":"","brand":"Unspecified","qty":2000.0,"unit":"Metre","unitRate":72.22,"unitRateBelow":59.559833999999995,"totalAmount":119119.66799999999,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":119119.66799999999,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":17,"desc":"Supply of 50 pair 0.5 mm annealed copper conductor PVC insulated switch board Telephone cable as per specification.","techSpec":"","brand":"Unspecified","qty":2000.0,"unit":"Metre","unitRate":180.56,"unitRateBelow":148.907832,"totalAmount":297815.66400000005,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":297815.66400000005,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":18,"desc":"Supply of metal DP box 20 pair with locking arrangement fitted with krnon module as per specification.","techSpec":"","brand":"Unspecified","qty":30.0,"unit":"Numbers","unitRate":1389.0,"unitRateBelow":1145.5083,"totalAmount":34365.248999999996,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":34365.248999999996,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":19,"desc":"Supply of metal DP box 50 pair with locking arrangement fitted with krnon module as per specification.","techSpec":"","brand":"Unspecified","qty":12.0,"unit":"Numbers","unitRate":2260.0,"unitRateBelow":1863.822,"totalAmount":22365.863999999998,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":22365.863999999998,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":20,"desc":"Supply of metal DP box 100 pair with locking arrangement fitted with krnon module as per specification.","techSpec":"","brand":"Unspecified","qty":5.0,"unit":"Numbers","unitRate":3927.0,"unitRateBelow":3238.5969,"totalAmount":16192.9845,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":16192.9845,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":21,"desc":"Supply of Connectors/Pig Tail/Patch cords/ MC/ LIU/ Patch Panels/Switch; with necessary accessories for termination/ splicing of OFC cable as per specification.","techSpec":"commscope, R&M, Molex","brand":"CommScope","qty":24.0,"unit":"Lumpsum","unitRate":11765.0,"unitRateBelow":9702.5955,"totalAmount":232862.292,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":232862.292,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":22,"desc":"Supply of HDPE duct 40/33 mm as per RDSO/ SPN/TC/ 45/2013 /Rev. 2.0 with latest amendments 2 with different colour code as per site requirement. The duct is to be supplied as per HQ Technical guidelines for installation and utilization of OFC cable (efile no. 592147) dtd. 01.01.2025.","techSpec":"Make: -Mukand Poly Product, Narayani Poly Pipe, Dura-Line India Pvt. Ltd","brand":"Mukand","qty":10.0,"unit":"Kilometre","unitRate":62884.0,"unitRateBelow":51860.4348,"totalAmount":518604.348,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"RITES","inspectionRaw":"RITES","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":518604.348,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":23,"desc":"Supply of 2 x 24 fiber optic fiber splice straight joint enclosure (SJC) complete with all accessories as per RDSO/SPN/TC/ 68/2014,Rev.3 or latest amendment.","techSpec":"commscope, R&M","brand":"CommScope","qty":500.0,"unit":"Numbers","unitRate":5439.0,"unitRateBelow":4485.5433,"totalAmount":2242771.65,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"RDSO","inspectionRaw":"RDSO","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":2242771.65,"status":"Not Started","valueBand":"₹10L–1Cr"},{"sch":"A","sno":24,"desc":"Supply of 25 mm dia. HDPE pipe (TEC spec. No. G/CDS- 08/02, Nov'04 or latest) as per specification.","techSpec":"","brand":"Unspecified","qty":2000.0,"unit":"Running Metre","unitRate":36.0,"unitRateBelow":29.6892,"totalAmount":59378.4,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":59378.4,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":25,"desc":"Supply of 40 mm PVC casing capping as per specification.","techSpec":"","brand":"Unspecified","qty":3000.0,"unit":"Running Metre","unitRate":47.0,"unitRateBelow":38.7609,"totalAmount":116282.7,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":116282.7,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":26,"desc":"Supply of Rectangle Pvc Channel as per technical specification.","techSpec":"","brand":"Unspecified","qty":400.0,"unit":"Metre","unitRate":100.0,"unitRateBelow":82.47,"totalAmount":32988.0,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":32988.0,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":27,"desc":"Supply of maintenance free earth electrode as per RDSO/SPN/ 197/2016 Ver 1.0or latest.","techSpec":"","brand":"Unspecified","qty":20.0,"unit":"Numbers","unitRate":17566.0,"unitRateBelow":14486.6802,"totalAmount":289733.604,"suppliedQty":20.0,"progress":1.0,"progressAmount":289733.604,"challanNo":"MEEPL/25-26/ADI Tele 04 /009 Dt: 12.01.2026","challanDate":"2026-01-12","udmEntry":"RN.56091-25-00847 dt. 17-01-2026","inspection":"RDSO","inspectionRaw":"RDSO","remaining":0.0,"mb01Qty":20.0,"mb01Value":231786.8832,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"₹1L–10L"},{"sch":"A","sno":28,"desc":"Supply of \"Ring Earthing System for Telecom Installations as per specification No. RDSO/SPN/ 197/2016 Ver 1.0 or latest.","techSpec":"","brand":"Unspecified","qty":15.0,"unit":"Numbers","unitRate":36438.0,"unitRateBelow":30050.4186,"totalAmount":450756.27900000004,"suppliedQty":15.0,"progress":1.0,"progressAmount":450756.27900000004,"challanNo":"MEEPL/25-26/ADI Tele 04 /009 Dt: 12.01.2026","challanDate":"2026-01-12","udmEntry":"RN.56091-25-00848 dt. 17-01-2026","inspection":"RDSO","inspectionRaw":"RDSO","remaining":0.0,"mb01Qty":15.0,"mb01Value":360605.02320000005,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"₹1L–10L"},{"sch":"A","sno":29,"desc":"Supply of Class -B type & Class - C type surge arrester lightening arrester for single phase as per RDSO Specs. RDSO/SPN /TC /98/2011amendment 1 or latest.","techSpec":"","brand":"Unspecified","qty":10.0,"unit":"Numbers","unitRate":17213.0,"unitRateBelow":14195.561099999999,"totalAmount":141955.61099999998,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"RITES","inspectionRaw":"RITES","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":141955.61099999998,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":30,"desc":"Supply of surge & lightening protection arrangement in the optical fibre huts up to the level of the circuits derived from MUX at the stations (Surge & Lightening protection complete for 30 circuits arrived from P Mux and earthing arrangement as per Drg. No.TW/Earthing/2 and TW /Earthing /3 including supply of all the materials required for the work, as per technical specification.","techSpec":"","brand":"Unspecified","qty":10.0,"unit":"Numbers","unitRate":17092.0,"unitRateBelow":14095.7724,"totalAmount":140957.724,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"RITES","inspectionRaw":"RITES","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":140957.724,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":31,"desc":"Supply of Power pack 230 volt AC in put to 48 volt DC out put 1 Amp capacity complete with battery back up 48 volt7-AH as per specification.","techSpec":"","brand":"Unspecified","qty":2.0,"unit":"Numbers","unitRate":16941.0,"unitRateBelow":13971.2427,"totalAmount":27942.4854,"suppliedQty":2.0,"progress":1.0,"progressAmount":27942.4854,"challanNo":"MEEPL/25-26/ADI Tele04/003  Dt:14/10/2025","challanDate":"2025-10-14","udmEntry":"RN.56091-25-00632  Dt: 29/10/2025","inspection":"Consignee","inspectionRaw":"consignee","remaining":0.0,"mb01Qty":2.0,"mb01Value":22353.988320000004,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"<₹1L"},{"sch":"A","sno":32,"desc":"Supply of cross talk meter conforming to as per Technical Specifications.","techSpec":"","brand":"Unspecified","qty":2.0,"unit":"Set","unitRate":83910.0,"unitRateBelow":69200.577,"totalAmount":138401.154,"suppliedQty":2.0,"progress":1.0,"progressAmount":138401.154,"challanNo":"MEEPL/25-26/ADI Tele04/006  Dt:12/11/2025","challanDate":"2025-11-12","udmEntry":"RN.56091-25-00693  Dt: 01/12/2025","inspection":"Consignee","inspectionRaw":"Consignee","remaining":0.0,"mb01Qty":2.0,"mb01Value":110720.92320000002,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"₹1L–10L"},{"sch":"A","sno":33,"desc":"Supply of SMPS Power Plant with FR/FC Module, 48 V, 50 amps for telecom use as per No. RDSO/SPN /TL/23/99 (Ver.4) Amd-1 or latest.","techSpec":"","brand":"Unspecified","qty":20.0,"unit":"Numbers","unitRate":112737.0,"unitRateBelow":92974.2039,"totalAmount":1859484.0779999997,"suppliedQty":20.0,"progress":1.0,"progressAmount":1859484.0779999997,"challanNo":"MEEPL/25-26/ADI Tele04/009A  Dt:19/11/2025","challanDate":"2025-11-19","udmEntry":"RN.56091-25-00794  Dt: 02/01/2026","inspection":"RDSO","inspectionRaw":"RDSO","remaining":0.0,"mb01Qty":20.0,"mb01Value":1487587.2624,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"₹10L–1Cr"},{"sch":"A","sno":34,"desc":"Supply of Precision hot air and soldering iron soldering station, with temperature adjust control on the iron handle as per technical specification.","techSpec":"YIHUA","brand":"YIHUA","qty":4.0,"unit":"Set","unitRate":21610.17,"unitRateBelow":17821.907198999997,"totalAmount":71287.62879599999,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":71287.62879599999,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":35,"desc":"Supply of SMPS Power Plant with FR/FC Module, 48 V, 100 amps for telecom use as per No. RDSO/SPN /TL/23/99 (Ver.4) Amd-I or latest in N+1 configuration i.e. using 3 modules of 25 amps with automatic switching between the modules, for one set of 200 AH VRLA battery. It shall be equipped with surge and lightening protection of class 'B' and 'C' the configuration shall be decided as per siterequirement.","techSpec":"statcon energia","brand":"Statcon Energia","qty":3.0,"unit":"Numbers","unitRate":179622.0,"unitRateBelow":148134.2634,"totalAmount":444402.7902,"suppliedQty":3.0,"progress":1.0,"progressAmount":444402.7902,"challanNo":"MEEPL/25-26/ADI Tele 04 /010 Dt: 13.01.2026","challanDate":"2026-01-13","udmEntry":"RN.56091-25-00850 dt. 17-01-2026","inspection":"RDSO","inspectionRaw":"RDSO","remaining":0.0,"mb01Qty":3.0,"mb01Value":355522.23216,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"₹1L–10L"},{"sch":"A","sno":36,"desc":"Supply of 5KVA online UPS having 1 hour back up as per technical specifications.","techSpec":"APC","brand":"APC","qty":18.0,"unit":"Numbers","unitRate":68563.7,"unitRateBelow":56544.483389999994,"totalAmount":1017800.7010199999,"suppliedQty":18.0,"progress":1.0,"progressAmount":1017800.7010199999,"challanNo":"MEEPL/25-26/TELE04/0021 Date : 07/02/2026","challanDate":"2026-02-07","udmEntry":"RN No.56091-25-00959\ndt. 18-02-2026","inspection":"RITES","inspectionRaw":"RITES","remaining":18.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":18.0,"mb02Value":814240.560816,"pendingValue":0.0,"status":"Completed","valueBand":"₹10L–1Cr"},{"sch":"A","sno":37,"desc":"Supply of centralized power supply system 24 Volts DC power pack with 7AH MF battery for Electronic LC gate Telephone system as per RDSO Spec: No. RDSO/SPN/TC/51/2021 (Rev. 3.0)Amdt -1","techSpec":"","brand":"Unspecified","qty":10.0,"unit":"Numbers","unitRate":6732.21,"unitRateBelow":5552.053587,"totalAmount":55520.53587000001,"suppliedQty":10.0,"progress":1.0,"progressAmount":55520.53587000001,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":10.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"<₹1L"},{"sch":"A","sno":38,"desc":"supply of IP phone connect - IP6LP with Gigabit connectivity HD voice & 4.3'' 480*272 graphical LCD with backlight, 4-bit gray level, support 3-way conference, support PoE. Up to 6SIP accounts","techSpec":"dasscom","brand":"Dasscom","qty":10.0,"unit":"Numbers","unitRate":8186.0,"unitRateBelow":6750.9942,"totalAmount":67509.942,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":67509.942,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":39,"desc":"Supply of Analog push button telephone with CLI as per specification.","techSpec":"beetal","brand":"Beetal","qty":15.0,"unit":"Numbers","unitRate":717.74,"unitRateBelow":591.920178,"totalAmount":8878.80267,"suppliedQty":15.0,"progress":1.0,"progressAmount":8878.80267,"challanNo":"MEEPL/25-26/ADI Tele04/003  Dt:14/10/2025","challanDate":"2025-10-14","udmEntry":"RN.56091-25-00630  Dt: 29/10/2025","inspection":"Consignee","inspectionRaw":"Consignee","remaining":0.0,"mb01Qty":15.0,"mb01Value":7103.042136,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"<₹1L"},{"sch":"A","sno":40,"desc":"Supply of Master Telephone with voice logging facility for Electronic LC Gate Telephone system as per specification No: RDSO/SPN/TC-51/2021Revision 3.0 with amendmentNo. 1 or latest.","techSpec":"","brand":"Unspecified","qty":10.0,"unit":"Numbers","unitRate":46342.44,"unitRateBelow":38218.610268000004,"totalAmount":382186.10268,"suppliedQty":10.0,"progress":1.0,"progressAmount":382186.10268,"challanNo":"MEEPL/25-26/TELE04/0022 \nDate : 16/02/2026","challanDate":"2026-02-16","udmEntry":"RN No. 56091-25-00960 \ndt. 18-02-2026","inspection":"RDSO","inspectionRaw":"RDSO","remaining":10.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":10.0,"mb02Value":305748.88214400003,"pendingValue":0.0,"status":"Completed","valueBand":"₹1L–10L"},{"sch":"A","sno":41,"desc":"Supply of Electronic LC Gate slave Telephone system with voice recorder as per RDSO Specification no.RDSO/SPN/TC/51/2021Revision 1.0 or latest.","techSpec":"","brand":"Unspecified","qty":60.0,"unit":"Numbers","unitRate":5027.08,"unitRateBelow":4145.8328759999995,"totalAmount":248749.97255999997,"suppliedQty":60.0,"progress":1.0,"progressAmount":248749.97255999997,"challanNo":"MEEPL/25-26/TELE04/0022 \nDate : 16/02/2026","challanDate":"2026-02-16","udmEntry":"RN No. 56091-25-00961\n dt. 18-02-2026","inspection":"RDSO","inspectionRaw":"RDSO","remaining":60.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":60.0,"mb02Value":198999.978048,"pendingValue":0.0,"status":"Completed","valueBand":"₹1L–10L"},{"sch":"A","sno":42,"desc":"SUPPLY OF OPTICAL LASER TORCH AS PER SPECIFICATION.","techSpec":"https://share.google/WzL5QR8yhXs3VxGKV","brand":"Unspecified","qty":10.0,"unit":"Numbers","unitRate":2348.2,"unitRateBelow":1936.5605399999997,"totalAmount":19365.605399999997,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":19365.605399999997,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":43,"desc":"Supply of 4 port -48 DC Router 4x2 mbps G-703 port, 3 port integrated gigabyte Ethernet ports /2 LAN port or more , RAM minimum 512 (installeD) & Flash Memory 256 MB (installed), power supply card (-48V dc operated) etc, as per RDSO specification No, RDSO/SPN/TC/84/2008 )Rev.0) or as perlatest specification.","techSpec":"","brand":"Unspecified","qty":4.0,"unit":"Numbers","unitRate":88476.4,"unitRateBelow":72966.48707999999,"totalAmount":291865.94831999997,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"RDSO","inspectionRaw":"RDSO","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":291865.94831999997,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":44,"desc":"Supply of 8-Port with 2 port SFP Networking Switch with POE , as per Technical Specifications.","techSpec":"","brand":"Unspecified","qty":30.0,"unit":"Numbers","unitRate":22703.0,"unitRateBelow":18723.164099999998,"totalAmount":561694.923,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"RITES","inspectionRaw":"RITES","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":561694.923,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":45,"desc":"Supply of Wi-Fi Extender Dual- Band AX1800 Wifi 6 System Router + 2 Satellite extender as per technical specification.","techSpec":"","brand":"Unspecified","qty":15.0,"unit":"Numbers","unitRate":22349.2,"unitRateBelow":18431.38524,"totalAmount":276470.7786,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":276470.7786,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":46,"desc":"Supply of 16 Port POE manageable switch 10/100/1000 base T with four or more 1000 base x Layer 2 switch ( 4nos 1000 LX (Fiber up link) complete with SFP trans receiver module including ) as per specification.","techSpec":"Zyxel","brand":"Zyxel","qty":5.0,"unit":"Numbers","unitRate":26608.0,"unitRateBelow":21943.6176,"totalAmount":109718.088,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"RDSO","inspectionRaw":"RDSO","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":109718.088,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":47,"desc":"Supply of 24 Port POE manageable switch 10/100/1000 base T with four or more 1000 base x Layer 2 switch ( 4nos 1000 LX (Fiber up link) complete with 4 port SFP trans receiver module including ) as per specification.","techSpec":"Zyxel","brand":"Zyxel","qty":15.0,"unit":"Numbers","unitRate":37714.0,"unitRateBelow":31102.7358,"totalAmount":466541.03699999995,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"RITES","inspectionRaw":"RITES","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":466541.03699999995,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":48,"desc":"Supply of G.703, 2 Port E1 to Ethernet Converter along with complete Chassis, power module (48VDC), NMC module etc. Compatible with SCADA communication, as per technical specification.","techSpec":"","brand":"Unspecified","qty":20.0,"unit":"Numbers","unitRate":56232.0,"unitRateBelow":46374.530399999996,"totalAmount":927490.6079999999,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"RITES","inspectionRaw":"RITES","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":927490.6079999999,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":49,"desc":"Supply of Two-Way 5.25 inch (135mm) Coaxial Mushroom Landscape Speaker, as per technical specification.","techSpec":"JBL","brand":"JBL","qty":4.0,"unit":"Numbers","unitRate":21830.0,"unitRateBelow":18003.201,"totalAmount":72012.804,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":72012.804,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":50,"desc":"Supply of 300 WATT MIXER AMPLIFIER BT WITH USB asper technical specification.","techSpec":"JBL","brand":"JBL","qty":1.0,"unit":"Numbers","unitRate":27730.0,"unitRateBelow":22868.931,"totalAmount":22868.931,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":22868.931,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":51,"desc":"Supply of 15-inch Powered PA Speaker with Bluetooth as per technical specification.","techSpec":"JBL","brand":"JBL","qty":4.0,"unit":"Numbers","unitRate":54280.0,"unitRateBelow":44764.716,"totalAmount":179058.864,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":179058.864,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":52,"desc":"Supply of SPEAKER STAND as per technical specification.","techSpec":"","brand":"Unspecified","qty":7.0,"unit":"Numbers","unitRate":3540.0,"unitRateBelow":2919.438,"totalAmount":20436.066,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":20436.066,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":53,"desc":"Supply of 8 CHANNEL MIXER ANLOG as per technical specification.","techSpec":"yamaha","brand":"Yamaha","qty":1.0,"unit":"Numbers","unitRate":16520.0,"unitRateBelow":13624.044,"totalAmount":13624.044,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":13624.044,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":54,"desc":"Supply of BT & USB PLAYER as per technical specification.","techSpec":"???","brand":"Unspecified","qty":2.0,"unit":"Numbers","unitRate":3540.0,"unitRateBelow":2919.438,"totalAmount":5838.876,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":5838.876,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":55,"desc":"Supply of 18\" High Power Flying Subwoofer as per technical specification.","techSpec":"JBL","brand":"JBL","qty":1.0,"unit":"Numbers","unitRate":96760.0,"unitRateBelow":79797.972,"totalAmount":79797.972,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":79797.972,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":56,"desc":"Supply of Two-channel, 1100W @ 4 Power Amplifier FOR SPEAKER as per technical specification.","techSpec":"Crown","brand":"Crown","qty":2.0,"unit":"Numbers","unitRate":66670.0,"unitRateBelow":54982.748999999996,"totalAmount":109965.49799999999,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":109965.49799999999,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":57,"desc":"Supply of High Output Indoor/Outdoor Background/Foreground Speaker as per technical specification.","techSpec":"JBL","brand":"JBL","qty":6.0,"unit":"Numbers","unitRate":25960.0,"unitRateBelow":21409.212,"totalAmount":128455.272,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":128455.272,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":58,"desc":"Supply of 15\" High Power Subwoofer System, as per technical specification.","techSpec":"JBL","brand":"JBL","qty":2.0,"unit":"Numbers","unitRate":67732.0,"unitRateBelow":55858.5804,"totalAmount":111717.1608,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":111717.1608,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":59,"desc":"Supply of Two-channel, 525W @ 4 Power Amplifier as per technical specification.","techSpec":"Crown","brand":"Crown","qty":1.0,"unit":"Numbers","unitRate":34220.0,"unitRateBelow":28221.234,"totalAmount":28221.234,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":28221.234,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":60,"desc":"Supply of 12 CHANNEL ANLOG MIXER as per technical specification.","techSpec":"yamaha","brand":"Yamaha","qty":1.0,"unit":"Numbers","unitRate":18408.0,"unitRateBelow":15181.0776,"totalAmount":15181.0776,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":15181.0776,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":61,"desc":"Supply of WALL BRACKET FOR SPEAKER as per technical specification.","techSpec":"","brand":"Unspecified","qty":6.0,"unit":"Numbers","unitRate":4130.0,"unitRateBelow":3406.011,"totalAmount":20436.066,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":20436.066,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":62,"desc":"Supply of GOOESNECK MICROPHONE WITH BASE asper technical specification.","techSpec":"Shure","brand":"Shure","qty":4.0,"unit":"Numbers","unitRate":25960.0,"unitRateBelow":21409.212,"totalAmount":85636.848,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":85636.848,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":63,"desc":"Supply of CORDLESS MICROPHONE HANDHELD asper technical specification.","techSpec":"Shure","brand":"Shure","qty":4.0,"unit":"Numbers","unitRate":31270.0,"unitRateBelow":25788.369,"totalAmount":103153.476,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":103153.476,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":64,"desc":"Supply of CRODLESS MICROPHONE LAPEL as pertechnical specification.","techSpec":"Shure","brand":"Shure","qty":4.0,"unit":"Numbers","unitRate":31270.0,"unitRateBelow":25788.369,"totalAmount":103153.476,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":103153.476,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":65,"desc":"Supply of SPEAKER CABLE 2.5 SQMM (APPROX)as pertechnical specification.","techSpec":"","brand":"Unspecified","qty":200.0,"unit":"Running Metre","unitRate":112.1,"unitRateBelow":92.44887,"totalAmount":18489.774,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":18489.774,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":66,"desc":"Supply of SPEAKER CABLE 1.5 SQMM (APPROX)as pertechnical specification.","techSpec":"","brand":"Unspecified","qty":200.0,"unit":"Running Metre","unitRate":70.8,"unitRateBelow":58.38876,"totalAmount":11677.752,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":11677.752,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":67,"desc":"Supply of MICROPHONE CABLE DIGITAL (APPROX) asper technical specification.","techSpec":"","brand":"Unspecified","qty":200.0,"unit":"Running Metre","unitRate":53.1,"unitRateBelow":43.79157,"totalAmount":8758.314,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":8758.314,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":68,"desc":"Supply of INTER CONNECTION & CONNECTOR LOT as per technical specification.","techSpec":"","brand":"Unspecified","qty":1.0,"unit":"Numbers","unitRate":12390.0,"unitRateBelow":10218.033,"totalAmount":10218.033,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":10218.033,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":69,"desc":"Supply of EQUIPMENT RACK 9 U FOR GYM AREA as per technical specification.","techSpec":"","brand":"Unspecified","qty":1.0,"unit":"Numbers","unitRate":14750.0,"unitRateBelow":12164.325,"totalAmount":12164.325,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":12164.325,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":70,"desc":"Supply of EQUIPMENT RACK 18U FOR OUTDOOR AREA asper technical specification.","techSpec":"","brand":"Unspecified","qty":1.0,"unit":"Numbers","unitRate":27730.0,"unitRateBelow":22868.931,"totalAmount":22868.931,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":22868.931,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":71,"desc":"Supply of five line single face train Arrival Departure Display Boards with all necessary accessories as per RDSO specification No. RDSO./SPN/ TC/108/2019 Ver.1.0 or latest.","techSpec":"","brand":"Unspecified","qty":2.0,"unit":"Numbers","unitRate":569415.54,"unitRateBelow":469596.99583800003,"totalAmount":939193.9916760001,"suppliedQty":2.0,"progress":1.0,"progressAmount":939193.9916760001,"challanNo":"MEEPL/25-26/TELE 04/0025  Date : 10/03/2026","challanDate":"2026-03-10","udmEntry":"RN No : 56091-25-01040 dt. 11-03-2026","inspection":"RDSO","inspectionRaw":"RDSO","remaining":2.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":2.0,"mb02Value":751355.1933408001,"pendingValue":0.0,"status":"Completed","valueBand":"₹1L–10L"},{"sch":"A","sno":72,"desc":"Supply of Three line single face train arrival departure display boards with all necessary accessories as per RDSO Specifications No.RDSO./SPN/ TC/108/2019Ver.1.0 or latest or latest amendment and conforming to as per Technical Specifications.","techSpec":"","brand":"Unspecified","qty":2.0,"unit":"Numbers","unitRate":451518.17,"unitRateBelow":372367.03479899996,"totalAmount":744734.0695979999,"suppliedQty":2.0,"progress":1.0,"progressAmount":744734.0695979999,"challanNo":"MEEPL/25-26/TELE 04/0025  Date : 10/03/2026","challanDate":"2026-03-10","udmEntry":"RN No : 56091-25-01041 dt. 11-03-2026","inspection":"RDSO","inspectionRaw":"RDSO","remaining":2.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":2.0,"mb02Value":595787.2556783999,"pendingValue":0.0,"status":"Completed","valueBand":"₹1L–10L"},{"sch":"A","sno":73,"desc":"Supply of Single line double face train Arrival Departure Display Boards with all necessary accessories as per RDSO specification No.RDSO./SPN/ TC/108/2019Ver.1.0 or latest.","techSpec":"","brand":"Unspecified","qty":10.0,"unit":"Numbers","unitRate":353269.0,"unitRateBelow":291340.9443,"totalAmount":2913409.443,"suppliedQty":10.0,"progress":1.0,"progressAmount":2913409.443,"challanNo":"MEEPL/25-26/TELE 04/0025  Date : 10/03/2026","challanDate":"2026-03-10","udmEntry":"RN No : 56091-25-01042 dt. 11-03-2026","inspection":"RDSO","inspectionRaw":"RDSO","remaining":10.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":10.0,"mb02Value":2330727.5544000003,"pendingValue":0.0,"status":"Completed","valueBand":"₹10L–1Cr"},{"sch":"A","sno":74,"desc":"Supply of LED based At a Glance Display Board (AGDB) Double Face as per Specification No. RDSO /SPN/ TC/108/ 2019, Ver.1.0 orlatest.","techSpec":"","brand":"Unspecified","qty":6.0,"unit":"Numbers","unitRate":272615.0,"unitRateBelow":224825.5905,"totalAmount":1348953.543,"suppliedQty":6.0,"progress":1.0,"progressAmount":1348953.543,"challanNo":"MEEPL/25-26/TELE 04/0025  Date : 10/03/2026","challanDate":"2026-03-10","udmEntry":"RN No : 56091-25-01043 dt. 11-03-2026","inspection":"RDSO","inspectionRaw":"RDSO","remaining":6.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":6.0,"mb02Value":1079162.8344,"pendingValue":0.0,"status":"Completed","valueBand":"₹10L–1Cr"},{"sch":"A","sno":75,"desc":"Supply of test room equipment with 19\" rack mounting arrangement operating on (-) 48 Volt DC which shall be directly interfaced to QUAD MUX on 4 wire circuit as per RDSO/SPN/TC/66/2007 Ver.1.0 or latest amd.3.","techSpec":"","brand":"Unspecified","qty":12.0,"unit":"Numbers","unitRate":195536.0,"unitRateBelow":161258.5392,"totalAmount":1935102.4704,"suppliedQty":12.0,"progress":1.0,"progressAmount":1935102.4704,"challanNo":"MEEPL/25-26/ADI Tele04/003  Dt:14/10/2025","challanDate":"2025-10-14","udmEntry":"RN.56091-25-00626  Dt: 29/10/2025","inspection":"RDSO","inspectionRaw":"RDSO","remaining":0.0,"mb01Qty":12.0,"mb01Value":1548081.9763200001,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"₹10L–1Cr"},{"sch":"A","sno":76,"desc":"Supply of control room equipment for controller's use operated on 48 volt DC with three digit 7-segment LED display and way station calling facility up to 80 stations by pressing push buttons along with 20 local telephones calling capacity, as per RDSO specification No: RDSO/SPN/TC/66/2007 Ver.1.0 or latest amd.-3 and conforming to as per technicalspecifications .","techSpec":"","brand":"Unspecified","qty":12.0,"unit":"Numbers","unitRate":183782.0,"unitRateBelow":151565.0154,"totalAmount":1818780.1848,"suppliedQty":12.0,"progress":1.0,"progressAmount":1818780.1848,"challanNo":"MEEPL/25-26/ADI Tele04/003  Dt:14/10/2025","challanDate":"2025-10-14","udmEntry":"RN.56091-25-00627  Dt: 29/10/2025","inspection":"RDSO","inspectionRaw":"RDSO","remaining":0.0,"mb01Qty":12.0,"mb01Value":1455024.14784,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"₹10L–1Cr"},{"sch":"A","sno":77,"desc":"Supply of way station equipment with necessary mounting arrangement on composite rack or on wall, as per RDSO specification No. RDSO/SPN/TC/66/2007 Ver.1.0 or latest amd.1,2 & 3.","techSpec":"","brand":"Unspecified","qty":20.0,"unit":"Numbers","unitRate":91670.0,"unitRateBelow":75600.249,"totalAmount":1512004.98,"suppliedQty":20.0,"progress":1.0,"progressAmount":1512004.98,"challanNo":"MEEPL/25-26/ADI Tele04/003  Dt:14/10/2025","challanDate":"2025-10-14","udmEntry":"RN.56091-25-00627  Dt: 29/10/2025","inspection":"RDSO","inspectionRaw":"RDSO","remaining":0.0,"mb01Qty":20.0,"mb01Value":1209603.984,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"₹10L–1Cr"},{"sch":"A","sno":78,"desc":"Supply of Standard 19\" Rack Mountable -48V DC Working Add-Drop STM-4 SDH Equipment conforming to TEC GR No: GR/SDH-010/003. JAN2011 (with latest amendment) complete with, redundant power supply, 2 Nos STM 4 of Aggregate L.4.2 Optical Interface Modules/Cards one each for East and West side TX/RX and 2 nos of STM-1 S1.1 optical interface modules complete with 5 mts. long Optical Patch Cords . 21 E1s with DDFs and Cable assembly for termination to DDF and minimum 8 nos of 10/100 Base-T Ethernet Ports Fast Ethernet on SDH (EoS) 10/100 Base-T Interface Module/ Card supporting with LCAS and GFP, order wire subrack DDF installation Material, manuals and other accessories.Complete Engineering Order Wire(EOW)arrangement.Necessary Software / Firmware for local /remote monitoring / configuration of the equipment through EMS and Software / Firmware Interface to work all Network Elements as Gateway Network Element (GNE).2 Nos of MCBs of appropriate ratings and necessary Connecting cords and cables for power supply modules as per Specification.","techSpec":"tejas","brand":"Tejas","qty":4.0,"unit":"Numbers","unitRate":348072.0,"unitRateBelow":287054.9784,"totalAmount":1148219.9136,"suppliedQty":4.0,"progress":1.0,"progressAmount":1148219.9136,"challanNo":"MEEPL/25-26/ADI Tele04/007","challanDate":null,"udmEntry":"RN. 56091-25-00684\ndt. 20-11-2025","inspection":"RDSO","inspectionRaw":"RDSO","remaining":0.0,"mb01Qty":4.0,"mb01Value":918575.9308800001,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"₹10L–1Cr"},{"sch":"A","sno":79,"desc":"Supply of 2MB programmable primary digital drop insert multiplexer as per RDSO specs. IRS-TC 68/2012 Amd 1 or latest with conference facility and other stipulations of tender documents fully wired for 30 channels completed with all necessary cards, power supply card,remote control , supervision facility and all other accessories, installation materials, manuals etc. it should have facilities to accommodate data interface card in multi drop mode and should be able to support card needed for video conferencing and ISDN. It shall also support NMS operations from local/remote locations as per specification.","techSpec":"webfill","brand":"Webfil","qty":6.0,"unit":"Numbers","unitRate":193619.0,"unitRateBelow":159677.5893,"totalAmount":958065.5358,"suppliedQty":6.0,"progress":1.0,"progressAmount":958065.5358,"challanNo":"MEEPL/25-26/ADI Tele04/011 dt.28-11-2025","challanDate":"2025-11-28","udmEntry":"RN.56091-25-00810 dt. 05-01-2026","inspection":"RDSO","inspectionRaw":"RDSO","remaining":0.0,"mb01Qty":6.0,"mb01Value":766452.42864,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"₹1L–10L"},{"sch":"A","sno":80,"desc":"Supply of 2MB programmable primary digital drop insert multiplexer as per RDSO specs. IRS-TC 68/2012 Amd 1 or latest with conference facility and other stipulations of tender documents fully wired for 30 channels completed with all necessary cards, power supply card,remote control , supervision facility and all other accessories, installation materials, manuals etc. it should have facilities to accommodate data interface card in multi drop mode and should be able to support card needed for video conferencing and ISDN. It shall also support NMS operations from local/remote locations as per specification.","techSpec":"puncom","brand":"Puncom","qty":2.0,"unit":"Numbers","unitRate":193619.0,"unitRateBelow":159677.5893,"totalAmount":319355.1786,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"RDSO","inspectionRaw":"RDSO","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":319355.1786,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":81,"desc":"Supply of 3 way amplifier used for above system for giving more than 4 connections. as per RDSO specification No.RDSO/SPN/TC/66/2007 Ver.1.0 or latest.","techSpec":"","brand":"Unspecified","qty":6.0,"unit":"Numbers","unitRate":24792.0,"unitRateBelow":20445.9624,"totalAmount":122675.7744,"suppliedQty":6.0,"progress":1.0,"progressAmount":122675.7744,"challanNo":"MEEPL/25-26/ADI Tele04/003  Dt:14/10/2025","challanDate":"2025-10-14","udmEntry":"RN.56091-25-00629  Dt: 29/10/2025","inspection":"Consignee","inspectionRaw":"consignee","remaining":0.0,"mb01Qty":6.0,"mb01Value":98140.61952000001,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"₹1L–10L"},{"sch":"A","sno":82,"desc":"Supply of input/output socket for switch as per specification.","techSpec":"","brand":"Unspecified","qty":50.0,"unit":"Numbers","unitRate":205.0,"unitRateBelow":169.0635,"totalAmount":8453.175000000001,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":8453.175000000001,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":83,"desc":"Supply of RJ-45 connectors as per Technical Specifications.","techSpec":"","brand":"Unspecified","qty":2200.0,"unit":"Numbers","unitRate":11.0,"unitRateBelow":9.0717,"totalAmount":19957.739999999998,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":19957.739999999998,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":84,"desc":"Supply of Single mode LC- LC/LC-SC/SC-SC optical patch cord as per specification","techSpec":"","brand":"Unspecified","qty":150.0,"unit":"Numbers","unitRate":134.35,"unitRateBelow":110.79844499999999,"totalAmount":16619.76675,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":16619.76675,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":85,"desc":"Supply of Portable Work Station for data input and configuration with necessary software/program/Accessories, Simulation and functional testing, diagnostics and trouble shooting as per technical specification.","techSpec":"dell, hp","brand":"Dell","qty":7.0,"unit":"Numbers","unitRate":129765.79,"unitRateBelow":107017.84701299999,"totalAmount":749124.929091,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":749124.929091,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":86,"desc":"Supply of All in one Laser jet printer as per technical specification.","techSpec":"","brand":"Unspecified","qty":5.0,"unit":"Numbers","unitRate":25404.0,"unitRateBelow":20950.6788,"totalAmount":104753.394,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":104753.394,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":87,"desc":"Supply of Smart Television Tv 55 Inch 4K Ultra HD as per technical specification.","techSpec":"SOny, Samsung TV (not sinage board)","brand":"Sony","qty":10.0,"unit":"Numbers","unitRate":66461.85,"unitRateBelow":54811.087695,"totalAmount":548110.8769500001,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":548110.8769500001,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":88,"desc":"Supply of material consisting of DCDB, DC distribution arrangement, connectors, wires, etc. as per technical specification.","techSpec":"","brand":"Unspecified","qty":6.0,"unit":"Lumpsum","unitRate":25695.0,"unitRateBelow":21190.6665,"totalAmount":127143.999,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":127143.999,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":89,"desc":"Supply of 19\" 24 U rack with all accessories as per technical specifications.","techSpec":"","brand":"Unspecified","qty":5.0,"unit":"Numbers","unitRate":34688.0,"unitRateBelow":28607.1936,"totalAmount":143035.968,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":143035.968,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":90,"desc":"Supply of 19\" covered 42U rack, Val rack/ Vero president/Rattle/APC make with Glass front door complete with all fittings for housing SDH equipment, primary Muxes, DDF, MDF using Crone module, cooling fan and other equipments like runway ladders etc. completely wired and equipped with integrated protection modules for all channels as per technical specifications and other stipulations of tender document. It should be possible to lock all the equipment with only order wire telephone remaining outside the rack as per technical specification attached.","techSpec":"","brand":"Unspecified","qty":10.0,"unit":"Numbers","unitRate":43913.0,"unitRateBelow":36215.0511,"totalAmount":362150.51099999994,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":362150.51099999994,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":91,"desc":"6U Network Rack for Switch and UPS system as per technical specifications.","techSpec":"","brand":"Unspecified","qty":10.0,"unit":"Numbers","unitRate":6861.0,"unitRateBelow":5658.2667,"totalAmount":56582.667,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":56582.667,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":92,"desc":"Supply of wall mounting 19\" 15U rack as per technical specification.","techSpec":"","brand":"Unspecified","qty":15.0,"unit":"Numbers","unitRate":9723.0,"unitRateBelow":8018.5581,"totalAmount":120278.37150000001,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":120278.37150000001,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":93,"desc":"Supply of metal chair with armrest for office round pipe 1\"16 gauge with cane seat & back as per Consignee.","techSpec":"","brand":"Unspecified","qty":60.0,"unit":"Numbers","unitRate":1554.26,"unitRateBelow":1281.798222,"totalAmount":76907.89331999999,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":76907.89331999999,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":94,"desc":"Office table with laminated top with three drawers on left hand side and one locker on the right hand side. Olive brown with duplicate keys or as per consignee.","techSpec":"","brand":"Unspecified","qty":10.0,"unit":"Numbers","unitRate":16052.54,"unitRateBelow":13238.529738000001,"totalAmount":132385.29738,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":132385.29738,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":95,"desc":"Supply of Steel Plain Almirah with 4 adjustable slaves Size: 1980mm height, 915 mm width and 485 mm depth or as per Consignee.","techSpec":"godrej","brand":"Godrej","qty":10.0,"unit":"Numbers","unitRate":17036.67,"unitRateBelow":14050.141748999999,"totalAmount":140501.41749,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":140501.41749,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":96,"desc":"Supply of Office Revolving Chair as per consignee.","techSpec":"godrej","brand":"Godrej","qty":10.0,"unit":"Numbers","unitRate":8188.3,"unitRateBelow":6752.89101,"totalAmount":67528.91010000001,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":67528.91010000001,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":97,"desc":"Supply of Optical splicing machine asper technical specification.","techSpec":"sumitomo","brand":"Sumitomo","qty":4.0,"unit":"Numbers","unitRate":200028.29,"unitRateBelow":164963.330763,"totalAmount":659853.323052,"suppliedQty":4.0,"progress":1.0,"progressAmount":659853.323052,"challanNo":"MEEPL/25-26/ADI Tele04/001  Dt:08/10/2025","challanDate":"2025-10-08","udmEntry":"RN.56091-25-00624  Dt: 29/10/2025","inspection":"RITES","inspectionRaw":"RITES (Amendment required from RITES to Consignee)","remaining":0.0,"mb01Qty":4.0,"mb01Value":527882.6584416,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"₹1L–10L"},{"sch":"A","sno":98,"desc":"Supply of OTDR suitable for 1310/1550 nm fiber with resolution of 60 cm , dynamic range of 31/29 db with all accessories, 5000/fd floppy Disk Drive, AC Adopter/ Charger ,Rechargeable battery, Manual , hard & soft carrying case etc. as per TEC specification No. GR/TX/OTD- 01/04 APR-2010 with latest amendments in force at the time of tender opening with allaccessories.","techSpec":"exfo","brand":"Exfo","qty":6.0,"unit":"Numbers","unitRate":403919.26,"unitRateBelow":333112.213722,"totalAmount":1998673.282332,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"RITES","inspectionRaw":"RITES","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":1998673.282332,"status":"Not Started","valueBand":"₹10L–1Cr"},{"sch":"A","sno":99,"desc":"Supply of Frequency Analyzer 100KHz to 960MHz MF/VHFUHF Input, Signal Generator with 2.8 inch Touch Screen as per technical specification.","techSpec":"","brand":"Unspecified","qty":2.0,"unit":"Numbers","unitRate":15847.46,"unitRateBelow":13069.400262,"totalAmount":26138.800524,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":26138.800524,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":100,"desc":"Supply of cable fault locator in the under ground cable as per technical specification.","techSpec":"https://www.stanlay.in/uploads/products/technical_specs/Telescout-TS90-User-Guide.pdf","brand":"Unspecified","qty":2.0,"unit":"Numbers","unitRate":240963.0,"unitRateBelow":198722.1861,"totalAmount":397444.3722,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":397444.3722,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":101,"desc":"Supply of power meter( wave length 1310mm 1500mm user selectable, measuring range+3 dbm to -60 dbm) as perspecification.","techSpec":"pon power meter (not the normal one) example https://share.google/vYqLDOV3bMqnfCGDK","brand":"Pon","qty":12.0,"unit":"Numbers","unitRate":24932.53,"unitRateBelow":20561.857491,"totalAmount":246742.28989199997,"suppliedQty":12.0,"progress":1.0,"progressAmount":246742.28989199997,"challanNo":"MEEPL/25-26/ADI Tele04/002  Dt:08/10/2025","challanDate":"2025-10-08","udmEntry":"RN.56091-25-00625  Dt: 29/10/2025","inspection":"Consignee","inspectionRaw":"Consignee","remaining":0.0,"mb01Qty":12.0,"mb01Value":197393.83191359998,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"₹1L–10L"},{"sch":"A","sno":102,"desc":"Supply of digital multimeter as per specification and conforming to as per Technical Specifications .","techSpec":"Rishabh","brand":"Rishabh","qty":13.0,"unit":"Numbers","unitRate":2584.0,"unitRateBelow":2131.0248,"totalAmount":27703.3224,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":27703.3224,"status":"Not Started","valueBand":"<₹1L"},{"sch":"A","sno":103,"desc":"Supply of digital insulation tester for measurement of cable insulation as per technical specification.","techSpec":"Rishabh","brand":"Rishabh","qty":17.0,"unit":"Numbers","unitRate":13104.0,"unitRateBelow":10806.8688,"totalAmount":183716.7696,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":183716.7696,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":104,"desc":"Supply of Cable route Tracer to be localize and depth measurement as per specification.","techSpec":"RD8200G radio detection","brand":"RD8200G","qty":1.0,"unit":"Numbers","unitRate":489094.6,"unitRateBelow":403356.31662,"totalAmount":403356.31662,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":403356.31662,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"A","sno":105,"desc":"Supply of transmission measurement set (TMS) with Tone generator & DB meter as per technical specification.","techSpec":"","brand":"Unspecified","qty":2.0,"unit":"Numbers","unitRate":38101.0,"unitRateBelow":31421.8947,"totalAmount":62843.7894,"suppliedQty":2.0,"progress":1.0,"progressAmount":62843.7894,"challanNo":"MEEPL/25-26/ADI Tele04/008  Dt:19/11/2025","challanDate":"2025-11-19","udmEntry":"RN.56091-25-00694  Dt: 01/12/2025","inspection":"Consignee","inspectionRaw":"Consignee","remaining":0.0,"mb01Qty":2.0,"mb01Value":50275.031520000004,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"<₹1L"},{"sch":"A","sno":106,"desc":"Supply of digital Earth tester for measurement of Earth resistance (clamp meter) as per technical specification.","techSpec":"Rishabh   https://www.industrybuying.com/earth-resistance-tester-rishabh-TES.EAR.78382864?utm_source=Google&utm_medium=PLA&utm_campaign=PLA_Top_GSTPref&gad_source=1&gad_campaignid=21885865883&gbraid=0AAAAADesIl_5md3W7aavjrDku3d2VCubl&gclid=Cj0KCQjw58PGBhCkARIsADbDilzkK9Yi8dIuYNnqYr4SnGje-QVoqjvG-27EQHpIDQx3RbNg9MzGCT0aAi7AEALw_wcB","brand":"Rishabh","qty":4.0,"unit":"Numbers","unitRate":9584.0,"unitRateBelow":7903.9248,"totalAmount":31615.6992,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":31615.6992,"status":"Not Started","valueBand":"<₹1L"},{"sch":"B","sno":1,"desc":"Installation of Thermo- shrinkable joining kits for making (a) straight through joints without transformers for 6 quad Jelly filled cable (b) Derivation joint without transformer for 6 quad jelly filled cable, and (c) Straight Through joint without transformer for 10 Pr/20Pr.PIJF cables and construction of Brick chamber for protection of joints with contractor's all materials as per railway Drg. where VF transformers are not required. All the materials required for the work are to be arranged by the contractor himself at his own cost except Thermo shrinkable jointing kit which is already covered in supply portion of the tender.After jointing the cable through test such as insulation test, Continuity cable losses etc. to be carried out jointly with the Railway Engineer. If any defect or any damage observed during jointing, the contractor should be redo thejoint free of cost.","techSpec":"","brand":"Unspecified","qty":150.0,"unit":"Numbers","unitRate":1295.0,"unitRateBelow":1067.9865,"totalAmount":160197.975,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":160197.975,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"B","sno":2,"desc":"Installation of 2T Derivation joint for jointing of 6 Quad jelly filled cable-using Thermo- shrinkable jointing and construction of brick chamber for protection of joints with all contractors' materials as per railway drawing . This includes the taping of nominated quad at a specified location and directives of the Railway Engineer using 2T transformer joint assembly already covered under Schedule 'A' of supply. The other end of the transformer should be connected to 10 pair PIJF jelly filled U/G telephone cable, which is already laid in the trench for this jointing purpose. This jelly filled cable to be taken out of the joint using branch off clip. While jointing, the necessary precautions to be taken against the moisture etc. The cable ends to be taken out and cleaned before jointing.","techSpec":"","brand":"Unspecified","qty":150.0,"unit":"Numbers","unitRate":2042.0,"unitRateBelow":1684.0374,"totalAmount":252605.61,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":252605.61,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"B","sno":3,"desc":"Supply and installation of drop insert termination along with all accessories up to end user as per technical specification.","techSpec":"","brand":"Unspecified","qty":2.0,"unit":"Kilometre","unitRate":59510.0,"unitRateBelow":49077.897,"totalAmount":98155.794,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":98155.794,"status":"Not Started","valueBand":"<₹1L"},{"sch":"B","sno":4,"desc":"Supply and installation FAT box fully loaded atleast 12 fiber as per technical specification.","techSpec":"","brand":"Unspecified","qty":72.0,"unit":"Numbers","unitRate":3787.0,"unitRateBelow":3123.1389,"totalAmount":224866.00079999998,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":224866.00079999998,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"B","sno":5,"desc":"Laying of OFC/Power cable through HDPE pipe/casing capping/fall ceiling with laying/fixing of HDPE pipe/casing capping for Networking System and for connecting/interfacing various components (cutting of masonry wall at the entry of room, repairing of masonry wall , cement plastering at per site requirement are to be supplied by contractor) and system integration. All materials for jointing and termination of power cable cable as per site requirement are to be supplied by contractor.","techSpec":"","brand":"Unspecified","qty":22000.0,"unit":"Running Metre","unitRate":21.0,"unitRateBelow":17.3187,"totalAmount":381011.4,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":381011.4,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"B","sno":6,"desc":"Supply and installation of RCC cable route marker engraved and painted on both side along the route every 50mm and route diversion as per Drg. No 4014/00/CC4 or latest/ Stone marker.","techSpec":"","brand":"Unspecified","qty":100.0,"unit":"Numbers","unitRate":412.66,"unitRateBelow":340.32070200000004,"totalAmount":34032.0702,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":34032.0702,"status":"Not Started","valueBand":"<₹1L"},{"sch":"B","sno":7,"desc":"Laying of S&T Cables of various cores/ pairs/ quads in trenches/ GI pipes/ RCC pipes/ DWC pipes/ Trucking/Polyolefin cable channel. This also includes laying of cables in track crossings & road crossings.Item includes provision of labels of colored plastic adhesive tapes or any other identifiable material on each cable to give the cable number at each G.P.(Cables will be daggered before and after its laying by contractor under supervision of Railway Representative and he will submit the meggering report of each testing). Length of the cable laid includes the length of the cable coiled fortermination purposes.","techSpec":"","brand":"Unspecified","qty":1250.0,"unit":"Metre","unitRate":9.37,"unitRateBelow":7.7274389999999995,"totalAmount":9659.29875,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":9659.29875,"status":"Not Started","valueBand":"<₹1L"},{"sch":"B","sno":8,"desc":"Splicing of laid under above items OFC cable and making the splice joint in dust free environment with contractor's own equipments and labour. The splice loss shall be as per the policy/technical circulars issued by the railways from time to time.","techSpec":"","brand":"Unspecified","qty":2000.0,"unit":"CORE","unitRate":88.79,"unitRateBelow":73.22511300000001,"totalAmount":146450.22600000002,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":146450.22600000002,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"B","sno":9,"desc":"Installation of fiber distribution management system (Supply covered Above) with all installation materials, restoration wall etc. to original condition , splicing and termination of 2 X 24 fiber cable (With all contractor's materials), routing/dressing fibers as per directions of Engineer in-charge.","techSpec":"","brand":"Unspecified","qty":35.0,"unit":"Numbers","unitRate":3157.0,"unitRateBelow":2603.5778999999998,"totalAmount":91125.22649999999,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":91125.22649999999,"status":"Not Started","valueBand":"<₹1L"},{"sch":"B","sno":10,"desc":"Horizontal direction drilling/boring without damage of surface road using Auger Machine. The bore shall be 150 mm Dia & shall be done at the depth of minimum 1200 mm from the ground level.The ground level shall be considered ignoring the bank height of the bank of the road. The length of the bore shall be minimum 4 Mtr long. The HDD with or without HDPE pipe as per direction of Engineer In charge. Note: HDPE pipe supply is taken as separate item. This item also includescable laying (HDD boring).","techSpec":"","brand":"Unspecified","qty":5500.0,"unit":"Metre","unitRate":1187.85,"unitRateBelow":979.6198949999999,"totalAmount":5387909.422499999,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":5387909.422499999,"status":"Not Started","valueBand":"₹10L–1Cr"},{"sch":"B","sno":11,"desc":"Excavation of cable trench as per cable route plan, 1 Mtr. deep and of 0.3 Mtr. to 0.6 Mtr wide advised by Engineer-in- charge alongside the track in normal (all type) soil/strata, conforming to distances as per cable route plan and refilling. This work includes clearing of route from bushes etc., covering of cable laid in trench by loose soil for a layer of 50mm thickness approximately before covering by bricks. The work shall be done as per the extant practice on Western Railway and instructions of Railway Engineer at site. In case 1m depth of trench is not achievable due to site conditions, specific approval of JA grade officer will be required for each site where trench depth of 1m is not possible. Without the approval of JA Grade officer, no payment for trenching will be made for trench depth less than 1m.","techSpec":"","brand":"Unspecified","qty":3300.0,"unit":"cum","unitRate":839.0,"unitRateBelow":691.9233,"totalAmount":2283346.89,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":2283346.89,"status":"Not Started","valueBand":"₹10L–1Cr"},{"sch":"B","sno":12,"desc":"Fixing and termination of metal DP box 20 pair with locking arrangement fitted with krnon module as per Consignee in charge.","techSpec":"","brand":"Unspecified","qty":30.0,"unit":"Numbers","unitRate":387.0,"unitRateBelow":319.1589,"totalAmount":9574.767,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":9574.767,"status":"Not Started","valueBand":"<₹1L"},{"sch":"B","sno":13,"desc":"Fixing and termination of metal DP box 50 pair with locking arrangement fitted with krnon module as per Consignee in charge.","techSpec":"","brand":"Unspecified","qty":12.0,"unit":"Numbers","unitRate":590.0,"unitRateBelow":486.573,"totalAmount":5838.876,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":5838.876,"status":"Not Started","valueBand":"<₹1L"},{"sch":"B","sno":14,"desc":"Fixing and termination of metal DP box 100 pair with locking arrangement fitted with krnon module as per consignee in charge.","techSpec":"","brand":"Unspecified","qty":5.0,"unit":"Numbers","unitRate":1007.0,"unitRateBelow":830.4729,"totalAmount":4152.3645,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":4152.3645,"status":"Not Started","valueBand":"<₹1L"},{"sch":"B","sno":15,"desc":"Installation of Connectors/Pig Tail/Patch cords/ MC/ LIU/ Patch Panels/Switch; with necessary accessories for termination/ splicing of OFC cable as per Consignee in charge.","techSpec":"","brand":"Unspecified","qty":24.0,"unit":"Lumpsum","unitRate":3054.0,"unitRateBelow":2518.6338,"totalAmount":60447.211200000005,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":60447.211200000005,"status":"Not Started","valueBand":"<₹1L"},{"sch":"B","sno":16,"desc":"Supply and fixing of casing capping size 38x16 mm as per technical specification.","techSpec":"","brand":"Unspecified","qty":4000.0,"unit":"Metre","unitRate":36.0,"unitRateBelow":29.6892,"totalAmount":118756.8,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":118756.8,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"B","sno":17,"desc":"Earthing of armor of under- ground Quad & extending it to the telecom earth as per consignee in charge.","techSpec":"","brand":"Unspecified","qty":15.0,"unit":"Numbers","unitRate":1489.0,"unitRateBelow":1227.9783,"totalAmount":18419.6745,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":18419.6745,"status":"Not Started","valueBand":"<₹1L"},{"sch":"B","sno":18,"desc":"Installation, testing & commissioning of maintenance free earth electrode as per RDSO/SPN/ 197/2016 Ver 1.0or latest.","techSpec":"","brand":"Unspecified","qty":20.0,"unit":"Numbers","unitRate":4346.0,"unitRateBelow":3584.1462,"totalAmount":71682.924,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":71682.924,"status":"Not Started","valueBand":"<₹1L"},{"sch":"B","sno":19,"desc":"Installation of \"Ring Earthing System for Telecom Installations as per specification No. RDSO/SPN/ 197/2016 Ver 1.0 or latest.","techSpec":"","brand":"Unspecified","qty":15.0,"unit":"Numbers","unitRate":15642.0,"unitRateBelow":12899.9574,"totalAmount":193499.36099999998,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":193499.36099999998,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"B","sno":20,"desc":"Installation of Class -B type & Class - C type surge arrester lightening arrester for single phase as per RDSO Specs.RDSO/SPN /TC /98/2011 Amd.1 or latest.","techSpec":"","brand":"Unspecified","qty":10.0,"unit":"Numbers","unitRate":4361.0,"unitRateBelow":3596.5167,"totalAmount":35965.167,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":35965.167,"status":"Not Started","valueBand":"<₹1L"},{"sch":"B","sno":21,"desc":"Installation of surge & lightening protection arrangement in the optical fibre huts up to the level of the circuits derived from MUX at the stations (Surge & Lightening protection complete for 30 circuits arrived from P Mux and earthing arrangement as per Drg.No.TW/Earthing/2 and TW/Earthing /3 including supply of all the materials required for the work as per Consignee in charge.","techSpec":"","brand":"Unspecified","qty":10.0,"unit":"Numbers","unitRate":4337.0,"unitRateBelow":3576.7239,"totalAmount":35767.239,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":35767.239,"status":"Not Started","valueBand":"<₹1L"},{"sch":"B","sno":22,"desc":"Installation Power pack 230 volt AC in put to 48 volt DC out put 1 Amp capacity complete with battery back up 48 volt 7-AH as per Consignee in charge.","techSpec":"","brand":"Unspecified","qty":2.0,"unit":"Numbers","unitRate":4277.0,"unitRateBelow":3527.2419,"totalAmount":7054.4838,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":7054.4838,"status":"Not Started","valueBand":"<₹1L"},{"sch":"B","sno":23,"desc":"Installation, wiring, testing and commissioning of SMPS battery charger & maintenance free VRLA cells at each location/station as per Consignee in charge. Note:- The rate quoted shall be including the cost of DC bus bar of 48V DC /Power wire suitable stand etc., connection of power supply to the equipments. All the wiring shall be done with the suitable gauge of power wires through suitable casing / capping as per the instructions of railway engineer's. All the materials required for this item shall be supplied by the contractor. (SPMS charger is covered in schedule & VRLA battery will be supplied by Railway).","techSpec":"","brand":"Unspecified","qty":23.0,"unit":"Numbers","unitRate":3016.0,"unitRateBelow":2487.2952,"totalAmount":57207.789600000004,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":57207.789600000004,"status":"Not Started","valueBand":"<₹1L"},{"sch":"B","sno":24,"desc":"As and when required by the Engineer in charge arranging/providing of labors for various safety related works such as protection of track etc. with contractor's T&P, equipment, hand signal flags, spanners, hammers, etc. as per specification special conditions and detailed scope of work as furnished in the tender and directed by the engineer incharge.","techSpec":"","brand":"Unspecified","qty":2000.0,"unit":"Man-Days","unitRate":649.71,"unitRateBelow":535.815837,"totalAmount":1071631.6739999999,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":1071631.6739999999,"status":"Not Started","valueBand":"₹10L–1Cr"},{"sch":"B","sno":25,"desc":"Supply, Installation and commissioning of 8 PON port OLT with 4 port SFP + (10G), 4 port SFP (Giga Fiber)& 4 Port Giga TX/SFP Combo, ITU- T G.984/G .998, L2 switching functionality,4096 VLAN, QoS, SNMP,IGMP as per technical specification.","techSpec":"","brand":"Unspecified","qty":20.0,"unit":"Numbers","unitRate":150775.2,"unitRateBelow":124344.30744,"totalAmount":2486886.1488,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":2486886.1488,"status":"Not Started","valueBand":"₹10L–1Cr"},{"sch":"B","sno":26,"desc":"Supply, Installation and commissioning of 2.5 Gig PON Port SFP Module for OLT as per technical specification.","techSpec":"","brand":"Unspecified","qty":50.0,"unit":"Numbers","unitRate":6874.0,"unitRateBelow":5668.9878,"totalAmount":283449.39,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":283449.39,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"B","sno":27,"desc":"Supply, installation, testing and commissioning of wall mount Out door 1:4 Optical splitter for PON with fusion Splicing termination as per technical specification/site requirement.","techSpec":"","brand":"Unspecified","qty":68.0,"unit":"Numbers","unitRate":4628.0,"unitRateBelow":3816.7116,"totalAmount":259536.38880000002,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":259536.38880000002,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"B","sno":28,"desc":"Supply ,installation, testing and commissioning of wall mount Out door 1:8 Optical splitter for PON with fusion Splicing termination as per technical specification/site requirement.","techSpec":"","brand":"Unspecified","qty":60.0,"unit":"Numbers","unitRate":7600.12,"unitRateBelow":6267.818964,"totalAmount":376069.13784,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":376069.13784,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"B","sno":29,"desc":"Supply, Installation and commissioning of 4 PON port OLT as per technical specification/site requirement.","techSpec":"","brand":"Unspecified","qty":26.0,"unit":"Numbers","unitRate":97297.0,"unitRateBelow":80240.8359,"totalAmount":2086261.7334000003,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"RITES","inspectionRaw":"RITES","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":2086261.7334000003,"status":"Not Started","valueBand":"₹10L–1Cr"},{"sch":"B","sno":30,"desc":"Supply, installation, testing and commissioning of ONT unit with 1PON port & 4 RJ45 Giga Ethernet,802. each, 1 xPOTS (RJ 11)Ports, 300mbpsWi-Fi , VLAN,IGMP,VoIP, QoS, auto- discovery/Link detection,Dual Band as per technicalspecification.","techSpec":"","brand":"Unspecified","qty":140.0,"unit":"Numbers","unitRate":8107.0,"unitRateBelow":6685.8429,"totalAmount":936018.0059999999,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"RITES","inspectionRaw":"RITES","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":936018.0059999999,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"B","sno":31,"desc":"Supply, Installation & Commissioning of industrial grade 16 Port Router with accessories, as per technical specification.","techSpec":"","brand":"Unspecified","qty":4.0,"unit":"Numbers","unitRate":289100.0,"unitRateBelow":238420.77,"totalAmount":953683.08,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"RITES","inspectionRaw":"RITES","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":953683.08,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"B","sno":32,"desc":"Supply ,installation, testing and commissioning of of 4 port FXS gateway with existing auto exchange as per technical specification.","techSpec":"Dinstar","brand":"Dinstar","qty":11.0,"unit":"Numbers","unitRate":13590.0,"unitRateBelow":11207.673,"totalAmount":123284.403,"suppliedQty":11.0,"progress":1.0,"progressAmount":123284.403,"challanNo":"MEEPL/25-26/ADI Tele04/008A dt 23/12/2025","challanDate":"2025-12-23","udmEntry":"RN.56091-25-00778  Dt: 29/12/2025","inspection":"Consignee","inspectionRaw":"Consignee","remaining":11.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"₹1L–10L"},{"sch":"B","sno":33,"desc":"Supply ,installation, testing and commissioning of of 8 port FXS gateway with existing auto exchange as per technical specification.","techSpec":"Dinstar","brand":"Dinstar","qty":12.0,"unit":"Numbers","unitRate":20417.0,"unitRateBelow":16837.8999,"totalAmount":202054.7988,"suppliedQty":12.0,"progress":1.0,"progressAmount":202054.7988,"challanNo":"MEEPL/25-26/ADI Tele04/008A dt 23/12/2025","challanDate":"2025-12-23","udmEntry":"RN.56091-25-00779  Dt: 29/12/2025","inspection":"Consignee","inspectionRaw":"Consignee","remaining":12.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"₹1L–10L"},{"sch":"B","sno":34,"desc":"Supply ,installation, testing and commissioning of of 32 port FXS gateway with existing auto exchange as per technical specification.","techSpec":"Dinstar","brand":"Dinstar","qty":15.0,"unit":"Numbers","unitRate":67854.0,"unitRateBelow":55959.1938,"totalAmount":839387.907,"suppliedQty":15.0,"progress":1.0,"progressAmount":839387.907,"challanNo":"MEEPL/25-26/TELE04/0021 Date : 07/02/2026","challanDate":"2026-02-07","udmEntry":"\"RN No.56091-25-00958\ndt. 18-02-2026\"","inspection":"RITES","inspectionRaw":"RITES","remaining":15.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"₹1L–10L"},{"sch":"B","sno":35,"desc":"Supply ,installation, testing and commissioning of of 48 port FXS gateway with existing auto exchange as per technical specification.","techSpec":"Dinstar","brand":"Dinstar","qty":10.0,"unit":"Numbers","unitRate":93849.0,"unitRateBelow":77397.2703,"totalAmount":773972.703,"suppliedQty":10.0,"progress":1.0,"progressAmount":773972.703,"challanNo":"MEEPL/25-26/TELE04/0021 Date : 07/02/2026","challanDate":"2026-02-07","udmEntry":"RN No.56091-25-00959\ndt. 18-02-2026","inspection":"RITES","inspectionRaw":"RITES","remaining":10.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":0.0,"status":"Completed","valueBand":"₹1L–10L"},{"sch":"B","sno":36,"desc":"Installation, testing &commissioning of 8 Port POE L2 switch as per consignee.","techSpec":"","brand":"Unspecified","qty":30.0,"unit":"Numbers","unitRate":607.0,"unitRateBelow":500.5929,"totalAmount":15017.787,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":15017.787,"status":"Not Started","valueBand":"<₹1L"},{"sch":"B","sno":37,"desc":"Installation, testing &commissioning of 16 port managed Layer-2 switch as per consignee.","techSpec":"","brand":"Unspecified","qty":5.0,"unit":"Numbers","unitRate":607.0,"unitRateBelow":500.5929,"totalAmount":2502.9645,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":2502.9645,"status":"Not Started","valueBand":"<₹1L"},{"sch":"B","sno":38,"desc":"Installation testing & commissioning of 24 Port manageable switch 10/100/1000 base T with four or more 1000 base x Layer 2 switch ( 2nos 1000 LX (Fiber up link) complete with SFP trans receiver module including ) as per technical specification.","techSpec":"","brand":"Unspecified","qty":15.0,"unit":"Numbers","unitRate":3798.0,"unitRateBelow":3132.2106,"totalAmount":46983.159,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":46983.159,"status":"Not Started","valueBand":"<₹1L"},{"sch":"B","sno":39,"desc":"Installation of five line single face train Arrival Departure Display Boards with all necessary accessories as per RDSO specification No.RDSO./SPN/ TC/108/2019Ver.1.0 or latest or as per consignee in charge.","techSpec":"","brand":"Unspecified","qty":2.0,"unit":"Numbers","unitRate":27402.34,"unitRateBelow":22598.709798,"totalAmount":45197.419596,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":45197.419596,"status":"Not Started","valueBand":"<₹1L"},{"sch":"B","sno":40,"desc":"Installation & Commissioning of three line single face train arrival departure display board with crow guard as per instructions of site in charge.","techSpec":"","brand":"Unspecified","qty":2.0,"unit":"Numbers","unitRate":11917.7,"unitRateBelow":9828.52719,"totalAmount":19657.05438,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":19657.05438,"status":"Not Started","valueBand":"<₹1L"},{"sch":"B","sno":41,"desc":"Installation and commissioning of Single line double face train arrival/ Departure display board as per instruction of site engineer.","techSpec":"","brand":"Unspecified","qty":10.0,"unit":"Numbers","unitRate":14123.0,"unitRateBelow":11647.2381,"totalAmount":116472.38100000001,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":116472.38100000001,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"B","sno":42,"desc":"Supply, Installation and commissioning of GPS based double sized clock with required SMPS charger and battery as per RDSO specification: RDSO/SPN/TC/62 /2008 Rev.4.1 or Latest (Stand alone mode) with hanging/ mounting arrangement and confirming to as per Technical Specifications.Click here for Deletion.","techSpec":"","brand":"Unspecified","qty":18.0,"unit":"Numbers","unitRate":50836.0,"unitRateBelow":41924.4492,"totalAmount":754640.0856000001,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"RDSO","inspectionRaw":"RDSO","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":754640.0856000001,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"B","sno":43,"desc":"Installation & commissioning of At a Glance display board as per instruction of site in charge. All fitting materials including iron frame are to be supplied by the contractor.","techSpec":"","brand":"Unspecified","qty":6.0,"unit":"Numbers","unitRate":7789.0,"unitRateBelow":6423.5883,"totalAmount":38541.529800000004,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":38541.529800000004,"status":"Not Started","valueBand":"<₹1L"},{"sch":"B","sno":44,"desc":"Supply, Installation, Testing and Commissioning of True colour MLDB (Outdoor Video display (OVD) 6 Line for Train Arrival departure Display Board (TADDB) No.RDSO/SPN/TC/ 108/2019,Ver.-1.0. or Latest, Inspection: RDSO of OVD (6 line) with all accessories.","techSpec":"","brand":"Unspecified","qty":1.0,"unit":"Numbers","unitRate":2609315.0,"unitRateBelow":2151902.0805,"totalAmount":2151902.0805,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"RDSO","inspectionRaw":"RDSO","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":2151902.0805,"status":"Not Started","valueBand":"₹10L–1Cr"},{"sch":"B","sno":45,"desc":"Installation, wiring testing and commissioning of TRE for controller as per consignee in- charge.","techSpec":"","brand":"Unspecified","qty":12.0,"unit":"Numbers","unitRate":5099.0,"unitRateBelow":4205.1453,"totalAmount":50461.7436,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":50461.7436,"status":"Not Started","valueBand":"<₹1L"},{"sch":"B","sno":46,"desc":"Installation, wiring testing and commissioning of CRE on 19\" rack as per consignee in- charge.","techSpec":"","brand":"Unspecified","qty":12.0,"unit":"Numbers","unitRate":4384.0,"unitRateBelow":3615.4848,"totalAmount":43385.8176,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":43385.8176,"status":"Not Started","valueBand":"<₹1L"},{"sch":"B","sno":47,"desc":"Installation, wiring testing and commissioning of MTWE on the rack as per consignee in- charge","techSpec":"","brand":"Unspecified","qty":20.0,"unit":"Numbers","unitRate":3614.0,"unitRateBelow":2980.4658,"totalAmount":59609.316,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":59609.316,"status":"Not Started","valueBand":"<₹1L"},{"sch":"B","sno":48,"desc":"Installation, wiring ,testing and commissioning of STM-4 with all accessories, 19\" rack with suitable stand/ platform made of MS angle/CC , power supply board FDF racks (Already installed) , DDF with miniature 'U' link type for 63E1s , runway ladder , etc. This includes connecting all pig tails, optical patch cords etc. to the SDH equipments. This also includes connecting the SDH and primary MUX equipment with all interface cards to the 48V Bus including supply of wires and connectors, termination of all E1 on DDF, taking PVC cable over runway or a wall and termination of VF interface circuits to the krone type, as per consignee.","techSpec":"","brand":"Unspecified","qty":3.0,"unit":"Numbers","unitRate":7500.0,"unitRateBelow":6185.25,"totalAmount":18555.75,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":18555.75,"status":"Not Started","valueBand":"<₹1L"},{"sch":"B","sno":49,"desc":"Installation, Wiring of D / I Mux with E1 interface cards connection to 48V bus barr & termination of VF/Data interface circuit to the crone MDF in already installed 42U EURO Rack.This include4s termination of PVC cable at both ends, taking PVC Cable over runway or on the wall. This also includes supply of PVC cable of conductor size0.63 mm. (ii) Testing and commissioning of STM-1/ D / I Mux Equipment installed vide item no. 1 & 2 above using NMS as per as per approved test protocol. The work includes submission of all technical documents, manuals. All miscellaneous items required for the final testing and commissioning for the system will be supplied by thecontractor, as per consignee.","techSpec":"","brand":"Unspecified","qty":8.0,"unit":"Numbers","unitRate":17678.0,"unitRateBelow":14579.0466,"totalAmount":116632.3728,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":116632.3728,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"B","sno":50,"desc":"Installation, testing &commissioning of 6U Network Rack as per consignee.","techSpec":"","brand":"Unspecified","qty":10.0,"unit":"Numbers","unitRate":1213.0,"unitRateBelow":1000.3611,"totalAmount":10003.610999999999,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":10003.610999999999,"status":"Not Started","valueBand":"<₹1L"},{"sch":"B","sno":51,"desc":"Installation of 15U wall mounting rack as per consignee.","techSpec":"","brand":"Unspecified","qty":15.0,"unit":"Numbers","unitRate":866.0,"unitRateBelow":714.1902,"totalAmount":10712.853,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":10712.853,"status":"Not Started","valueBand":"<₹1L"},{"sch":"B","sno":52,"desc":"Supply of Maintenance free VRLA type batteries 48 Volt/200 AH and its standard installation as per latest RDSO Specification","techSpec":"","brand":"Unspecified","qty":20.0,"unit":"Set","unitRate":101866.0,"unitRateBelow":84008.8902,"totalAmount":1680177.804,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"RDSO","inspectionRaw":"RDSO","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":1680177.804,"status":"Not Started","valueBand":"₹10L–1Cr"},{"sch":"B","sno":53,"desc":"Supply of Maintenance free VRLA type batteries 48 Volt/500AH capacity and its standard installation as per RDSO Specification.","techSpec":"","brand":"Unspecified","qty":3.0,"unit":"Set","unitRate":247993.0,"unitRateBelow":204519.8271,"totalAmount":613559.4813,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"RDSO","inspectionRaw":"RDSO","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":613559.4813,"status":"Not Started","valueBand":"₹1L–10L"},{"sch":"B","sno":54,"desc":"Supply of Wi-Fi base unit (Wi- Fi Router) & its standard installation.","techSpec":"","brand":"Unspecified","qty":30.0,"unit":"Numbers","unitRate":1817.4,"unitRateBelow":1498.80978,"totalAmount":44964.2934,"suppliedQty":0.0,"progress":0.0,"progressAmount":0.0,"challanNo":"","challanDate":null,"udmEntry":"","inspection":"","inspectionRaw":"","remaining":0.0,"mb01Qty":0.0,"mb01Value":0.0,"mb02Qty":0.0,"mb02Value":0.0,"pendingValue":44964.2934,"status":"Not Started","valueBand":"<₹1L"}],"challanTimeline":[{"month":"2025-10","count":10,"value":5778421.9404912},{"month":"2025-11","count":10,"value":5134671.92736},{"month":"2025-12","count":2,"value":0.0},{"month":"2026-01","count":4,"value":2744209.70256},{"month":"2026-02","count":5,"value":1318989.4210080002},{"month":"2026-03","count":4,"value":4757032.8378192}],"filters":{"brands":["APC","Beetal","CommScope","Crown","D-Link","Dasscom","Dell","Dinstar","Exfo","Finolex","Godrej","JBL","Mukand","Pon","Puncom","RD8200G","Rishabh","Shure","Sony","Statcon Energia","Sumitomo","Tejas","Unspecified","Webfil","YIHUA","Yamaha","Zyxel"],"units":["CORE","Kilometre","Lumpsum","Man-Days","Metre","Numbers","Running Metre","Set","cum"],"inspections":["Consignee","RDSO","RITES"]}}</script>
+<script>
+/* ===== DATA INJECTION ===== */
+const DATA = JSON.parse(document.getElementById('dashData').textContent);
+document.getElementById('genTs').textContent = DATA.meta.generatedOn;
+
+/* ===== FORMATTERS ===== */
+const fmtINR = (n) => {
+  if (n === 0 || n == null) return '₹0';
+  const abs = Math.abs(n);
+  if (abs >= 1e7)  return '₹' + (n/1e7).toFixed(2) + ' Cr';
+  if (abs >= 1e5)  return '₹' + (n/1e5).toFixed(2) + ' L';
+  if (abs >= 1e3)  return '₹' + (n/1e3).toFixed(1) + ' K';
+  return '₹' + Math.round(n);
+};
+const fmtINRshort = (n) => {
+  if (n == null) return '—';
+  const abs = Math.abs(n);
+  if (abs >= 1e7)  return (n/1e7).toFixed(2) + ' Cr';
+  if (abs >= 1e5)  return (n/1e5).toFixed(1) + ' L';
+  if (abs >= 1e3)  return (n/1e3).toFixed(0) + 'K';
+  return Math.round(n).toString();
+};
+const fmtPct = (n, d=1) => (n==null ? '—' : (n*100).toFixed(d) + '%');
+const fmtPctNum = (n, d=1) => (n==null ? '—' : n.toFixed(d) + '%');
+const fmtQty = (n) => {
+  if (n == null) return '—';
+  return Number.isInteger(n) ? n.toLocaleString('en-IN') : n.toFixed(2);
+};
+
+/* ===== COLOURS ===== */
+const C = {a:'#1D5F5E', aSoft:'#D4E4E2', b:'#C17841', bSoft:'#F2DFCC',
+           neutral:'#9B958A', neutralSoft:'#D9D4C5', red:'#B63A2E', amber:'#D89B3C',
+           green:'#5E8858', ink:'#141414', inkSoft:'#5B5A52', inkFaint:'#8F8C81',
+           grid:'#ECE8DC', border:'#E6E2D7'};
+const chartFont = 'Manrope, sans-serif';
+const baseTextStyle = {fontFamily:chartFont, color:C.inkSoft, fontSize:11, fontWeight:500};
+
+/* ===== STATE ===== */
+const state = {
+  sch:'all', insp:'all', status:'all', band:'all',
+  units:new Set(), brands:new Set(),
+  search:'',
+  tableSearch:'',
+  tableSort:{col:'totalAmount', dir:'desc'},
+};
+
+/* ===== FILTER LOGIC ===== */
+function filtered(){
+  let arr = DATA.items;
+  if (state.sch !== 'all') arr = arr.filter(i => i.sch === state.sch);
+  if (state.insp !== 'all'){
+    if (state.insp === 'none') arr = arr.filter(i => !i.inspection);
+    else arr = arr.filter(i => i.inspection === state.insp);
+  }
+  if (state.status !== 'all') arr = arr.filter(i => i.status === state.status);
+  if (state.band !== 'all') arr = arr.filter(i => i.valueBand === state.band);
+  if (state.units.size) arr = arr.filter(i => state.units.has(i.unit));
+  if (state.brands.size) arr = arr.filter(i => state.brands.has(i.brand));
+  if (state.search.trim()) {
+    const q = state.search.trim().toLowerCase();
+    arr = arr.filter(i => i.desc.toLowerCase().includes(q) || String(i.sno).includes(q));
+  }
+  return arr;
+}
+
+/* ===== CHART INSTANCES ===== */
+const charts = {};
+function ensureChart(id){
+  if (!charts[id]){
+    const el = document.getElementById(id);
+    if (!el) return null;
+    charts[id] = echarts.init(el, null, {renderer:'canvas'});
+  }
+  return charts[id];
+}
+window.addEventListener('resize', () => { Object.values(charts).forEach(c => c && c.resize()); });
+
+/* ===== KPI STRIP ===== */
+function renderKPIs(items){
+  const total = items.reduce((s,i)=>s+i.totalAmount,0);
+  const earned = items.reduce((s,i)=>s+i.progressAmount,0);
+  const pending = total - earned;
+  const a = items.filter(i=>i.sch==='A');
+  const b = items.filter(i=>i.sch==='B');
+  const aT = a.reduce((s,i)=>s+i.totalAmount,0);
+  const aE = a.reduce((s,i)=>s+i.progressAmount,0);
+  const bT = b.reduce((s,i)=>s+i.totalAmount,0);
+  const bE = b.reduce((s,i)=>s+i.progressAmount,0);
+  const supplyPct = aT>0 ? aE/aT*100 : 0;
+  const execPct   = bT>0 ? bE/bT*100 : 0;
+  const overallPct = total>0 ? earned/total*100 : 0;
+
+  const cards = [
+    {cls:'total', lbl:'Total Contract Value', val:fmtINR(total), delta:`${items.length} items · rate = ${DATA.meta.rebatePct}% below schedule`},
+    {cls:'total', lbl:'Value Earned to Date', val:fmtINR(earned), delta:`<b>${fmtPctNum(overallPct)}</b> of contract`},
+    {cls:'total', lbl:'Overall Financial Progress', val:fmtPctNum(overallPct), delta:`Earned / Contract · value-weighted`},
+    {cls:'a',     lbl:'Material Supply Progress', val:fmtPctNum(supplyPct), delta:`Sch A · ${fmtINR(aE)} / ${fmtINR(aT)}`},
+    {cls:'b',     lbl:'Execution Progress',       val:fmtPctNum(execPct),   delta:`Sch B · ${fmtINR(bE)} / ${fmtINR(bT)}`},
+    {cls:'pending', lbl:'Pending Value',          val:fmtINR(pending),      delta:`${items.filter(i=>i.progress<1).length} items open`},
+  ];
+  document.getElementById('kpis').innerHTML = cards.map(c =>
+    `<div class="kpi ${c.cls}">
+      <div class="lbl">${c.lbl}</div>
+      <div class="val tnum">${c.val}</div>
+      <div class="delta tnum">${c.delta}</div>
+    </div>`).join('');
+}
+
+/* ===== CHART 1 · Twin gauges ===== */
+function renderGauges(items){
+  const c = ensureChart('chartGauges'); if (!c) return;
+  const a = items.filter(i=>i.sch==='A'); const b = items.filter(i=>i.sch==='B');
+  const aT = a.reduce((s,i)=>s+i.totalAmount,0); const aE = a.reduce((s,i)=>s+i.progressAmount,0);
+  const bT = b.reduce((s,i)=>s+i.totalAmount,0); const bE = b.reduce((s,i)=>s+i.progressAmount,0);
+  const sp = aT>0 ? aE/aT*100 : 0;
+  const ep = bT>0 ? bE/bT*100 : 0;
+  const common = (val, col, title, sub) => ({
+    type:'gauge', radius:'82%', startAngle:210, endAngle:-30,
+    min:0, max:100, splitNumber:4,
+    axisLine:{lineStyle:{width:14, color:[[1,'#E6E2D7']]}},
+    progress:{show:true, width:14, itemStyle:{color:col}},
+    pointer:{show:false},
+    axisTick:{show:false}, splitLine:{show:false},
+    axisLabel:{color:C.inkFaint, fontSize:10, distance:-20, fontFamily:chartFont},
+    anchor:{show:false},
+    title:{show:true, offsetCenter:[0,'62%'], fontSize:11, color:C.inkSoft, fontFamily:chartFont, fontWeight:600},
+    detail:{valueAnimation:true, fontSize:26, fontWeight:700, fontFamily:chartFont, color:C.ink,
+            offsetCenter:[0,'0%'], formatter: v=> v.toFixed(1)+'%'},
+    data:[{value:val, name:title}],
+  });
+  c.setOption({
+    animationDuration:600,
+    series:[
+      {...common(sp, C.a, 'Schedule A · Supply'), center:['27%','58%']},
+      {...common(ep, C.b, 'Schedule B · Execution'), center:['73%','58%']},
+    ]
+  }, true);
+}
+
+/* ===== CHART 2 · Waterfall ===== */
+function renderWaterfall(items){
+  const c = ensureChart('chartWaterfall'); if (!c) return;
+  const total = items.reduce((s,i)=>s+i.totalAmount,0);
+  const a = items.filter(i=>i.sch==='A');
+  const b = items.filter(i=>i.sch==='B');
+  const aPend = a.reduce((s,i)=>s+(i.totalAmount-i.progressAmount),0);
+  const bPend = b.reduce((s,i)=>s+(i.totalAmount-i.progressAmount),0);
+  const earned = total - aPend - bPend;
+  if (total === 0){ c.clear(); c.setOption({title:{text:'No data in filter',textStyle:{fontFamily:chartFont, fontSize:12, color:C.inkFaint}, left:'center', top:'center'}}); return; }
+  // Waterfall: [Contract] → [-Sch A pending] → [-Sch B pending] → [Earned]
+  const cats = ['Contract', 'Sch A pending', 'Sch B pending', 'Earned'];
+  const placeholder = [0, total - aPend, total - aPend - bPend, 0];
+  const bars = [total, aPend, bPend, earned];
+  const colors = [C.ink, C.a, C.b, C.green];
+  c.setOption({
+    animationDuration:500,
+    grid:{left:70, right:20, top:20, bottom:28},
+    xAxis:{type:'category', data:cats, axisLine:{lineStyle:{color:C.border}},
+           axisLabel:{...baseTextStyle, fontSize:10, interval:0}},
+    yAxis:{type:'value', axisLine:{show:false}, axisTick:{show:false},
+           splitLine:{lineStyle:{color:C.grid, type:'dashed'}},
+           axisLabel:{...baseTextStyle, formatter: v=> fmtINRshort(v)}},
+    tooltip:{trigger:'axis', axisPointer:{type:'shadow'},
+             textStyle:{fontFamily:chartFont, fontSize:11},
+             formatter: params => {
+               const bar = params.find(p => p.seriesName==='val');
+               return bar.name + '<br/><b>' + fmtINR(bar.value) + '</b>';
+             }},
+    series:[
+      {name:'ph', type:'bar', stack:'wf', data:placeholder, itemStyle:{color:'transparent'}},
+      {name:'val', type:'bar', stack:'wf', data:bars.map((v,i)=>({value:v, itemStyle:{color:colors[i]}})),
+       label:{show:true, position:'top', fontFamily:chartFont, fontSize:10, fontWeight:600,
+              color:C.ink, formatter: p => fmtINRshort(p.value)}}
+    ]
+  }, true);
+}
+
+/* ===== CHART 3 · Status donut ===== */
+function renderStatus(items){
+  const c = ensureChart('chartStatus'); if (!c) return;
+  const buckets = [
+    {k:'A·Completed', sch:'A', st:'Completed', color:'#0F5E5C'},
+    {k:'A·In Progress', sch:'A', st:'In Progress', color:'#5B8F8D'},
+    {k:'A·Not Started', sch:'A', st:'Not Started', color:'#B9D1CF'},
+    {k:'B·Completed', sch:'B', st:'Completed', color:'#9A5A2D'},
+    {k:'B·In Progress', sch:'B', st:'In Progress', color:'#C17841'},
+    {k:'B·Not Started', sch:'B', st:'Not Started', color:'#E8C9A9'},
+  ];
+  const data = buckets.map(b => ({
+    name: b.k, value: items.filter(i => i.sch===b.sch && i.status===b.st).length,
+    itemStyle:{color:b.color},
+  })).filter(d => d.value > 0);
+  if (!data.length){ c.clear(); c.setOption({title:{text:'No items',textStyle:{fontFamily:chartFont,fontSize:12,color:C.inkFaint},left:'center',top:'center'}}); return; }
+  c.setOption({
+    animationDuration:500,
+    tooltip:{trigger:'item',
+             textStyle:{fontFamily:chartFont, fontSize:11},
+             formatter:p => `${p.name}<br/><b>${p.value}</b> items (${p.percent}%)`},
+    legend:{show:false},
+    series:[{
+      type:'pie', radius:['52%','78%'], center:['50%','50%'],
+      avoidLabelOverlap:true, padAngle:1,
+      label:{show:true, fontSize:10, fontFamily:chartFont, color:C.inkSoft,
+             formatter: p => p.name.split('·')[1].trim() + '\n' + p.value},
+      labelLine:{length:6, length2:6, lineStyle:{color:C.inkFaint}},
+      data,
+    }]
+  }, true);
+}
+
+/* ===== CHART 4 · Top 10 ===== */
+function renderTop10(items){
+  const c = ensureChart('chartTop10'); if (!c) return;
+  const top = [...items].sort((x,y)=>y.totalAmount-x.totalAmount).slice(0,10).reverse();
+  if (!top.length){ c.clear(); c.setOption({title:{text:'No items in filter',textStyle:{fontFamily:chartFont,fontSize:12,color:C.inkFaint},left:'center',top:'center'}}); return; }
+  const labels = top.map(i => `${i.sch}${i.sno} · ${i.desc.slice(0,45)}${i.desc.length>45?'…':''}`);
+  const earned = top.map(i => ({value:i.progressAmount, itemStyle:{color: i.sch==='A' ? C.a : C.b}}));
+  const pending = top.map(i => ({value:i.totalAmount-i.progressAmount, itemStyle:{color: i.sch==='A' ? C.aSoft : C.bSoft}}));
+  c.setOption({
+    animationDuration:500,
+    grid:{left:290, right:60, top:10, bottom:28},
+    xAxis:{type:'value', axisLine:{show:false}, axisTick:{show:false},
+           splitLine:{lineStyle:{color:C.grid, type:'dashed'}},
+           axisLabel:{...baseTextStyle, formatter: v=> fmtINRshort(v)}},
+    yAxis:{type:'category', data:labels, axisLine:{lineStyle:{color:C.border}},
+           axisTick:{show:false}, axisLabel:{...baseTextStyle, fontSize:10}},
+    tooltip:{trigger:'axis', axisPointer:{type:'shadow'},
+             textStyle:{fontFamily:chartFont, fontSize:11},
+             formatter: params => {
+               const idx = params[0].dataIndex;
+               const item = top[idx];
+               return `<b>${item.sch}${item.sno}</b> · ${item.desc}<br/>`
+                 + `Brand: ${item.brand}<br/>`
+                 + `Earned: <b>${fmtINR(item.progressAmount)}</b> · Pending: <b>${fmtINR(item.totalAmount-item.progressAmount)}</b><br/>`
+                 + `Progress: <b>${fmtPctNum(item.progress*100)}</b>`;
+             }},
+    series:[
+      {name:'Earned', type:'bar', stack:'t', data:earned,
+       label:{show:true, position:'insideRight', fontSize:10, color:'#fff', fontFamily:chartFont,
+              formatter: p => p.value > 0 ? fmtINRshort(p.value) : ''}},
+      {name:'Pending', type:'bar', stack:'t', data:pending,
+       label:{show:true, position:'insideRight', fontSize:10, color:C.inkSoft, fontFamily:chartFont,
+              formatter: p => p.value > 0 ? fmtINRshort(p.value) : ''}},
+    ]
+  }, true);
+}
+
+/* ===== CHART 5 · Inspection stacked ===== */
+function renderInspection(items){
+  const c = ensureChart('chartInspection'); if (!c) return;
+  const agencies = ['RDSO','RITES','Consignee','No Agency'];
+  const key = i => i.inspection || 'No Agency';
+  const byAg = {};
+  agencies.forEach(a => byAg[a] = {A:{count:0, pending:0}, B:{count:0, pending:0}});
+  items.forEach(i => {
+    const ag = key(i);
+    if (i.progress < 1) {
+      byAg[ag][i.sch].count += 1;
+      byAg[ag][i.sch].pending += (i.totalAmount - i.progressAmount);
+    }
+  });
+  const pendA = agencies.map(a => byAg[a].A.pending / 1e5);
+  const pendB = agencies.map(a => byAg[a].B.pending / 1e5);
+  const countA = agencies.map(a => byAg[a].A.count);
+  const countB = agencies.map(a => byAg[a].B.count);
+  c.setOption({
+    animationDuration:500,
+    grid:{left:55, right:55, top:30, bottom:28},
+    legend:{data:['Sch A · pending','Sch B · pending'], top:0, textStyle:{fontFamily:chartFont, fontSize:10, color:C.inkSoft}, itemWidth:10, itemHeight:10},
+    xAxis:{type:'category', data:agencies, axisLine:{lineStyle:{color:C.border}},
+           axisLabel:{...baseTextStyle, fontSize:10}},
+    yAxis:[
+      {type:'value', name:'₹ L', position:'left', nameTextStyle:{fontFamily:chartFont, fontSize:10, color:C.inkFaint},
+       axisLine:{show:false}, axisTick:{show:false}, splitLine:{lineStyle:{color:C.grid, type:'dashed'}},
+       axisLabel:{...baseTextStyle, fontSize:10}},
+    ],
+    tooltip:{trigger:'axis', axisPointer:{type:'shadow'},
+             textStyle:{fontFamily:chartFont, fontSize:11},
+             formatter: params => {
+               const idx = params[0].dataIndex;
+               const ag = agencies[idx];
+               return `<b>${ag}</b><br/>`
+                 + `Sch A: ${countA[idx]} open · ${fmtINR(byAg[ag].A.pending)} pending<br/>`
+                 + `Sch B: ${countB[idx]} open · ${fmtINR(byAg[ag].B.pending)} pending`;
+             }},
+    series:[
+      {name:'Sch A · pending', type:'bar', stack:'p', data:pendA, itemStyle:{color:C.a},
+       label:{show:true, position:'insideTop', color:'#fff', fontSize:9, fontFamily:chartFont,
+              formatter: p => p.value>0.5 ? p.value.toFixed(0)+'L' : ''}},
+      {name:'Sch B · pending', type:'bar', stack:'p', data:pendB, itemStyle:{color:C.b},
+       label:{show:true, position:'insideTop', color:'#fff', fontSize:9, fontFamily:chartFont,
+              formatter: p => p.value>0.5 ? p.value.toFixed(0)+'L' : ''}},
+    ]
+  }, true);
+}
+
+/* ===== CHART 6 · Brand-wise (Sch A only) ===== */
+function renderBrand(items){
+  const c = ensureChart('chartBrand'); if (!c) return;
+  const aItems = items.filter(i => i.sch === 'A');
+  const byB = {};
+  aItems.forEach(i => {
+    if (!byB[i.brand]) byB[i.brand] = {supplied:0, pending:0, items:0};
+    byB[i.brand].supplied += i.progressAmount;
+    byB[i.brand].pending += (i.totalAmount - i.progressAmount);
+    byB[i.brand].items += 1;
+  });
+  const brands = Object.entries(byB)
+    .map(([k,v]) => ({...v, brand:k, total:v.supplied+v.pending}))
+    .sort((x,y) => y.total - x.total)
+    .slice(0, 12)
+    .reverse();
+  if (!brands.length){ c.clear(); c.setOption({title:{text:'No Schedule A items in filter',textStyle:{fontFamily:chartFont,fontSize:12,color:C.inkFaint},left:'center',top:'center'}}); return; }
+  const names = brands.map(b => b.brand);
+  const supp = brands.map(b => b.supplied/1e5);
+  const pend = brands.map(b => b.pending/1e5);
+  c.setOption({
+    animationDuration:500,
+    grid:{left:110, right:30, top:30, bottom:28},
+    legend:{data:['Supplied','Pending'], top:0, textStyle:{fontFamily:chartFont, fontSize:10, color:C.inkSoft}, itemWidth:10, itemHeight:10},
+    xAxis:{type:'value', axisLine:{show:false}, axisTick:{show:false}, splitLine:{lineStyle:{color:C.grid, type:'dashed'}},
+           axisLabel:{...baseTextStyle, formatter: v => v + 'L'}},
+    yAxis:{type:'category', data:names, axisLine:{lineStyle:{color:C.border}},
+           axisTick:{show:false}, axisLabel:{...baseTextStyle, fontSize:10}},
+    tooltip:{trigger:'axis', axisPointer:{type:'shadow'},
+             textStyle:{fontFamily:chartFont, fontSize:11},
+             formatter: params => {
+               const idx = params[0].dataIndex;
+               const b = brands[idx];
+               const pct = b.total>0 ? (b.supplied/b.total*100).toFixed(0) : 0;
+               return `<b>${b.brand}</b> · ${b.items} items<br/>Supplied: <b>${fmtINR(b.supplied)}</b> (${pct}%)<br/>Pending: <b>${fmtINR(b.pending)}</b>`;
+             }},
+    series:[
+      {name:'Supplied', type:'bar', stack:'t', data:supp, itemStyle:{color:C.a}},
+      {name:'Pending',  type:'bar', stack:'t', data:pend, itemStyle:{color:C.neutralSoft}},
+    ]
+  }, true);
+}
+
+/* ===== CHART 7 · Treemap ===== */
+function renderTreemap(items){
+  const c = ensureChart('chartTreemap'); if (!c) return;
+  const byU = {};
+  items.forEach(i => {
+    if (!byU[i.unit]) byU[i.unit] = {A:0, B:0, count:0};
+    byU[i.unit][i.sch] += i.totalAmount;
+    byU[i.unit].count += 1;
+  });
+  const data = [];
+  Object.entries(byU).forEach(([u,v]) => {
+    const tot = v.A + v.B;
+    if (tot <= 0) return;
+    data.push({name:u, value:tot, schABreakdown:{A:v.A, B:v.B, count:v.count}});
+  });
+  data.sort((x,y) => y.value - x.value);
+  // Color by dominant schedule
+  data.forEach(d => {
+    const share = d.schABreakdown.A / (d.schABreakdown.A + d.schABreakdown.B);
+    if (share > 0.85) d.itemStyle = {color:C.a};
+    else if (share < 0.15) d.itemStyle = {color:C.b};
+    else {
+      // blended
+      d.itemStyle = {color:'#7A6F60'};
+    }
+  });
+  if (!data.length){ c.clear(); c.setOption({title:{text:'No data',textStyle:{fontFamily:chartFont,fontSize:12,color:C.inkFaint},left:'center',top:'center'}}); return; }
+  c.setOption({
+    animationDuration:500,
+    tooltip:{
+      textStyle:{fontFamily:chartFont, fontSize:11},
+      formatter: p => {
+        const d = p.data;
+        if (!d.schABreakdown) return `${p.name}: ${fmtINR(p.value)}`;
+        return `<b>${d.name}</b> · ${d.schABreakdown.count} items<br/>`
+          + `Contract: <b>${fmtINR(p.value)}</b><br/>`
+          + `Sch A: ${fmtINR(d.schABreakdown.A)} · Sch B: ${fmtINR(d.schABreakdown.B)}`;
+      }
+    },
+    series:[{
+      type:'treemap', data,
+      left:0, right:0, top:4, bottom:4,
+      roam:false, breadcrumb:{show:false},
+      label:{show:true, fontFamily:chartFont, fontSize:12, color:'#fff', fontWeight:600,
+             formatter: p => p.data.name + '\n' + fmtINRshort(p.value)},
+      itemStyle:{borderColor:'#fff', borderWidth:2, gapWidth:2},
+      levels:[{}],
+    }]
+  }, true);
+}
+
+/* ===== CHART 8 · Alignment scatter ===== */
+function renderAlign(items){
+  const c = ensureChart('chartAlign'); if (!c) return;
+  // Plot all items: x = supply/exec progress %, y = contract value (log-ish)
+  // Actually per the prompt: for comparable items, plot Sch A progress vs Sch B progress.
+  // Since A and B items aren't paired 1:1, do a hybrid: each dot = one item, X = its progress %,
+  // Y = the counterpart schedule's OVERALL progress for that brand — but brands don't match either.
+  // Simpler semantic: X = supply % (for A items) or 0 (for B items we haven't installed yet),
+  // Y = execution % overall, and plot items colored by schedule.
+  //
+  // Cleaner interpretation that's actually useful: two-axis scatter per-item:
+  //   X = item's own progress %   (0–100)
+  //   Y = item's contract value   (log scale)
+  //   color by schedule, size by pending value
+  // The 45° diagonal line / reference lines show ideal vs lagging.
+  const a = items.filter(i => i.sch==='A').map(i => [i.progress*100, i.totalAmount, i.desc, i.sno, i.totalAmount-i.progressAmount, i.brand]);
+  const b = items.filter(i => i.sch==='B').map(i => [i.progress*100, i.totalAmount, i.desc, i.sno, i.totalAmount-i.progressAmount, i.brand]);
+  if (!a.length && !b.length){ c.clear(); c.setOption({title:{text:'No data',textStyle:{fontFamily:chartFont,fontSize:12,color:C.inkFaint},left:'center',top:'center'}}); return; }
+  c.setOption({
+    animationDuration:500,
+    grid:{left:55, right:20, top:30, bottom:42},
+    legend:{data:['Sch A items','Sch B items'], top:0, textStyle:{fontFamily:chartFont, fontSize:10, color:C.inkSoft}, itemWidth:10, itemHeight:10},
+    xAxis:{type:'value', name:'Item progress %', nameLocation:'middle', nameGap:28,
+           min:0, max:100,
+           nameTextStyle:{fontFamily:chartFont, fontSize:10, color:C.inkFaint},
+           axisLine:{lineStyle:{color:C.border}},
+           splitLine:{lineStyle:{color:C.grid, type:'dashed'}},
+           axisLabel:{...baseTextStyle, formatter: v => v+'%'}},
+    yAxis:{type:'log', name:'Contract value ₹ (log)', nameLocation:'middle', nameGap:45,
+           nameTextStyle:{fontFamily:chartFont, fontSize:10, color:C.inkFaint},
+           axisLine:{show:false},
+           splitLine:{lineStyle:{color:C.grid, type:'dashed'}},
+           axisLabel:{...baseTextStyle, formatter: v => fmtINRshort(v)}},
+    tooltip:{trigger:'item',
+             textStyle:{fontFamily:chartFont, fontSize:11},
+             formatter: p => {
+               const [x, y, desc, sno, pend, brand] = p.data;
+               return `<b>${p.seriesName.charAt(3)}${sno}</b> · ${desc}<br/>Brand: ${brand}<br/>Progress: <b>${fmtPctNum(x)}</b><br/>Contract: <b>${fmtINR(y)}</b> · Pending: <b>${fmtINR(pend)}</b>`;
+             }},
+    series:[
+      {name:'Sch A items', type:'scatter', data:a, symbolSize: d => Math.max(5, Math.min(30, Math.sqrt(d[4]/1e5)*3)),
+       itemStyle:{color:C.a, opacity:.7, borderColor:'#fff', borderWidth:1}},
+      {name:'Sch B items', type:'scatter', data:b, symbolSize: d => Math.max(5, Math.min(30, Math.sqrt(d[4]/1e5)*3)),
+       itemStyle:{color:C.b, opacity:.7, borderColor:'#fff', borderWidth:1}},
+    ]
+  }, true);
+}
+
+/* ===== CHART 9 · MB Timeline ===== */
+function renderTimeline(items){
+  const c = ensureChart('chartTimeline'); if (!c) return;
+  // Group MB-billed amounts by challan month (from the filtered items)
+  const byM = {};
+  items.forEach(i => {
+    if (!i.challanDate) return;
+    const ym = i.challanDate.slice(0,7);
+    if (!byM[ym]) byM[ym] = {mb01:0, mb02:0, count:0};
+    byM[ym].mb01 += i.mb01Value;
+    byM[ym].mb02 += i.mb02Value;
+    byM[ym].count += 1;
+  });
+  const months = Object.keys(byM).sort();
+  if (!months.length){ c.clear(); c.setOption({title:{text:'No challan data in filter',textStyle:{fontFamily:chartFont,fontSize:12,color:C.inkFaint},left:'center',top:'center'}}); return; }
+  let cum1 = 0, cum2 = 0;
+  const cumMb01 = [], cumMb02 = [], cumAll = [];
+  months.forEach(m => {
+    cum1 += byM[m].mb01; cum2 += byM[m].mb02;
+    cumMb01.push(cum1/1e5);
+    cumMb02.push(cum2/1e5);
+    cumAll.push((cum1+cum2)/1e5);
+  });
+  const monthLabel = m => { const [y,mo] = m.split('-'); const names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return names[parseInt(mo)-1]+' '+y.slice(-2); };
+  c.setOption({
+    animationDuration:500,
+    grid:{left:55, right:20, top:30, bottom:28},
+    legend:{data:['MB01 cumul.','MB02 cumul.','Total MB cumul.'], top:0, textStyle:{fontFamily:chartFont, fontSize:10, color:C.inkSoft}, itemWidth:10, itemHeight:10},
+    xAxis:{type:'category', data:months.map(monthLabel), axisLine:{lineStyle:{color:C.border}},
+           axisLabel:{...baseTextStyle, fontSize:10}},
+    yAxis:{type:'value', name:'₹ L', nameTextStyle:{fontFamily:chartFont, fontSize:10, color:C.inkFaint},
+           axisLine:{show:false}, splitLine:{lineStyle:{color:C.grid, type:'dashed'}},
+           axisLabel:{...baseTextStyle}},
+    tooltip:{trigger:'axis',
+             textStyle:{fontFamily:chartFont, fontSize:11},
+             formatter: params => {
+               const idx = params[0].dataIndex;
+               const m = months[idx];
+               return `<b>${monthLabel(m)}</b> · ${byM[m].count} challans issued<br/>`
+                 + `MB01 cumul: <b>${fmtINR(cumMb01[idx]*1e5)}</b><br/>`
+                 + `MB02 cumul: <b>${fmtINR(cumMb02[idx]*1e5)}</b><br/>`
+                 + `Total: <b>${fmtINR(cumAll[idx]*1e5)}</b>`;
+             }},
+    series:[
+      {name:'MB01 cumul.', type:'line', data:cumMb01, smooth:true, lineStyle:{color:C.a, width:2}, itemStyle:{color:C.a}, areaStyle:{color:C.aSoft, opacity:.45}},
+      {name:'MB02 cumul.', type:'line', data:cumMb02, smooth:true, lineStyle:{color:C.b, width:2}, itemStyle:{color:C.b}, areaStyle:{color:C.bSoft, opacity:.45}},
+      {name:'Total MB cumul.', type:'line', data:cumAll, smooth:true, lineStyle:{color:C.ink, width:2.5, type:'dashed'}, itemStyle:{color:C.ink}, symbol:'circle', symbolSize:5},
+    ]
+  }, true);
+}
+
+/* ===== CHART 10 · Pareto ===== */
+function renderPareto(items){
+  const c = ensureChart('chartPareto'); if (!c) return;
+  const pend = items.map(i => ({
+    label: `${i.sch}${i.sno}`, desc:i.desc, sch:i.sch, v: i.totalAmount-i.progressAmount
+  })).filter(x => x.v > 0).sort((a,b) => b.v - a.v).slice(0, 20);
+  if (!pend.length){ c.clear(); c.setOption({title:{text:'No pending value',textStyle:{fontFamily:chartFont,fontSize:12,color:C.inkFaint},left:'center',top:'center'}}); return; }
+  const totalPending = pend.reduce((s,x)=>s+x.v,0);
+  let cum = 0;
+  const cumPct = pend.map(x => { cum += x.v; return +(cum/totalPending*100).toFixed(1); });
+  c.setOption({
+    animationDuration:500,
+    grid:{left:55, right:50, top:22, bottom:36},
+    xAxis:{type:'category', data:pend.map(x => x.label),
+           axisLine:{lineStyle:{color:C.border}},
+           axisLabel:{...baseTextStyle, fontSize:9, rotate:0, interval:0}},
+    yAxis:[
+      {type:'value', name:'₹ L pending', nameTextStyle:{fontFamily:chartFont, fontSize:10, color:C.inkFaint},
+       axisLine:{show:false}, axisTick:{show:false},
+       splitLine:{lineStyle:{color:C.grid, type:'dashed'}},
+       axisLabel:{...baseTextStyle, formatter: v => (v/1e5).toFixed(0)}},
+      {type:'value', name:'Cumulative %', max:100, nameTextStyle:{fontFamily:chartFont, fontSize:10, color:C.inkFaint},
+       position:'right', axisLine:{show:false}, axisTick:{show:false}, splitLine:{show:false},
+       axisLabel:{...baseTextStyle, formatter: v => v + '%'}},
+    ],
+    tooltip:{trigger:'axis',
+             textStyle:{fontFamily:chartFont, fontSize:11},
+             formatter: params => {
+               const idx = params[0].dataIndex;
+               const x = pend[idx];
+               return `<b>${x.label}</b> · ${x.desc.slice(0,50)}<br/>Pending: <b>${fmtINR(x.v)}</b><br/>Cum: <b>${cumPct[idx]}%</b> of pending`;
+             }},
+    series:[
+      {name:'Pending', type:'bar', yAxisIndex:0, data:pend.map(x => ({value:x.v, itemStyle:{color: x.sch==='A' ? C.a : C.b}}))},
+      {name:'Cum %', type:'line', yAxisIndex:1, data:cumPct, smooth:true, lineStyle:{color:C.red, width:2}, itemStyle:{color:C.red}, symbol:'none',
+       markLine:{data:[{yAxis:80, lineStyle:{color:C.red, type:'dashed'}, label:{formatter:'80%', color:C.red, fontSize:10, fontFamily:chartFont}}], silent:true}},
+    ]
+  }, true);
+}
+
+/* ===== CHART 11 · Challan cadence bars ===== */
+function renderChallanBars(items){
+  const c = ensureChart('chartChallanBars'); if (!c) return;
+  const byM = {};
+  items.forEach(i => {
+    if (!i.challanDate) return;
+    const ym = i.challanDate.slice(0,7);
+    byM[ym] = (byM[ym] || 0) + 1;
+  });
+  const months = Object.keys(byM).sort();
+  if (!months.length){ c.clear(); c.setOption({title:{text:'No challans in filter',textStyle:{fontFamily:chartFont,fontSize:12,color:C.inkFaint},left:'center',top:'center'}}); return; }
+  const monthLabel = m => { const [y,mo] = m.split('-'); const names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return names[parseInt(mo)-1]+' '+y.slice(-2); };
+  c.setOption({
+    animationDuration:500,
+    grid:{left:40, right:15, top:22, bottom:28},
+    xAxis:{type:'category', data:months.map(monthLabel), axisLine:{lineStyle:{color:C.border}},
+           axisLabel:{...baseTextStyle, fontSize:10}},
+    yAxis:{type:'value', axisLine:{show:false}, axisTick:{show:false},
+           splitLine:{lineStyle:{color:C.grid, type:'dashed'}},
+           axisLabel:{...baseTextStyle}, minInterval:1},
+    tooltip:{trigger:'axis', axisPointer:{type:'shadow'},
+             textStyle:{fontFamily:chartFont, fontSize:11},
+             formatter: p => `${p[0].name}<br/><b>${p[0].value}</b> challan${p[0].value===1?'':'s'}`},
+    series:[{type:'bar', data:months.map(m=>byM[m]), itemStyle:{color:C.a},
+      label:{show:true, position:'top', color:C.ink, fontFamily:chartFont, fontSize:10, fontWeight:600}}],
+  }, true);
+}
+
+/* ===== INSIGHTS ===== */
+function renderInsights(items){
+  const ul = document.getElementById('insightsList');
+  const insights = [];
+  const a = items.filter(i=>i.sch==='A');
+  const b = items.filter(i=>i.sch==='B');
+  const aT=a.reduce((s,i)=>s+i.totalAmount,0), aE=a.reduce((s,i)=>s+i.progressAmount,0);
+  const bT=b.reduce((s,i)=>s+i.totalAmount,0), bE=b.reduce((s,i)=>s+i.progressAmount,0);
+  const sp = aT>0 ? aE/aT*100 : 0;
+  const ep = bT>0 ? bE/bT*100 : 0;
+  const gap = sp - ep;
+
+  // 1. Supply-execution gap
+  if (a.length && b.length){
+    if (gap > 10){
+      const idleValue = a.reduce((s,i)=>s+i.progressAmount,0) - bE;
+      insights.push({warn:true, txt:`<b>Execution lags supply by ${gap.toFixed(1)} points</b> (Supply ${fmtPctNum(sp)} vs Execution ${fmtPctNum(ep)}). Roughly <b>${fmtINR(Math.max(0,idleValue))}</b> of material is on site but not yet installed — this is money tied up in idle inventory.`});
+    } else if (gap < -5){
+      insights.push({txt:`Execution (${fmtPctNum(ep)}) is ahead of supply (${fmtPctNum(sp)}) in this filter — verify accuracy of progress booking before accepting.`});
+    } else {
+      insights.push({txt:`Supply (${fmtPctNum(sp)}) and execution (${fmtPctNum(ep)}) are aligned within ${Math.abs(gap).toFixed(1)} pts — healthy cadence.`});
+    }
+  }
+
+  // 2. Top-3 pending items — % of pending + inspection status
+  const pending = items.filter(i=>i.totalAmount > i.progressAmount)
+    .map(i => ({...i, pend: i.totalAmount - i.progressAmount}))
+    .sort((x,y) => y.pend - x.pend);
+  if (pending.length){
+    const totPend = pending.reduce((s,x)=>s+x.pend, 0);
+    const top3 = pending.slice(0,3);
+    const top3Sum = top3.reduce((s,x)=>s+x.pend,0);
+    const pctShare = totPend>0 ? top3Sum/totPend*100 : 0;
+    const refs = top3.map(i => `${i.sch}${i.sno}`).join(', ');
+    const inspections = [...new Set(top3.map(i => i.inspection || 'No agency'))].join(', ');
+    insights.push({warn: pctShare > 40,
+      txt:`<b>Top 3 pending items (${refs})</b> hold <b>${pctShare.toFixed(0)}%</b> of all pending value (${fmtINR(top3Sum)} of ${fmtINR(totPend)}). Awaiting: <b>${inspections}</b>.`});
+  }
+
+  // 3. Brand concentration risk — 0% suppliers vs 100% suppliers (Sch A only)
+  const brandStats = {};
+  a.forEach(i => {
+    const k = i.brand;
+    if (!brandStats[k]) brandStats[k] = {supplied:0, total:0, items:0};
+    brandStats[k].supplied += i.progressAmount;
+    brandStats[k].total += i.totalAmount;
+    brandStats[k].items += 1;
+  });
+  const bigBrands = Object.entries(brandStats)
+    .map(([k,v]) => ({brand:k, pct: v.total>0 ? v.supplied/v.total*100 : 0, value:v.total, items:v.items}))
+    .filter(x => x.value > 200000)
+    .sort((x,y) => y.value - x.value);
+  const stalled = bigBrands.filter(x => x.pct < 5 && x.value > 500000);
+  const complete = bigBrands.filter(x => x.pct >= 99);
+  if (stalled.length){
+    insights.push({warn:true,
+      txt:`<b>Stalled suppliers:</b> ${stalled.slice(0,3).map(s => `${s.brand} (${fmtINR(s.value)} contracted, 0% supplied)`).join(' · ')}. Single-vendor exposure — expedite or seek alternate make.`});
+  }
+  if (complete.length){
+    insights.push({txt:`<b>Fully-supplied brands</b> (at 100%): ${complete.slice(0,5).map(x => `${x.brand}`).join(', ')}. Execution on these items can begin in parallel.`});
+  }
+
+  // 4. Billing velocity → ETA
+  const timelineM = {};
+  items.forEach(i => {
+    if (!i.challanDate) return;
+    const ym = i.challanDate.slice(0,7);
+    if (!timelineM[ym]) timelineM[ym] = 0;
+    timelineM[ym] += i.mb01Value + i.mb02Value;
+  });
+  const months = Object.keys(timelineM).sort();
+  if (months.length >= 2){
+    const totalBilled = Object.values(timelineM).reduce((s,v)=>s+v,0);
+    const avgPerMonth = totalBilled / months.length;
+    const totalContract = items.reduce((s,i)=>s+i.totalAmount,0);
+    const remaining = totalContract - items.reduce((s,i)=>s+i.progressAmount,0);
+    if (avgPerMonth > 0 && remaining > 0){
+      const monthsLeft = remaining / avgPerMonth;
+      const lastMonth = months[months.length-1].split('-');
+      const d = new Date(parseInt(lastMonth[0]), parseInt(lastMonth[1])-1 + Math.ceil(monthsLeft), 1);
+      const eta = d.toLocaleDateString('en-IN', {month:'short', year:'numeric'});
+      insights.push({warn: monthsLeft > 12,
+        txt:`At current billing velocity (<b>${fmtINR(avgPerMonth)}/month</b> over ${months.length} active months), remaining <b>${fmtINR(remaining)}</b> clears in ≈ <b>${monthsLeft.toFixed(1)} months</b> → projected completion <b>${eta}</b>.`});
+    }
+  }
+
+  // 5. Inspection bottleneck
+  const inspPending = {};
+  items.filter(i => i.progress < 1).forEach(i => {
+    const k = i.inspection || 'No agency assigned';
+    if (!inspPending[k]) inspPending[k] = {count:0, value:0};
+    inspPending[k].count += 1;
+    inspPending[k].value += (i.totalAmount - i.progressAmount);
+  });
+  const inspRanked = Object.entries(inspPending).sort((x,y) => y[1].value - x[1].value);
+  if (inspRanked.length){
+    const [k, v] = inspRanked[0];
+    insights.push({txt:`Biggest inspection queue: <b>${k}</b> — ${v.count} items worth <b>${fmtINR(v.value)}</b> pending clearance.`});
+  }
+
+  // 6. If filter returns nothing useful
+  if (!items.length){
+    insights.length = 0;
+    insights.push({txt:`No items match the current filter. Clear one or more filters above to resume analysis.`});
+  }
+
+  ul.innerHTML = insights.map(i => `<li${i.warn?' class="warn"':''}>${i.txt}</li>`).join('');
+}
+
+/* ===== TABLE ===== */
+function renderTable(items){
+  const q = state.tableSearch.trim().toLowerCase();
+  let rows = items;
+  if (q) rows = rows.filter(i =>
+    i.desc.toLowerCase().includes(q) ||
+    i.brand.toLowerCase().includes(q) ||
+    (i.challanNo||'').toLowerCase().includes(q) ||
+    String(i.sno).includes(q)
+  );
+  const sortCol = state.tableSort.col, dir = state.tableSort.dir;
+  rows = [...rows].sort((x,y) => {
+    let a = x[sortCol], b = y[sortCol];
+    if (a == null) a = '';
+    if (b == null) b = '';
+    if (typeof a === 'number' && typeof b === 'number'){
+      return dir === 'asc' ? a-b : b-a;
+    }
+    a = String(a); b = String(b);
+    return dir === 'asc' ? a.localeCompare(b) : b.localeCompare(a);
+  });
+
+  const tbody = document.getElementById('itemTbody');
+  document.getElementById('tableCount').textContent = `${rows.length} row${rows.length===1?'':'s'} shown`;
+  document.getElementById('tableMeta').textContent = `${items.length} items in filter · rebate-adjusted rate`;
+  if (!rows.length){
+    tbody.innerHTML = `<tr><td colspan="12" class="empty" style="padding:32px">No matching items. Adjust filters or search.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(i => {
+    const pct = i.progress * 100;
+    const cls = pct < 25 ? 'r' : pct < 75 ? 'a' : 'g';
+    const inspCls = i.inspection === 'RDSO' ? 'rdso' : i.inspection === 'RITES' ? 'rites' : i.inspection === 'Consignee' ? 'cons' : 'none';
+    const inspText = i.inspection || '—';
+    return `<tr>
+      <td class="sch sch-${i.sch}">${i.sch}</td>
+      <td class="num">${i.sno}</td>
+      <td class="desc">${i.desc}</td>
+      <td>${i.brand}</td>
+      <td class="num">${fmtQty(i.qty)}</td>
+      <td>${i.unit}</td>
+      <td class="num">${fmtINR(i.totalAmount)}</td>
+      <td class="num">${fmtINR(i.progressAmount)}</td>
+      <td class="num">${fmtINR(i.totalAmount - i.progressAmount)}</td>
+      <td><div class="prog-cell"><div class="prog-bar ${cls}"><i style="width:${Math.min(100,pct)}%"></i></div><div class="prog-num ${cls}">${fmtPctNum(pct,0)}</div></div></td>
+      <td><span class="pill ${inspCls}">${inspText}</span></td>
+      <td class="num">${i.challanDate || '—'}</td>
+    </tr>`;
+  }).join('');
+
+  // Header sort indicators
+  document.querySelectorAll('#itemTable thead th').forEach(th => {
+    th.classList.remove('sort-asc','sort-desc');
+    if (th.dataset.sort === sortCol) th.classList.add('sort-' + dir);
+  });
+}
+
+/* ===== MAIN RENDER ===== */
+function render(){
+  const items = filtered();
+  renderKPIs(items);
+  renderGauges(items);
+  renderWaterfall(items);
+  renderStatus(items);
+  renderTop10(items);
+  renderInspection(items);
+  renderBrand(items);
+  renderTreemap(items);
+  renderAlign(items);
+  renderTimeline(items);
+  renderPareto(items);
+  renderChallanBars(items);
+  renderInsights(items);
+  renderTable(items);
+}
+
+/* ===== FILTER STRIP EVENTS ===== */
+function setChipGroup(f, v){
+  state[f] = v;
+  document.querySelectorAll(`[data-f="${f}"]`).forEach(b => {
+    b.classList.toggle('active', b.dataset.v === v);
+  });
+}
+document.getElementById('filterStrip').addEventListener('click', e => {
+  const t = e.target.closest('.chip'); if (!t) return;
+  const f = t.dataset.f; const v = t.dataset.v;
+  if (!f) return;
+  setChipGroup(f, v);
+  render();
+});
+
+document.getElementById('searchBox').addEventListener('input', e => {
+  state.search = e.target.value;
+  render();
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  state.sch = 'all'; state.insp = 'all'; state.status = 'all'; state.band = 'all';
+  state.units.clear(); state.brands.clear();
+  state.search = '';
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('[data-v="all"]').forEach(c => c.classList.add('active'));
+  document.getElementById('searchBox').value = '';
+  refreshDropdownTriggers();
+  render();
+});
+
+/* ===== Dropdown multi-selects (Unit / Brand) ===== */
+function buildDropdown(id, items, stateKey, label, showSearch=false){
+  const dd = document.getElementById(id);
+  const pop = dd.querySelector('.pop');
+  const base = showSearch ? '<input type="search" placeholder="Search…" />' : '';
+  const listHtml = items.map(v => `<label><input type="checkbox" value="${v.replace(/"/g,'&quot;')}"> ${v}</label>`).join('');
+  pop.innerHTML = base + listHtml;
+  if (showSearch){
+    const inp = pop.querySelector('input[type=search]');
+    inp.addEventListener('input', () => {
+      const q = inp.value.toLowerCase();
+      pop.querySelectorAll('label').forEach(l => {
+        l.style.display = l.textContent.toLowerCase().includes(q) ? '' : 'none';
+      });
+    });
+  }
+  pop.addEventListener('change', e => {
+    if (e.target.type !== 'checkbox') return;
+    const v = e.target.value;
+    if (e.target.checked) state[stateKey].add(v); else state[stateKey].delete(v);
+    refreshDropdownTriggers();
+    render();
+  });
+  dd.querySelector('.trg').addEventListener('click', () => {
+    document.querySelectorAll('.ddown').forEach(d => { if (d !== dd) d.classList.remove('open'); });
+    dd.classList.toggle('open');
+  });
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('.ddown')) document.querySelectorAll('.ddown').forEach(d => d.classList.remove('open'));
+});
+function refreshDropdownTriggers(){
+  const uT = document.querySelector('#ddUnit .trg');
+  uT.textContent = state.units.size === 0 ? 'Unit: All' : `Unit: ${state.units.size} selected`;
+  uT.classList.toggle('on', state.units.size > 0);
+  const bT = document.querySelector('#ddBrand .trg');
+  bT.textContent = state.brands.size === 0 ? 'Brand: All' : `Brand: ${state.brands.size} selected`;
+  bT.classList.toggle('on', state.brands.size > 0);
+}
+buildDropdown('ddUnit', DATA.filters.units, 'units', 'Unit');
+buildDropdown('ddBrand', DATA.filters.brands, 'brands', 'Brand', true);
+
+/* ===== Table events ===== */
+document.getElementById('tableSearch').addEventListener('input', e => {
+  state.tableSearch = e.target.value;
+  renderTable(filtered());
+});
+document.querySelectorAll('#itemTable thead th').forEach(th => {
+  th.addEventListener('click', () => {
+    const col = th.dataset.sort;
+    if (state.tableSort.col === col){
+      state.tableSort.dir = state.tableSort.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      state.tableSort.col = col;
+      state.tableSort.dir = ['totalAmount','progressAmount','pendingValue','qty','sno','progress'].includes(col) ? 'desc' : 'asc';
+    }
+    renderTable(filtered());
+  });
+});
+
+/* ===== CROSS-FILTER via chart clicks ===== */
+// Top-10 click -> filter by brand
+function wireCrossFilters(){
+  const tryClick = (id, handler) => {
+    const c = charts[id]; if (!c) return;
+    c.off('click'); c.on('click', handler);
+  };
+  tryClick('chartInspection', p => {
+    if (!p.name) return;
+    const name = p.name === 'No Agency' ? 'none' : p.name;
+    setChipGroup('insp', name); render();
+  });
+  tryClick('chartStatus', p => {
+    const st = p.name.split('·')[1]?.trim();
+    if (['Completed','In Progress','Not Started'].includes(st)){
+      setChipGroup('status', st); render();
+    }
+  });
+  tryClick('chartBrand', p => {
+    if (!p.name) return;
+    state.brands.clear(); state.brands.add(p.name);
+    refreshDropdownTriggers(); render();
+  });
+  tryClick('chartTreemap', p => {
+    if (!p.name) return;
+    state.units.clear(); state.units.add(p.name);
+    refreshDropdownTriggers(); render();
+  });
+}
+
+/* ===== BOOT ===== */
+render();
+// wire up click-through after first paint
+setTimeout(wireCrossFilters, 300);
+</script>
+</body>
+</html>

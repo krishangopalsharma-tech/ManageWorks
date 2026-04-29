@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Work, WorkItem, WorkItemEntry, WorkExtension, WorkBill
+from .models import Work, WorkItem, WorkItemEntry, WorkExtension
 from django.contrib.auth.models import User
 
 class UserSerializer(serializers.ModelSerializer):
@@ -26,15 +26,9 @@ class WorkExtensionSerializer(serializers.ModelSerializer):
         model = WorkExtension
         fields = ['id', 'extension_date']
 
-class WorkBillSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = WorkBill
-        fields = ['id', 'bill_amount']
-
 class WorkSerializer(serializers.ModelSerializer):
     items = WorkItemSerializer(many=True, read_only=True)
     extensions = WorkExtensionSerializer(many=True, read_only=True)
-    bills = WorkBillSerializer(many=True, read_only=True)
 
     class Meta:
         model = Work

@@ -122,16 +122,3 @@ class WorkExtension(models.Model):
 
     def __str__(self):
         return f"Extension for {self.work_id}: {self.extension_date}"
-
-
-class WorkBill(models.Model):
-    """Bills released to the contractor; sum / work total_amount = financial progress."""
-    work = models.ForeignKey(Work, on_delete=models.CASCADE, related_name='bills')
-    bill_amount = models.FloatField()
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ['created_at']
-
-    def __str__(self):
-        return f"Bill ₹{self.bill_amount} for {self.work_id}"

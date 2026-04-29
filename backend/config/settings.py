@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'documents',
     'users',
     'item_progress',
+    'mb_details',
 ]
 
 MIDDLEWARE = [
