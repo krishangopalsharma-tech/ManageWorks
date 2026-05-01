@@ -18,6 +18,7 @@ class Work(models.Model):
     tender_number = models.CharField(max_length=255, null=True, blank=True)
     date = models.CharField(max_length=255, null=True, blank=True)
     contract_agreement = models.CharField(max_length=255, null=True, blank=True)
+    name_of_work = models.TextField(null=True, blank=True)
     contractor_name = models.CharField(max_length=255, null=True, blank=True)
     contractor_address = models.TextField(null=True, blank=True)
     date_of_completion = models.CharField(max_length=255, null=True, blank=True)

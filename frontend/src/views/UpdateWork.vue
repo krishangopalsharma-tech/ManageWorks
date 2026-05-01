@@ -244,6 +244,7 @@ const openEditWork = (work) => {
   editingWork.value = {
     id: work.id, loa_number: work.loa_number || '', tender_number: work.tender_number || '',
     date: work.date || '', contract_agreement: work.contract_agreement || '',
+    name_of_work: work.name_of_work || '',
     contractor_name: work.contractor_name || '', contractor_address: work.contractor_address || '',
     date_of_completion: work.date_of_completion || '', consignee: work.consignee || '',
     extensions: (work.extensions || []).map(e => ({ ...e })),
@@ -378,6 +379,7 @@ const deleteWork = async () => {
               </button>
               <div class="min-w-0">
                 <h2 class="text-xl font-bold text-gray-900 truncate">{{ selectedWork.contractor_name }}</h2>
+                <p v-if="selectedWork.name_of_work" class="text-xs text-gray-600 mt-0.5 leading-snug max-w-2xl">{{ selectedWork.name_of_work }}</p>
                 <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-2">
                   <span class="flex items-center gap-1.5 text-xs text-gray-500">
                     <span class="font-medium text-gray-400">LOA</span>
@@ -510,6 +512,10 @@ const deleteWork = async () => {
                 <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Contract Agreement</label>
                 <input v-model="editingWork.contract_agreement" type="text" class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
               </div>
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Name of Work</label>
+              <textarea v-model="editingWork.name_of_work" rows="2" class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all resize-none"></textarea>
             </div>
             <div class="flex flex-col gap-1">
               <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Contractor Name</label>

@@ -270,6 +270,7 @@ const toggleExpand = (itemId) => {
               </button>
               <div class="min-w-0">
                 <h2 class="text-xl font-bold text-gray-900 truncate">{{ selectedWork.contractor_name }}</h2>
+                <p v-if="selectedWork.name_of_work" class="text-xs text-gray-600 mt-0.5 leading-snug max-w-2xl">{{ selectedWork.name_of_work }}</p>
                 <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-2 text-xs text-gray-500">
                   <span><span class="text-gray-400 font-medium">LOA</span> <span class="font-semibold text-gray-800">{{ selectedWork.loa_number || '—' }}</span></span>
                   <span class="text-gray-200">·</span>

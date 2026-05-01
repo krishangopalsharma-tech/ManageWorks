@@ -13,8 +13,7 @@ const fmtDateTime = (val) => {
 }
 const uid = () => Math.random().toString(36).slice(2, 10)
 
-// ── Step state ────────────────────────────────────────────────────────────
-// 1: pick work  2: MB header (number + notes)  3: items  4: review
+// Steps: 1=Select Work, 2=Upload PDF, 3=Review & Save
 const step = ref(1)
 
 const workQuery    = ref('')
@@ -31,12 +30,9 @@ const mbNumberDisplay = computed(() => {
   return /^\d+$/.test(v) ? `MB${v.padStart(2, '0')}` : v
 })
 
-const scheduleFilter = ref('')  // '', 'A', 'B'
-const itemQuery      = ref('')
-const itemResults    = ref([])
-const isSearchingItems = ref(false)
-
-// pickedItems: array of { key, work_item, serial_number, item_desc, schedule, qty_default, unit, rate, quantity, prior_percentage, current_percentage, selected }
+// Items imported from PDF
+// shape: { key, work_item, serial_number, item_desc, schedule, qty_default, unit, rate,
+//          quantity, prior_percentage, current_percentage, selected, not_received_warning }
 const pickedItems = ref([])
 const bulkPct     = ref('')
 
@@ -44,6 +40,21 @@ const savedRecords = ref([])
 const summary      = ref(null)
 const saveStatus   = ref('')
 const isSaving     = ref(false)
+
+// PDF import
+const pdfFileInput   = ref(null)
+const isImporting    = ref(false)
+const importStatus   = ref('')
+const importWarnings = ref([])
+const unmatchedItems = ref([])
+
+// Edit modal state
+const editRecord     = ref(null)
+const editMbNumber   = ref('')
+const editNotes      = ref('')
+const editItems      = ref([])
+const editSaving     = ref(false)
+const editSaveStatus = ref('')
 
 // ── Work search ───────────────────────────────────────────────────────────
 let workSearchTimer = null
@@ -66,76 +77,79 @@ const pickWork = (w) => {
   step.value = 2
 }
 
-// ── MB header → items ─────────────────────────────────────────────────────
-const canProceedToItems = computed(() => String(mbNumber.value || '').trim().length > 0)
+// ── PDF Import ────────────────────────────────────────────────────────────
+const triggerPdfPicker = () => pdfFileInput.value?.click()
 
-const goToItems = () => {
-  if (!canProceedToItems.value) return
-  step.value = 3
+const onPdfSelected = async (event) => {
+  const file = event.target.files?.[0]
+  if (!file) return
+  await importPdf(file)
+  event.target.value = ''
 }
 
-// ── Item search ───────────────────────────────────────────────────────────
-let itemSearchTimer = null
-watch([itemQuery, scheduleFilter], () => {
-  clearTimeout(itemSearchTimer)
-  itemSearchTimer = setTimeout(searchItems, 250)
-})
-
-const searchItems = async () => {
-  if (!selectedWork.value) return
-  isSearchingItems.value = true
+const importPdf = async (file) => {
+  isImporting.value    = true
+  importStatus.value   = ''
+  importWarnings.value = []
+  unmatchedItems.value = []
   try {
-    const { data } = await axios.get(
-      `/api/mb-details/works/${selectedWork.value.id}/items/`,
-      { params: { schedule: scheduleFilter.value, q: itemQuery.value } }
-    )
-    itemResults.value = data
-  } catch (e) { console.error(e) }
-  finally { isSearchingItems.value = false }
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('work_id', selectedWork.value.id)
+    const { data } = await axios.post('/api/mb-details/import-pdf/', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+
+    if (data.header?.mb_number)          mbNumber.value = data.header.mb_number
+    if (data.header?.date_of_measurement) notes.value   = `Date of Measurement: ${data.header.date_of_measurement}`
+
+    const matched   = []
+    const unmatched = []
+    for (const r of (data.items || [])) {
+      if (r.matched) {
+        matched.push({
+          key:                  uid(),
+          work_item:            r.work_item,
+          serial_number:        r.item_no,
+          item_desc:            r.description || r.work_item_label || '',
+          schedule:             r.schedule,
+          qty_default:          r.contract_qty || r.quantity,
+          unit:                 r.unit,
+          rate:                 r.unit_rate_below || 0,
+          quantity:             r.quantity || 0,
+          prior_percentage:     r.suggested_prior || 0,
+          current_percentage:   r.current_percentage || 0,
+          selected:             false,
+          not_received_warning: r.not_received_warning || false,
+        })
+      } else {
+        unmatched.push(r)
+      }
+    }
+    pickedItems.value    = matched
+    unmatchedItems.value = unmatched
+    importWarnings.value = data.warnings || []
+
+    if (matched.length > 0) {
+      importStatus.value = 'ok'
+      step.value = 3
+    } else {
+      importStatus.value = 'no-match'
+    }
+    setTimeout(() => { importStatus.value = '' }, 4000)
+  } catch (e) {
+    console.error(e)
+    importStatus.value = e.response?.data?.error || 'Import failed.'
+    setTimeout(() => { importStatus.value = '' }, 4500)
+  } finally {
+    isImporting.value = false
+  }
 }
 
-const addItem = async (item) => {
-  let priorPct = 0
-  try {
-    const { data } = await axios.get(`/api/mb-details/items/${item.id}/prior/`)
-    priorPct = data.suggested_prior_pct || 0
-  } catch (e) { console.error(e) }
-
-  pickedItems.value.push({
-    key:                uid(),
-    work_item:          item.id,
-    serial_number:      item.serial_number,
-    item_desc:          item.item_desc,
-    schedule:           item.schedule,
-    qty_default:        item.qty,
-    unit:               item.unit,
-    rate:               item.unit_rate_below || 0,
-    quantity:           item.qty || 0,
-    prior_percentage:   priorPct,
-    current_percentage: 0,
-    selected:           true,  // newly added rows are selected by default for bulk %
-  })
-}
-
-const removeRow = (key) => {
-  pickedItems.value = pickedItems.value.filter(r => r.key !== key)
-}
-
-// Duplicate a row — split-qty scenario (same item, different prior/current or qty)
-const duplicateRow = (row) => {
-  pickedItems.value.push({
-    ...row,
-    key: uid(),
-    quantity: 0,
-    prior_percentage: 0,
-    current_percentage: 0,
-    selected: true,
-  })
-}
-
+// ── Row helpers ───────────────────────────────────────────────────────────
 const rowAmount = (row) => {
-  const qty  = parseFloat(row.quantity) || 0
-  const rate = parseFloat(row.rate)     || 0
+  const qty  = parseFloat(row.quantity)           || 0
+  const rate = parseFloat(row.rate)               || 0
   const cur  = parseFloat(row.current_percentage) || 0
   const pri  = parseFloat(row.prior_percentage)   || 0
   return Math.round(qty * rate * (cur - pri) / 100 * 100) / 100
@@ -145,43 +159,36 @@ const mbTotalAmount = computed(() =>
   pickedItems.value.reduce((s, r) => s + rowAmount(r), 0)
 )
 
-// ── Bulk percentage apply ─────────────────────────────────────────────────
-const selectedCount = computed(() => pickedItems.value.filter(r => r.selected).length)
-
-const selectAll   = () => pickedItems.value.forEach(r => r.selected = true)
-const selectNone  = () => pickedItems.value.forEach(r => r.selected = false)
-
-const applyBulkPct = () => {
-  const pct = parseFloat(bulkPct.value)
-  if (isNaN(pct) || pct <= 0 || pct > 100) return
-  pickedItems.value.forEach(r => {
-    if (r.selected) r.current_percentage = pct
-  })
-  // After applying, deselect so next batch is fresh
-  pickedItems.value.forEach(r => r.selected = false)
-  bulkPct.value = ''
-}
-
-// ── Save ──────────────────────────────────────────────────────────────────
 const rowIsValid = (r) => {
-  const qty = parseFloat(r.quantity) || 0
+  const qty = parseFloat(r.quantity)           || 0
   const cur = parseFloat(r.current_percentage) || 0
   const pri = parseFloat(r.prior_percentage)   || 0
   return qty > 0 && cur > pri && cur <= 100 && pri >= 0
 }
 
-const canReview = computed(() =>
-  pickedItems.value.length > 0 && pickedItems.value.every(rowIsValid)
-)
-
+const canSave     = computed(() => pickedItems.value.length > 0 && pickedItems.value.every(rowIsValid))
 const invalidCount = computed(() => pickedItems.value.filter(r => !rowIsValid(r)).length)
 
+// ── Bulk % apply ──────────────────────────────────────────────────────────
+const selectedCount = computed(() => pickedItems.value.filter(r => r.selected).length)
+const selectAll     = () => pickedItems.value.forEach(r => r.selected = true)
+const selectNone    = () => pickedItems.value.forEach(r => r.selected = false)
+
+const applyBulkPct = () => {
+  const pct = parseFloat(bulkPct.value)
+  if (isNaN(pct) || pct <= 0 || pct > 100) return
+  pickedItems.value.forEach(r => { if (r.selected) r.current_percentage = pct })
+  pickedItems.value.forEach(r => r.selected = false)
+  bulkPct.value = ''
+}
+
+// ── Save new MB record ────────────────────────────────────────────────────
 const saveMB = async () => {
-  if (!canReview.value || !selectedWork.value) return
-  isSaving.value = true
+  if (!canSave.value || !selectedWork.value) return
+  isSaving.value   = true
   saveStatus.value = ''
   try {
-    const payload = {
+    await axios.post('/api/mb-details/records/', {
       work:      selectedWork.value.id,
       mb_number: String(mbNumber.value || '').trim(),
       notes:     notes.value,
@@ -191,14 +198,10 @@ const saveMB = async () => {
         prior_percentage:   parseFloat(r.prior_percentage) || 0,
         current_percentage: parseFloat(r.current_percentage),
       })),
-    }
-    await axios.post('/api/mb-details/records/', payload)
+    })
     saveStatus.value = 'saved'
     await Promise.all([loadRecords(), loadSummary()])
-    setTimeout(() => {
-      saveStatus.value = ''
-      resetFlow()
-    }, 1200)
+    setTimeout(() => { saveStatus.value = ''; resetFlow() }, 1200)
   } catch (e) {
     console.error(e)
     saveStatus.value = e.response?.data?.error || (e.response?.status === 403 ? 'denied' : 'error')
@@ -209,21 +212,21 @@ const saveMB = async () => {
 }
 
 const resetFlow = () => {
-  step.value = 1
-  workQuery.value = ''
-  workResults.value = []
-  selectedWork.value = null
-  mbNumber.value = ''
-  notes.value = ''
-  scheduleFilter.value = ''
-  itemQuery.value = ''
-  itemResults.value = []
-  pickedItems.value = []
-  bulkPct.value = ''
+  step.value           = 1
+  workQuery.value      = ''
+  workResults.value    = []
+  selectedWork.value   = null
+  mbNumber.value       = ''
+  notes.value          = ''
+  pickedItems.value    = []
+  bulkPct.value        = ''
+  importWarnings.value = []
+  unmatchedItems.value = []
+  importStatus.value   = ''
   searchWorks('')
 }
 
-// ── Records / summary ─────────────────────────────────────────────────────
+// ── Records & summary ─────────────────────────────────────────────────────
 const loadRecords = async () => {
   try {
     const { data } = await axios.get('/api/mb-details/records/')
@@ -244,8 +247,109 @@ const deleteRecord = async (id) => {
     await axios.delete(`/api/mb-details/records/${id}/`)
     await Promise.all([loadRecords(), loadSummary()])
   } catch (e) {
-    console.error(e)
     alert(e.response?.status === 403 ? 'Permission denied.' : 'Failed to delete.')
+  }
+}
+
+// ── Edit modal ────────────────────────────────────────────────────────────
+const openEdit = (record) => {
+  editRecord.value   = record
+  editMbNumber.value = record.mb_number
+  editNotes.value    = record.notes || ''
+  editItems.value    = record.items.map(i => ({
+    work_item:          i.work_item,
+    serial_number:      i.work_item_sno,
+    item_desc:          i.work_item_desc,
+    schedule:           i.work_item_sch,
+    unit:               i.work_item_unit,
+    rate:               i.work_item_rate || 0,
+    qty_default:        i.work_item_qty,
+    quantity:           i.quantity,
+    prior_percentage:   i.prior_percentage,
+    current_percentage: i.current_percentage,
+  }))
+  editSaveStatus.value = ''
+}
+
+const closeEdit = () => {
+  editRecord.value = null
+  editItems.value  = []
+}
+
+const editRowAmount = (row) => {
+  const qty  = parseFloat(row.quantity)           || 0
+  const rate = parseFloat(row.rate)               || 0
+  const cur  = parseFloat(row.current_percentage) || 0
+  const pri  = parseFloat(row.prior_percentage)   || 0
+  return Math.round(qty * rate * (cur - pri) / 100 * 100) / 100
+}
+
+const editRowIsValid = (r) => {
+  const qty = parseFloat(r.quantity)           || 0
+  const cur = parseFloat(r.current_percentage) || 0
+  const pri = parseFloat(r.prior_percentage)   || 0
+  return qty > 0 && cur > pri && cur <= 100 && pri >= 0
+}
+
+const editTotal     = computed(() => editItems.value.reduce((s, r) => s + editRowAmount(r), 0))
+const editCanSave   = computed(() => editItems.value.length > 0 && editItems.value.every(editRowIsValid))
+const editInvalid   = computed(() => editItems.value.filter(r => !editRowIsValid(r)).length)
+
+const sortBy  = ref('mb_number')
+const sortDir = ref('asc')
+
+const toggleSort = (field) => {
+  if (sortBy.value === field) sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  else { sortBy.value = field; sortDir.value = 'asc' }
+}
+
+const workRecords = (workId) => {
+  const recs = savedRecords.value.filter(r => r.work === workId)
+  return [...recs].sort((a, b) => {
+    let av, bv
+    if (sortBy.value === 'mb_number') {
+      av = String(a.mb_number || ''); bv = String(b.mb_number || '')
+      const ai = parseInt(av), bi = parseInt(bv)
+      if (!isNaN(ai) && !isNaN(bi)) { av = ai; bv = bi }
+    } else if (sortBy.value === 'total_amount') {
+      av = parseFloat(a.total_amount) || 0; bv = parseFloat(b.total_amount) || 0
+    } else if (sortBy.value === 'created_at') {
+      av = new Date(a.created_at).getTime(); bv = new Date(b.created_at).getTime()
+    } else if (sortBy.value === 'items') {
+      av = a.items.length; bv = b.items.length
+    }
+    if (av < bv) return sortDir.value === 'asc' ? -1 : 1
+    if (av > bv) return sortDir.value === 'asc' ? 1 : -1
+    return 0
+  })
+}
+
+const fmtMbNum = (n) => /^\d+$/.test(String(n)) ? 'MB' + String(n).padStart(2, '0') : n
+
+const saveEdit = async () => {
+  if (!editCanSave.value || !editRecord.value) return
+  editSaving.value     = true
+  editSaveStatus.value = ''
+  try {
+    await axios.patch(`/api/mb-details/records/${editRecord.value.id}/`, {
+      mb_number: editMbNumber.value,
+      notes:     editNotes.value,
+      items:     editItems.value.map(r => ({
+        work_item:          r.work_item,
+        quantity:           parseFloat(r.quantity),
+        prior_percentage:   parseFloat(r.prior_percentage) || 0,
+        current_percentage: parseFloat(r.current_percentage),
+      })),
+    })
+    editSaveStatus.value = 'saved'
+    await Promise.all([loadRecords(), loadSummary()])
+    setTimeout(() => { editSaveStatus.value = ''; closeEdit() }, 1200)
+  } catch (e) {
+    console.error(e)
+    editSaveStatus.value = e.response?.data?.error || (e.response?.status === 403 ? 'denied' : 'error')
+    setTimeout(() => { editSaveStatus.value = '' }, 3500)
+  } finally {
+    editSaving.value = false
   }
 }
 
@@ -259,13 +363,13 @@ onMounted(() => {
 <template>
   <div class="bg-white rounded-2xl soft-shadow h-full w-full flex flex-col overflow-hidden">
 
-    <!-- Header — single row: title + stepper + summary + reset -->
+    <!-- Header -->
     <div class="flex-shrink-0 px-8 pt-5 pb-4 border-b border-gray-100 flex items-center gap-4 flex-wrap">
       <h1 class="text-xl font-bold text-gray-900 tracking-tight flex-shrink-0">MB Details</h1>
 
-      <!-- Stepper inline -->
+      <!-- Stepper -->
       <div class="flex items-center gap-2 flex-1 min-w-0 justify-center">
-        <div v-for="(label, i) in ['Select Work', 'MB Header', 'Add Items', 'Review']" :key="i"
+        <div v-for="(label, i) in ['Select Work', 'Upload PDF', 'Review & Save']" :key="i"
           class="flex items-center gap-1.5">
           <div :class="step > i+1 ? 'bg-[#34c759] text-white'
                        : step === i+1 ? 'bg-[#0071e3] text-white shadow shadow-[#0071e3]/30'
@@ -274,8 +378,9 @@ onMounted(() => {
             <span v-if="step > i+1" class="i-carbon-checkmark text-xs"></span>
             <span v-else>{{ i + 1 }}</span>
           </div>
-          <span :class="step === i+1 ? 'text-gray-800' : 'text-gray-400'" class="text-[11px] font-semibold whitespace-nowrap">{{ label }}</span>
-          <span v-if="i < 3" class="w-4 h-px bg-gray-200"></span>
+          <span :class="step === i+1 ? 'text-gray-800' : 'text-gray-400'"
+            class="text-[11px] font-semibold whitespace-nowrap">{{ label }}</span>
+          <span v-if="i < 2" class="w-4 h-px bg-gray-200"></span>
         </div>
       </div>
 
@@ -316,342 +421,392 @@ onMounted(() => {
           <div v-if="workResults.length === 0" class="py-12 text-center text-xs text-gray-400 font-medium">
             {{ workQuery ? 'No works match.' : 'No works available.' }}
           </div>
-          <div v-else class="grid grid-cols-1 gap-2">
-            <button v-for="w in workResults" :key="w.id" @click="pickWork(w)"
-              class="text-left bg-white border border-gray-200 hover:border-[#0071e3] hover:bg-[#0071e3]/5 rounded-xl px-4 py-3 transition-all group">
-              <div class="flex items-center justify-between gap-3">
-                <div class="min-w-0">
-                  <p class="text-sm font-semibold text-gray-900 truncate">{{ w.contractor_name || '—' }}</p>
-                  <div class="flex items-center gap-3 flex-wrap mt-1">
-                    <span class="text-[11px] font-semibold text-[#0071e3] bg-[#0071e3]/10 px-2 py-0.5 rounded-full">{{ w.loa_number || '—' }}</span>
-                    <span class="text-[11px] text-gray-500">Tender: <span class="font-semibold text-gray-700">{{ w.tender_number || '—' }}</span></span>
-                    <span class="text-[11px] text-gray-500">Consignee: <span class="font-semibold text-gray-700">{{ w.consignee || '—' }}</span></span>
+          <div class="grid grid-cols-1 gap-3">
+            <div v-for="w in workResults" :key="w.id">
+              <!-- Work card -->
+              <button @click="pickWork(w)"
+                class="w-full text-left bg-white border border-gray-200 hover:border-[#0071e3] hover:bg-[#0071e3]/5 px-4 py-3 transition-all group rounded-xl">
+                <div class="flex items-center justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="text-sm font-semibold text-gray-900 truncate">{{ w.contractor_name || '—' }}</p>
+                    <div class="flex items-center gap-3 flex-wrap mt-1">
+                      <span class="text-[11px] font-semibold text-[#0071e3] bg-[#0071e3]/10 px-2 py-0.5 rounded-full">{{ w.loa_number || '—' }}</span>
+                      <span class="text-[11px] text-gray-500">Tender: <span class="font-semibold text-gray-700">{{ w.tender_number || '—' }}</span></span>
+                      <span class="text-[11px] text-gray-500">Consignee: <span class="font-semibold text-gray-700">{{ w.consignee || '—' }}</span></span>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-2 flex-shrink-0">
+                    <span v-if="workRecords(w.id).length > 0"
+                      class="text-[10px] font-bold text-[#0071e3] bg-[#0071e3]/10 px-2 py-0.5 rounded-full">
+                      {{ workRecords(w.id).length }} MB{{ workRecords(w.id).length > 1 ? 's' : '' }}
+                    </span>
+                    <div class="i-carbon-add-alt text-gray-300 group-hover:text-[#0071e3] transition-colors"></div>
                   </div>
                 </div>
-                <div class="i-carbon-chevron-right text-gray-300 group-hover:text-[#0071e3] transition-colors"></div>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─ Step 2: Upload PDF ─ -->
+      <div v-else-if="step === 2">
+        <div class="flex items-center gap-3 mb-4">
+          <button @click="step = 1" class="w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 transition-all">
+            <div class="i-carbon-arrow-left"></div>
+          </button>
+          <div class="min-w-0">
+            <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Selected Work</p>
+            <p class="text-sm font-bold text-gray-900">{{ selectedWork?.contractor_name }} · <span class="text-[#0071e3]">{{ selectedWork?.loa_number }}</span></p>
+            <p v-if="selectedWork?.name_of_work" class="text-xs text-gray-500 mt-0.5 leading-snug max-w-2xl">{{ selectedWork.name_of_work }}</p>
+          </div>
+        </div>
+
+        <div>
+          <input ref="pdfFileInput" type="file" accept="application/pdf" @change="onPdfSelected" class="hidden">
+
+          <div class="border border-gray-200 rounded-xl overflow-hidden">
+            <!-- Upload card — compact -->
+            <div class="bg-gray-50 border-b border-dashed border-gray-300 hover:border-[#0071e3] px-4 py-3 flex items-center gap-3 transition-colors cursor-pointer"
+              :class="selectedWork && workRecords(selectedWork.id).length > 0 ? 'border-b' : 'border-b-0'"
+              @click="triggerPdfPicker">
+              <div v-if="isImporting" class="i-carbon-circle-dash animate-spin text-[#0071e3] text-xl flex-shrink-0"></div>
+              <div v-else class="i-carbon-document-pdf text-gray-300 text-2xl flex-shrink-0"></div>
+              <div class="flex-1 min-w-0">
+                <p class="text-xs font-bold text-gray-700">{{ isImporting ? 'Parsing PDF…' : 'Upload Record Measurement PDF' }}</p>
+                <p class="text-[10px] text-gray-400">Click to choose · PDF auto-fills MB number, items, quantities, and payment %</p>
               </div>
+              <button :disabled="isImporting"
+                class="px-3 py-1.5 rounded-full bg-[#0071e3] text-white text-[11px] font-semibold shadow shadow-[#0071e3]/30 hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0 flex-shrink-0"
+                @click.stop="triggerPdfPicker">
+                Choose PDF
+              </button>
+            </div>
+
+            <!-- MB records for selected work -->
+            <div v-if="selectedWork && workRecords(selectedWork.id).length > 0">
+              <table class="w-full text-xs">
+                <thead class="bg-gray-50/80 border-b border-gray-100">
+                  <tr>
+                    <th class="px-4 py-2 text-left w-36">
+                      <button @click="toggleSort('mb_number')"
+                        class="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-widest hover:text-gray-700 transition-colors">
+                        MB No
+                        <span :class="sortBy === 'mb_number' ? 'text-[#0071e3]' : 'text-gray-300'">
+                          {{ sortBy === 'mb_number' ? (sortDir === 'asc' ? '↑' : '↓') : '↕' }}
+                        </span>
+                      </button>
+                    </th>
+                    <th class="px-4 py-2 text-left">
+                      <button @click="toggleSort('items')"
+                        class="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-widest hover:text-gray-700 transition-colors">
+                        Items
+                        <span :class="sortBy === 'items' ? 'text-[#0071e3]' : 'text-gray-300'">
+                          {{ sortBy === 'items' ? (sortDir === 'asc' ? '↑' : '↓') : '↕' }}
+                        </span>
+                      </button>
+                    </th>
+                    <th class="px-4 py-2 text-right">
+                      <button @click="toggleSort('total_amount')"
+                        class="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-widest hover:text-gray-700 transition-colors ml-auto">
+                        Amount
+                        <span :class="sortBy === 'total_amount' ? 'text-[#0071e3]' : 'text-gray-300'">
+                          {{ sortBy === 'total_amount' ? (sortDir === 'asc' ? '↑' : '↓') : '↕' }}
+                        </span>
+                      </button>
+                    </th>
+                    <th class="px-4 py-2 text-right hidden sm:table-cell">
+                      <button @click="toggleSort('created_at')"
+                        class="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-widest hover:text-gray-700 transition-colors ml-auto">
+                        Date
+                        <span :class="sortBy === 'created_at' ? 'text-[#0071e3]' : 'text-gray-300'">
+                          {{ sortBy === 'created_at' ? (sortDir === 'asc' ? '↑' : '↓') : '↕' }}
+                        </span>
+                      </button>
+                    </th>
+                    <th class="px-4 py-2 w-20"></th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                  <tr v-for="rec in workRecords(selectedWork.id)" :key="rec.id"
+                    class="bg-white hover:bg-gray-50/60 transition-colors">
+                    <td class="px-4 py-2.5 font-bold text-gray-800">{{ fmtMbNum(rec.mb_number) }}</td>
+                    <td class="px-4 py-2.5 text-gray-500">
+                      {{ rec.items.length }} item{{ rec.items.length === 1 ? '' : 's' }}
+                      <span v-if="rec.notes" class="ml-2 text-[10px] text-gray-400 italic">{{ rec.notes }}</span>
+                    </td>
+                    <td class="px-4 py-2.5 text-right font-bold text-gray-900">{{ fmtAmt(rec.total_amount) }}</td>
+                    <td class="px-4 py-2.5 text-right text-[10px] text-gray-400 hidden sm:table-cell">
+                      {{ fmtDateTime(rec.created_at) }}
+                    </td>
+                    <td class="px-4 py-2.5 text-right">
+                      <div class="flex items-center justify-end gap-1.5">
+                        <button @click="openEdit(rec)" title="Edit"
+                          class="w-6 h-6 rounded-full bg-gray-100 hover:bg-[#0071e3]/10 hover:text-[#0071e3] text-gray-400 flex items-center justify-center transition-all">
+                          <div class="i-carbon-edit text-[10px]"></div>
+                        </button>
+                        <button @click="deleteRecord(rec.id)" title="Delete"
+                          class="w-6 h-6 rounded-full bg-gray-100 hover:bg-[#ff3b30]/10 hover:text-[#ff3b30] text-gray-400 flex items-center justify-center transition-all">
+                          <div class="i-carbon-trash-can text-[10px]"></div>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Import status -->
+          <div v-if="importStatus && importStatus !== 'ok'" class="mt-2">
+            <p v-if="importStatus === 'no-match'" class="text-xs font-semibold text-[#ff9500]">
+              PDF parsed, but no items matched this work. Check if the correct work is selected.
+            </p>
+            <p v-else class="text-xs font-semibold text-[#ff3b30]">{{ importStatus }}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─ Step 3: Review & Save ─ -->
+      <div v-else-if="step === 3">
+        <!-- Header bar -->
+        <div class="flex items-center gap-3 mb-4 flex-wrap">
+          <button @click="step = 2" class="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 transition-all flex-shrink-0">
+            <div class="i-carbon-arrow-left"></div>
+          </button>
+
+          <!-- Editable MB number / notes inline -->
+          <div class="flex-1 min-w-0 flex flex-col gap-0.5">
+            <input v-model="mbNumber" type="text" placeholder="MB Number / Reference"
+              class="text-sm font-bold text-gray-900 bg-transparent outline-none border-b border-transparent focus:border-[#0071e3] w-full truncate transition-colors"
+              :title="mbNumber">
+            <input v-model="notes" type="text" placeholder="Notes (optional)"
+              class="text-xs text-gray-400 bg-transparent outline-none border-b border-transparent focus:border-gray-300 w-full transition-colors">
+          </div>
+
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <p v-if="saveStatus && saveStatus !== 'saved'" class="text-xs font-medium text-[#ff3b30]">{{ saveStatus }}</p>
+            <button @click="saveMB" :disabled="!canSave || isSaving"
+              :class="saveStatus === 'saved' ? 'bg-[#34c759] shadow-[#34c759]/30' : 'bg-dark-active shadow-black/20'"
+              class="px-5 py-2.5 rounded-full text-white text-sm font-semibold shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center gap-2">
+              <div v-if="isSaving" class="i-carbon-circle-dash animate-spin"></div>
+              <span>{{ saveStatus === 'saved' ? 'Saved!' : 'Save MB Record' }}</span>
             </button>
           </div>
         </div>
 
-        <!-- Recent records -->
-        <div v-if="savedRecords.length > 0" class="mt-10">
-          <p class="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Recent MB Records</p>
-          <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-            <table class="w-full text-xs">
-              <thead class="bg-gray-50 text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100">
-                <tr>
-                  <th class="px-4 py-3 text-left">MB</th>
-                  <th class="px-4 py-3 text-left">Work</th>
-                  <th class="px-4 py-3 text-right w-16">Items</th>
-                  <th class="px-4 py-3 text-right w-32">Released</th>
-                  <th class="px-4 py-3 text-left w-40">By / When</th>
-                  <th class="px-4 py-3 text-center w-16"></th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-100">
-                <tr v-for="rec in savedRecords" :key="rec.id" class="hover:bg-gray-50/60 transition-colors">
-                  <td class="px-4 py-3 font-bold text-gray-800 max-w-[200px] truncate" :title="rec.mb_number">{{ /^\d+$/.test(String(rec.mb_number)) ? 'MB' + String(rec.mb_number).padStart(2, '0') : rec.mb_number }}</td>
-                  <td class="px-4 py-3">
-                    <p class="font-semibold text-gray-800 truncate">{{ rec.contractor }}</p>
-                    <p class="text-[10px] text-gray-400 mt-0.5">{{ rec.work_loa }}</p>
-                  </td>
-                  <td class="px-4 py-3 text-right font-semibold text-gray-700">{{ rec.items.length }}</td>
-                  <td class="px-4 py-3 text-right font-bold text-gray-900">{{ fmtAmt(rec.total_amount) }}</td>
-                  <td class="px-4 py-3 text-[11px] text-gray-500">
-                    <p class="font-semibold text-gray-700">{{ rec.created_by_username || '—' }}</p>
-                    <p class="text-[10px] text-gray-400">{{ fmtDateTime(rec.created_at) }}</p>
-                  </td>
-                  <td class="px-4 py-3 text-center">
-                    <button @click="deleteRecord(rec.id)"
-                      class="w-7 h-7 rounded-full bg-gray-100 hover:bg-[#ff3b30]/10 hover:text-[#ff3b30] text-gray-400 flex items-center justify-center transition-all mx-auto">
-                      <div class="i-carbon-trash-can text-xs"></div>
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <!-- ─ Step 2: MB header ─ -->
-      <div v-else-if="step === 2">
-        <div class="flex items-center gap-3 mb-6">
-          <button @click="step = 1" class="w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 transition-all">
-            <div class="i-carbon-arrow-left"></div>
-          </button>
-          <div>
-            <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Selected Work</p>
-            <p class="text-sm font-bold text-gray-900">{{ selectedWork?.contractor_name }} · <span class="text-[#0071e3]">{{ selectedWork?.loa_number }}</span></p>
+        <!-- Warnings banner -->
+        <div v-if="importWarnings.length > 0 || unmatchedItems.length > 0"
+          class="mb-4 bg-amber-50 border border-amber-200 rounded-xl p-3">
+          <p class="text-[11px] font-bold text-amber-700 uppercase tracking-wide mb-2">PDF Import Warnings</p>
+          <ul class="text-[11px] text-amber-800 list-disc pl-4 space-y-0.5">
+            <li v-for="(w, i) in importWarnings" :key="i">{{ w }}</li>
+          </ul>
+          <div v-if="unmatchedItems.length > 0" class="mt-2 pt-2 border-t border-amber-200">
+            <p class="text-[10px] font-semibold text-amber-700 mb-1">Unmatched items (not in this work):</p>
+            <ul class="text-[11px] text-amber-800 list-disc pl-4 space-y-0.5">
+              <li v-for="u in unmatchedItems" :key="u.item_no + u.schedule">
+                Sch {{ u.schedule }} · S.No {{ u.item_no }} · {{ (u.description || '').slice(0, 80) }} ({{ u.quantity }} {{ u.unit }} @ {{ u.current_percentage }}%)
+              </li>
+            </ul>
           </div>
         </div>
 
-        <div class="max-w-2xl bg-gray-50/60 border border-gray-200 rounded-2xl p-6">
-          <div class="flex flex-col gap-1.5 mb-4">
-            <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">MB Number / Reference <span class="text-red-400">*</span></label>
-            <input v-model="mbNumber" type="text"
-              placeholder="e.g. Measurement No. 10384230062214/SSE/TELE/II/ADI/FM/L1/03"
-              class="bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 transition-all">
-            <p class="text-[10px] text-gray-400 mt-0.5">Free text. Must be unique per work.</p>
-          </div>
-
-          <div class="flex flex-col gap-1.5 mb-5">
-            <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Notes</label>
-            <textarea v-model="notes" rows="2" placeholder="Any remarks for this MB..."
-              class="bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 transition-all resize-none"></textarea>
-          </div>
-
-          <button @click="goToItems" :disabled="!canProceedToItems"
-            class="px-5 py-2.5 rounded-full bg-dark-active text-white text-sm font-semibold shadow shadow-black/20 hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center gap-2">
-            Continue to Items <div class="i-carbon-chevron-right text-xs"></div>
-          </button>
-        </div>
-      </div>
-
-      <!-- ─ Step 3: Items ─ -->
-      <div v-else-if="step === 3">
-        <div class="flex items-center gap-3 mb-4">
-          <button @click="step = 2" class="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 transition-all flex-shrink-0">
-            <div class="i-carbon-arrow-left"></div>
-          </button>
-          <p class="text-sm font-bold text-gray-900 truncate flex-1">
-            {{ selectedWork?.loa_number }} · <span class="text-[#0071e3]" :title="mbNumber">{{ mbNumberDisplay }}</span>
-          </p>
-          <button v-if="pickedItems.length > 0" @click="step = 4" :disabled="!canReview"
-            class="px-5 py-2.5 rounded-full bg-dark-active text-white text-sm font-semibold shadow shadow-black/20 hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center gap-2 flex-shrink-0">
-            Review <div class="i-carbon-chevron-right text-xs"></div>
+        <!-- Bulk % toolbar -->
+        <div v-if="pickedItems.length > 0"
+          class="mb-3 flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl p-2 flex-wrap">
+          <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wide px-2">Set % for selected ({{ selectedCount }})</span>
+          <button @click="selectAll"  class="text-[10px] font-semibold text-gray-600 hover:text-gray-900 px-2">All</button>
+          <button @click="selectNone" class="text-[10px] font-semibold text-gray-600 hover:text-gray-900 px-2">None</button>
+          <input v-model="bulkPct" type="number" min="0.01" max="100" step="0.01" placeholder="80"
+            class="w-16 bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold text-gray-800 outline-none focus:border-[#0071e3] text-right">
+          <button @click="applyBulkPct" :disabled="!bulkPct || selectedCount === 0"
+            class="px-3 py-1 rounded-lg bg-[#0071e3] text-white text-[11px] font-bold hover:bg-[#0055b3] transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+            Apply
           </button>
         </div>
 
-        <div class="grid grid-cols-12 gap-6">
-
-          <!-- Item search column -->
-          <div class="col-span-12 xl:col-span-5">
-            <div class="flex items-center gap-2 mb-3">
-              <button @click="scheduleFilter = ''"
-                :class="scheduleFilter === '' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
-                class="px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all">All</button>
-              <button @click="scheduleFilter = 'A'"
-                :class="scheduleFilter === 'A' ? 'bg-[#0071e3] text-white' : 'bg-blue-50 text-[#0071e3] hover:bg-blue-100'"
-                class="px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all">Sch A</button>
-              <button @click="scheduleFilter = 'B'"
-                :class="scheduleFilter === 'B' ? 'bg-[#34c759] text-white' : 'bg-green-50 text-[#34c759] hover:bg-green-100'"
-                class="px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all">Sch B</button>
-            </div>
-
-            <div class="flex items-center bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 focus-within:ring-2 focus-within:ring-[#0071e3]/20 focus-within:border-[#0071e3] transition-all">
-              <div class="i-carbon-search text-gray-400 mr-2"></div>
-              <input v-model="itemQuery" type="text" placeholder="Search item by description or serial no..."
-                class="bg-transparent outline-none w-full text-sm text-gray-700 placeholder-gray-400 font-medium">
-              <div v-if="isSearchingItems" class="i-carbon-circle-dash animate-spin text-gray-400"></div>
-            </div>
-
-            <p class="text-[11px] font-bold text-gray-400 uppercase tracking-widest mt-4 mb-2">
-              {{ itemResults.length }} items
-            </p>
-            <div v-if="itemResults.length === 0" class="py-8 text-center text-xs text-gray-400 font-medium bg-gray-50 rounded-xl border border-dashed border-gray-200">
-              Search to see items.
-            </div>
-            <div v-else class="flex flex-col gap-2 max-h-[540px] overflow-y-auto pr-1">
-              <div v-for="item in itemResults" :key="item.id"
-                class="bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
-                <div class="min-w-0 flex-1">
-                  <div class="flex items-center gap-2 mb-1">
-                    <span :class="String(item.schedule||'').toUpperCase().startsWith('A') ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-700'"
-                      class="text-[10px] font-bold px-1.5 py-0.5 rounded">{{ item.schedule }}</span>
-                    <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">S.No {{ item.serial_number }}</span>
-                    <span class="text-[10px] font-semibold text-gray-400">{{ item.qty }} {{ item.unit }}</span>
-                    <span class="text-[10px] font-semibold text-gray-700">{{ fmtAmt(item.total_amount) }}</span>
-                  </div>
-                  <p class="text-xs text-gray-800 line-clamp-2 leading-relaxed">{{ item.item_desc }}</p>
-                </div>
-                <button @click="addItem(item)"
-                  class="flex-shrink-0 px-3 py-1.5 rounded-full bg-[#0071e3]/10 hover:bg-[#0071e3]/20 text-[#0071e3] text-[11px] font-semibold transition-all flex items-center gap-1">
-                  <div class="i-carbon-add text-xs"></div> Add
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Picked items column -->
-          <div class="col-span-12 xl:col-span-7">
-            <div class="bg-gray-50/60 border border-gray-200 rounded-2xl p-4">
-
-              <div class="flex items-center justify-between mb-3 gap-3 flex-wrap">
-                <div class="flex items-center gap-2">
-                  <span class="text-xs font-bold text-gray-600 uppercase tracking-wide">MB Items</span>
-                  <span class="text-[10px] font-bold text-gray-400">{{ pickedItems.length }}</span>
-                </div>
-
-                <!-- Bulk % apply -->
-                <div v-if="pickedItems.length > 0" class="flex items-center gap-2 bg-white border border-gray-200 rounded-xl p-1.5">
-                  <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wide px-2">Set % for selected ({{ selectedCount }})</span>
-                  <button @click="selectAll"  class="text-[10px] font-semibold text-gray-600 hover:text-gray-900 px-2">All</button>
-                  <button @click="selectNone" class="text-[10px] font-semibold text-gray-600 hover:text-gray-900 px-2">None</button>
-                  <input v-model="bulkPct" type="number" min="0.01" max="100" step="0.01" placeholder="80"
-                    class="w-16 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold text-gray-800 outline-none focus:border-[#0071e3] text-right">
-                  <button @click="applyBulkPct" :disabled="!bulkPct || selectedCount === 0"
-                    class="px-3 py-1 rounded-lg bg-[#0071e3] text-white text-[11px] font-bold hover:bg-[#0055b3] transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-                    Apply
-                  </button>
-                </div>
-              </div>
-
-              <div v-if="pickedItems.length === 0" class="py-4 text-center text-xs text-gray-400 font-medium">
-                No items yet. Pick from list on left.
-              </div>
-
-              <div v-else class="flex flex-col gap-2 max-h-[560px] overflow-y-auto pr-1">
-                <div v-for="row in pickedItems" :key="row.key"
-                  class="bg-white border rounded-xl p-3 transition-all"
-                  :class="row.selected ? 'border-[#0071e3] ring-2 ring-[#0071e3]/10' : 'border-gray-200'">
-
-                  <!-- Top row: checkbox + desc -->
-                  <div class="flex items-start gap-3 mb-2">
-                    <label class="flex-shrink-0 flex items-center mt-0.5 cursor-pointer">
-                      <input v-model="row.selected" type="checkbox"
-                        class="w-4 h-4 rounded border-gray-300 text-[#0071e3] focus:ring-[#0071e3]/30">
-                    </label>
-                    <div class="min-w-0 flex-1">
-                      <div class="flex items-center gap-2 mb-0.5 flex-wrap">
-                        <span :class="String(row.schedule||'').toUpperCase().startsWith('A') ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-700'"
-                          class="text-[10px] font-bold px-1.5 py-0.5 rounded">{{ row.schedule }}</span>
-                        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">S.No {{ row.serial_number }}</span>
-                        <span class="text-[10px] font-semibold text-gray-400">Contract qty: {{ row.qty_default }} {{ row.unit }}</span>
-                        <span class="text-[10px] font-semibold text-gray-400">Rate: {{ fmtAmt(row.rate) }}</span>
-                      </div>
-                      <p class="text-xs text-gray-800 line-clamp-2">{{ row.item_desc }}</p>
-                    </div>
-                    <div class="flex flex-shrink-0 items-center gap-1">
-                      <button @click="duplicateRow(row)" title="Split quantity"
-                        class="w-7 h-7 rounded-full bg-gray-100 hover:bg-[#0071e3]/10 hover:text-[#0071e3] text-gray-400 flex items-center justify-center transition-all">
-                        <div class="i-carbon-copy text-xs"></div>
-                      </button>
-                      <button @click="removeRow(row.key)"
-                        class="w-7 h-7 rounded-full bg-gray-100 hover:bg-[#ff3b30]/10 hover:text-[#ff3b30] text-gray-400 flex items-center justify-center transition-all">
-                        <div class="i-carbon-close text-xs"></div>
-                      </button>
-                    </div>
-                  </div>
-
-                  <!-- Qty / prior / current / amount -->
-                  <div class="grid grid-cols-4 gap-2 pl-7">
-                    <div class="flex flex-col gap-1">
-                      <label class="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Quantity</label>
-                      <input v-model="row.quantity" type="number" min="0" step="0.01"
-                        class="bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-semibold text-gray-800 outline-none focus:border-[#0071e3] focus:bg-white text-right">
-                    </div>
-                    <div class="flex flex-col gap-1">
-                      <label class="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Prior %</label>
-                      <div class="relative">
-                        <input v-model="row.prior_percentage" type="number" min="0" max="100" step="0.01"
-                          class="w-full bg-gray-50 border border-gray-200 rounded-lg pr-5 pl-2 py-1.5 text-xs font-semibold text-gray-800 outline-none focus:border-[#0071e3] focus:bg-white text-right">
-                        <span class="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400">%</span>
-                      </div>
-                    </div>
-                    <div class="flex flex-col gap-1">
-                      <label class="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Current %</label>
-                      <div class="relative">
-                        <input v-model="row.current_percentage" type="number" min="0" max="100" step="0.01"
-                          class="w-full bg-gray-50 border rounded-lg pr-5 pl-2 py-1.5 text-xs font-semibold text-gray-800 outline-none focus:bg-white text-right"
-                          :class="rowIsValid(row) ? 'border-gray-200 focus:border-[#0071e3]' : 'border-[#ff3b30]/40 focus:border-[#ff3b30]'">
-                        <span class="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400">%</span>
-                      </div>
-                    </div>
-                    <div class="flex flex-col gap-1">
-                      <label class="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Released</label>
-                      <div class="bg-[#0071e3]/5 border border-[#0071e3]/20 rounded-lg px-2 py-1.5 text-xs font-bold text-[#0071e3] text-right">
-                        {{ fmtAmt(rowAmount(row)) }}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Totals -->
-                <div class="mt-2 pt-3 border-t border-gray-200 flex items-center justify-between">
-                  <div class="text-[11px] font-semibold text-gray-500">
-                    <span v-if="invalidCount > 0" class="text-[#ff3b30]">{{ invalidCount }} row(s) need fixing (current % must exceed prior %)</span>
-                    <span v-else class="text-[#34c759]">All rows valid</span>
-                  </div>
-                  <div class="flex items-center gap-3">
-                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">MB Total</span>
-                    <span class="text-base font-bold text-gray-900">{{ fmtAmt(mbTotalAmount) }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </div>
-
-      <!-- ─ Step 4: Review ─ -->
-      <div v-else-if="step === 4">
-        <div class="flex items-center gap-3 mb-4">
-          <button @click="step = 3" class="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 transition-all flex-shrink-0">
-            <div class="i-carbon-arrow-left"></div>
-          </button>
-          <p class="text-sm font-bold text-gray-900 truncate flex-1" :title="mbNumber">
-            {{ selectedWork?.loa_number }} · <span class="text-[#0071e3]">{{ mbNumberDisplay }}</span> · {{ pickedItems.length }} lines
-          </p>
-        </div>
-
-        <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden mb-5">
+        <!-- Items table -->
+        <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden">
           <table class="w-full text-xs">
             <thead class="bg-gray-50 text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100">
               <tr>
+                <th class="px-3 py-3 text-center w-8">
+                  <input type="checkbox" @change="e => e.target.checked ? selectAll() : selectNone()"
+                    class="w-3.5 h-3.5 rounded border-gray-300 text-[#0071e3]">
+                </th>
                 <th class="px-3 py-3 text-left w-12">Sch</th>
                 <th class="px-3 py-3 text-left w-16">S.No</th>
                 <th class="px-3 py-3 text-left">Description</th>
-                <th class="px-3 py-3 text-right w-20">Qty</th>
-                <th class="px-3 py-3 text-right w-24">Rate</th>
-                <th class="px-3 py-3 text-right w-16">Prior %</th>
-                <th class="px-3 py-3 text-right w-16">Curr %</th>
+                <th class="px-3 py-3 text-right w-24">Qty</th>
+                <th class="px-3 py-3 text-right w-20">Prior %</th>
+                <th class="px-3 py-3 text-right w-20">Curr %</th>
                 <th class="px-3 py-3 text-right w-28">Released</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
-              <tr v-for="row in pickedItems" :key="row.key">
-                <td class="px-3 py-3">
+              <tr v-for="row in pickedItems" :key="row.key"
+                :class="row.not_received_warning ? 'bg-orange-50/40' : 'hover:bg-gray-50/40'"
+                class="transition-colors">
+                <td class="px-3 py-2.5 text-center">
+                  <input v-model="row.selected" type="checkbox"
+                    class="w-3.5 h-3.5 rounded border-gray-300 text-[#0071e3] focus:ring-[#0071e3]/30">
+                </td>
+                <td class="px-3 py-2.5">
                   <span :class="String(row.schedule||'').toUpperCase().startsWith('A') ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-700'"
                     class="text-[10px] font-bold px-1.5 py-0.5 rounded">{{ row.schedule }}</span>
                 </td>
-                <td class="px-3 py-3 text-gray-500 font-semibold">{{ row.serial_number }}</td>
-                <td class="px-3 py-3 text-gray-800">
-                  <p class="line-clamp-2">{{ row.item_desc }}</p>
+                <td class="px-3 py-2.5 font-semibold text-gray-500">{{ row.serial_number }}</td>
+                <td class="px-3 py-2.5">
+                  <p class="text-gray-800 line-clamp-2 leading-relaxed">{{ row.item_desc }}</p>
+                  <span v-if="row.not_received_warning"
+                    class="inline-flex items-center gap-1 mt-1 text-[10px] font-bold text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded">
+                    <div class="i-carbon-warning-alt text-xs"></div>
+                    Item not received — please receive before payment
+                  </span>
                 </td>
-                <td class="px-3 py-3 text-right text-gray-700 font-semibold">{{ row.quantity }} <span class="text-gray-400 font-normal">{{ row.unit }}</span></td>
-                <td class="px-3 py-3 text-right text-gray-600">{{ fmtAmt(row.rate) }}</td>
-                <td class="px-3 py-3 text-right text-gray-600 font-semibold">{{ row.prior_percentage }}%</td>
-                <td class="px-3 py-3 text-right text-gray-800 font-bold">{{ row.current_percentage }}%</td>
-                <td class="px-3 py-3 text-right font-bold text-[#0071e3]">{{ fmtAmt(rowAmount(row)) }}</td>
+                <td class="px-3 py-2.5 text-right">
+                  <input v-model="row.quantity" type="number" min="0" step="0.01"
+                    class="w-20 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-xs font-semibold text-gray-800 outline-none focus:border-[#0071e3] focus:bg-white text-right">
+                </td>
+                <td class="px-3 py-2.5 text-right">
+                  <div class="relative inline-flex items-center">
+                    <input v-model="row.prior_percentage" type="number" min="0" max="100" step="0.01"
+                      class="w-16 bg-gray-50 border border-gray-200 rounded-lg pr-4 pl-2 py-1 text-xs font-semibold text-gray-800 outline-none focus:border-[#0071e3] focus:bg-white text-right">
+                    <span class="absolute right-1.5 text-[9px] font-bold text-gray-400">%</span>
+                  </div>
+                </td>
+                <td class="px-3 py-2.5 text-right">
+                  <div class="relative inline-flex items-center">
+                    <input v-model="row.current_percentage" type="number" min="0" max="100" step="0.01"
+                      class="w-16 border rounded-lg pr-4 pl-2 py-1 text-xs font-semibold text-gray-800 outline-none focus:bg-white text-right"
+                      :class="rowIsValid(row) ? 'bg-gray-50 border-gray-200 focus:border-[#0071e3]' : 'bg-red-50 border-[#ff3b30]/40 focus:border-[#ff3b30]'">
+                    <span class="absolute right-1.5 text-[9px] font-bold text-gray-400">%</span>
+                  </div>
+                </td>
+                <td class="px-3 py-2.5 text-right font-bold text-[#0071e3]">{{ fmtAmt(rowAmount(row)) }}</td>
               </tr>
             </tbody>
-            <tfoot class="bg-gray-50 border-t border-gray-100">
+            <tfoot class="bg-gray-50 border-t border-gray-200">
               <tr>
-                <td colspan="7" class="px-3 py-3 text-right text-[10px] font-bold text-gray-400 uppercase tracking-wide">MB Total</td>
+                <td colspan="7" class="px-3 py-3 text-right">
+                  <span v-if="invalidCount > 0" class="text-[11px] font-semibold text-[#ff3b30]">
+                    {{ invalidCount }} row(s) need fixing (current % must exceed prior %)
+                  </span>
+                  <span v-else class="text-[11px] font-semibold text-[#34c759]">All rows valid</span>
+                  <span class="mx-4 text-gray-300">|</span>
+                  <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">MB Total</span>
+                </td>
                 <td class="px-3 py-3 text-right text-base font-bold text-gray-900">{{ fmtAmt(mbTotalAmount) }}</td>
               </tr>
             </tfoot>
           </table>
         </div>
-
-        <div class="flex items-center justify-end gap-3">
-          <p v-if="saveStatus && saveStatus !== 'saved'" class="text-xs font-medium text-[#ff3b30]">{{ saveStatus }}</p>
-          <button @click="step = 3"
-            class="px-5 py-2.5 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-800 text-sm font-semibold transition-all">
-            Back to Items
-          </button>
-          <button @click="saveMB" :disabled="!canReview || isSaving"
-            :class="saveStatus === 'saved' ? 'bg-[#34c759] shadow-[#34c759]/30' : 'bg-dark-active shadow-black/20'"
-            class="px-5 py-2.5 rounded-full text-white text-sm font-semibold shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center gap-2">
-            <div v-if="isSaving" class="i-carbon-circle-dash animate-spin"></div>
-            <span>{{ saveStatus === 'saved' ? 'Saved!' : 'Save MB Record' }}</span>
-          </button>
-        </div>
       </div>
 
     </div>
-  </div>
+
+  <!-- ─ Edit Modal ─────────────────────────────────────────────────────────── -->
+  <Teleport to="body">
+
+
+    <div v-if="editRecord" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <!-- Backdrop -->
+      <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="closeEdit"></div>
+
+      <!-- Panel -->
+      <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
+
+        <!-- Modal header -->
+        <div class="flex-shrink-0 px-6 pt-5 pb-4 border-b border-gray-100 flex items-center gap-4">
+          <div class="flex-1 min-w-0 flex flex-col gap-1">
+            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Edit MB Record</p>
+            <div class="flex items-center gap-3 flex-wrap">
+              <input v-model="editMbNumber" type="text" placeholder="MB Number"
+                class="text-sm font-bold text-gray-900 bg-transparent outline-none border-b border-gray-200 focus:border-[#0071e3] transition-colors min-w-0 flex-1">
+              <input v-model="editNotes" type="text" placeholder="Notes (optional)"
+                class="text-xs text-gray-500 bg-transparent outline-none border-b border-gray-200 focus:border-gray-400 transition-colors min-w-0 flex-1">
+            </div>
+          </div>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <p v-if="editSaveStatus && editSaveStatus !== 'saved'" class="text-xs font-medium text-[#ff3b30]">{{ editSaveStatus }}</p>
+            <button @click="saveEdit" :disabled="!editCanSave || editSaving"
+              :class="editSaveStatus === 'saved' ? 'bg-[#34c759] shadow-[#34c759]/30' : 'bg-dark-active shadow-black/20'"
+              class="px-4 py-2 rounded-full text-white text-xs font-semibold shadow hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center gap-2">
+              <div v-if="editSaving" class="i-carbon-circle-dash animate-spin"></div>
+              <span>{{ editSaveStatus === 'saved' ? 'Saved!' : 'Save Changes' }}</span>
+            </button>
+            <button @click="closeEdit"
+              class="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-all">
+              <div class="i-carbon-close text-sm"></div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Modal body: items table -->
+        <div class="flex-1 overflow-y-auto">
+          <table class="w-full text-xs">
+            <thead class="bg-gray-50 text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 sticky top-0">
+              <tr>
+                <th class="px-4 py-3 text-left w-12">Sch</th>
+                <th class="px-4 py-3 text-left w-14">S.No</th>
+                <th class="px-4 py-3 text-left">Description</th>
+                <th class="px-4 py-3 text-right w-24">Qty</th>
+                <th class="px-4 py-3 text-right w-20">Prior %</th>
+                <th class="px-4 py-3 text-right w-20">Curr %</th>
+                <th class="px-4 py-3 text-right w-28">Released</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr v-for="(row, idx) in editItems" :key="idx" class="hover:bg-gray-50/40 transition-colors">
+                <td class="px-4 py-2.5">
+                  <span :class="String(row.schedule||'').toUpperCase().startsWith('A') ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-700'"
+                    class="text-[10px] font-bold px-1.5 py-0.5 rounded">{{ row.schedule }}</span>
+                </td>
+                <td class="px-4 py-2.5 font-semibold text-gray-500">{{ row.serial_number }}</td>
+                <td class="px-4 py-2.5">
+                  <p class="text-gray-800 line-clamp-2 leading-relaxed">{{ row.item_desc }}</p>
+                  <p class="text-[10px] text-gray-400 mt-0.5">{{ row.qty_default }} {{ row.unit }} · Rate: {{ fmtAmt(row.rate) }}</p>
+                </td>
+                <td class="px-4 py-2.5 text-right">
+                  <input v-model="row.quantity" type="number" min="0" step="0.01"
+                    class="w-20 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-xs font-semibold text-gray-800 outline-none focus:border-[#0071e3] focus:bg-white text-right">
+                </td>
+                <td class="px-4 py-2.5 text-right">
+                  <div class="relative inline-flex items-center">
+                    <input v-model="row.prior_percentage" type="number" min="0" max="100" step="0.01"
+                      class="w-16 bg-gray-50 border border-gray-200 rounded-lg pr-4 pl-2 py-1 text-xs font-semibold text-gray-800 outline-none focus:border-[#0071e3] focus:bg-white text-right">
+                    <span class="absolute right-1.5 text-[9px] font-bold text-gray-400">%</span>
+                  </div>
+                </td>
+                <td class="px-4 py-2.5 text-right">
+                  <div class="relative inline-flex items-center">
+                    <input v-model="row.current_percentage" type="number" min="0" max="100" step="0.01"
+                      class="w-16 border rounded-lg pr-4 pl-2 py-1 text-xs font-semibold text-gray-800 outline-none focus:bg-white text-right"
+                      :class="editRowIsValid(row) ? 'bg-gray-50 border-gray-200 focus:border-[#0071e3]' : 'bg-red-50 border-[#ff3b30]/40 focus:border-[#ff3b30]'">
+                    <span class="absolute right-1.5 text-[9px] font-bold text-gray-400">%</span>
+                  </div>
+                </td>
+                <td class="px-4 py-2.5 text-right font-bold text-[#0071e3]">{{ fmtAmt(editRowAmount(row)) }}</td>
+              </tr>
+            </tbody>
+            <tfoot class="bg-gray-50 border-t border-gray-200 sticky bottom-0">
+              <tr>
+                <td colspan="6" class="px-4 py-3 text-right">
+                  <span v-if="editInvalid > 0" class="text-[11px] font-semibold text-[#ff3b30]">
+                    {{ editInvalid }} row(s) need fixing
+                  </span>
+                  <span v-else class="text-[11px] font-semibold text-[#34c759]">All rows valid</span>
+                  <span class="mx-4 text-gray-300">|</span>
+                  <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">MB Total</span>
+                </td>
+                <td class="px-4 py-3 text-right text-base font-bold text-gray-900">{{ fmtAmt(editTotal) }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+</div>
 </template>

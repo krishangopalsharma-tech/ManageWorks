@@ -16,10 +16,11 @@ def parse_and_save_work_excel(file_path):
     tender_number = safe_val(1, 1)
     date = safe_val(2, 1)
     contract_agreement = safe_val(3, 1)
-    contractor_name = safe_val(4, 1)
-    contractor_address = safe_val(5, 1)
-    completion_date = safe_val(6, 1)
-    consignee = safe_val(7, 1)
+    name_of_work = safe_val(4, 1)
+    contractor_name = safe_val(5, 1)
+    contractor_address = safe_val(6, 1)
+    completion_date = safe_val(7, 1)
+    consignee = safe_val(8, 1)
 
     if loa_number and Work.objects.filter(loa_number=loa_number).exists():
         raise ValueError(f"A Work document with LOA '{loa_number}' has already been uploaded.")
@@ -29,13 +30,14 @@ def parse_and_save_work_excel(file_path):
         tender_number=tender_number,
         date=date,
         contract_agreement=contract_agreement,
+        name_of_work=name_of_work,
         contractor_name=contractor_name,
         contractor_address=contractor_address,
         date_of_completion=completion_date,
         consignee=consignee,
     )
 
-    df_items = pd.read_excel(file_path, skiprows=7)
+    df_items = pd.read_excel(file_path, skiprows=9)
 
     def safe_float(val):
         try:

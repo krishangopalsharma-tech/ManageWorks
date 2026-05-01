@@ -4,10 +4,12 @@ from rest_framework import status, generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.parsers import MultiPartParser, FormParser
 
 from works.models import Work, WorkItem
 from .models import MBRecord, MBItem
 from .serializers import MBRecordSerializer
+from .parsers import parse_rm_pdf
 
 
 def _check_not_observer(user):
@@ -35,6 +37,7 @@ class WorkSearchView(APIView):
                 'tender_number': w.tender_number or '',
                 'contractor_name': w.contractor_name or '',
                 'consignee': w.consignee or '',
+                'name_of_work': w.name_of_work or '',
             }
             for w in qs[:50]
         ]
@@ -186,13 +189,73 @@ class MBRecordListCreateView(generics.ListCreateAPIView):
 
 
 class MBRecordDetailView(generics.RetrieveDestroyAPIView):
-    """GET / DELETE /api/mb-details/records/<pk>/"""
-    queryset         = MBRecord.objects.all()
+    """GET / DELETE / PATCH /api/mb-details/records/<pk>/"""
+    queryset         = MBRecord.objects.select_related('work').prefetch_related('items__work_item')
     serializer_class = MBRecordSerializer
 
     def perform_destroy(self, instance):
         _check_not_observer(self.request.user)
         instance.delete()
+
+    @transaction.atomic
+    def patch(self, request, *args, **kwargs):
+        _check_not_observer(request.user)
+        record = self.get_object()
+
+        mb_number  = str(request.data.get('mb_number', record.mb_number) or '').strip()
+        notes      = request.data.get('notes', record.notes) or ''
+        items_data = request.data.get('items')
+
+        if not mb_number:
+            return Response({'error': 'mb_number is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check uniqueness only if mb_number actually changed
+        if mb_number != record.mb_number:
+            if MBRecord.objects.filter(work=record.work, mb_number=mb_number).exclude(pk=record.pk).exists():
+                return Response(
+                    {'error': f'MB number "{mb_number}" already exists for this work.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        record.mb_number = mb_number
+        record.notes     = notes
+        record.save()
+
+        if items_data is not None:
+            record.items.all().delete()
+            for row in items_data:
+                wi_id = row.get('work_item')
+                try:
+                    qty       = float(row.get('quantity') or 0)
+                    prior_pct = float(row.get('prior_percentage') or 0)
+                    cur_pct   = float(row.get('current_percentage') or 0)
+                except (ValueError, TypeError):
+                    return Response({'error': f'Invalid numeric values for item {wi_id}.'},
+                                    status=status.HTTP_400_BAD_REQUEST)
+
+                if qty <= 0:
+                    continue
+                if cur_pct <= prior_pct:
+                    return Response(
+                        {'error': f'current_percentage must exceed prior_percentage for item {wi_id}.'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if cur_pct > 100 or prior_pct < 0:
+                    return Response({'error': f'Percentages out of range for item {wi_id}.'},
+                                    status=status.HTTP_400_BAD_REQUEST)
+
+                try:
+                    wi = WorkItem.objects.get(pk=wi_id, work=record.work)
+                except WorkItem.DoesNotExist:
+                    return Response({'error': f'Item {wi_id} not found in this work.'},
+                                    status=status.HTTP_404_NOT_FOUND)
+
+                MBItem.objects.create(
+                    mb_record=record, work_item=wi,
+                    quantity=qty, prior_percentage=prior_pct, current_percentage=cur_pct, amount=0,
+                )
+
+        return Response(MBRecordSerializer(record).data)
 
 
 class MBSummaryView(APIView):
@@ -229,4 +292,161 @@ class MBSummaryView(APIView):
             'sch_b_total':        round(b_total, 2),
             'sch_a_pct':          round((sch_a / a_total * 100) if a_total else 0, 2),
             'sch_b_pct':          round((sch_b / b_total * 100) if b_total else 0, 2),
+        })
+
+
+class PDFImportView(APIView):
+    """
+    POST /api/mb-details/import-pdf/
+      multipart fields:
+        file:    the RM PDF
+        work_id: target Work id
+
+    Returns a draft (NO database writes) for the frontend to review and save.
+    Warnings include: agreement mismatch, unmatched items, qty mismatch,
+    and items where payment % > 0 but supply/execution has not been recorded.
+    """
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        _check_not_observer(request.user)
+
+        file_obj = request.FILES.get('file')
+        work_id  = request.data.get('work_id')
+
+        if not file_obj:
+            return Response({'error': 'file is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not work_id:
+            return Response({'error': 'work_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            work = Work.objects.get(pk=work_id)
+        except Work.DoesNotExist:
+            return Response({'error': 'Work not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            parsed = parse_rm_pdf(file_obj)
+        except Exception as e:
+            return Response({'error': f'PDF parse failed: {e}'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if parsed.get('error'):
+            return Response({'error': parsed['error']}, status=status.HTTP_400_BAD_REQUEST)
+
+        warnings = []
+
+        header        = parsed.get('header', {})
+        agreement_pdf = (header.get('agreement') or '').strip()
+        agreement_db  = (work.contract_agreement or '').strip()
+        if agreement_pdf and agreement_db and agreement_pdf != agreement_db:
+            warnings.append(
+                f'Agreement reference mismatch: PDF says "{agreement_pdf}", '
+                f'selected work has "{agreement_db}". Verify the right work is selected.'
+            )
+
+        all_items = list(WorkItem.objects.filter(work=work))
+
+        def norm(s):
+            s = str(s or '').strip()
+            if s.endswith('.0'):
+                s = s[:-2]
+            return s.lstrip('0') or '0'
+
+        index = {}
+        for wi in all_items:
+            sch = (wi.schedule or '').strip().upper()
+            sch_letter = sch[0] if sch else ''
+            key = (sch_letter, norm(wi.serial_number))
+            index[key] = wi
+
+        prior_pct_map = {}
+        for row in (
+            MBItem.objects
+            .filter(work_item__work=work)
+            .values('work_item_id')
+            .annotate(m=Max('current_percentage'))
+        ):
+            prior_pct_map[row['work_item_id']] = row['m'] or 0
+
+        prior_qty_map = {}
+        for row in (
+            MBItem.objects
+            .filter(work_item__work=work)
+            .values('work_item_id')
+            .annotate(t=Sum('quantity'))
+        ):
+            prior_qty_map[row['work_item_id']] = row['t'] or 0
+
+        rows = []
+        for src in parsed.get('items', []):
+            sch_letter = (src.get('schedule') or '').upper()
+            key = (sch_letter, src.get('item_no_norm') or norm(src.get('item_no')))
+            wi  = index.get(key)
+            cur_pct = src.get('current_percentage', 0)
+
+            row = {
+                'schedule':            sch_letter,
+                'item_no':             src.get('item_no'),
+                'description':         src.get('description'),
+                'unit':                src.get('unit'),
+                'quantity':            src.get('quantity', 0),
+                'total_to_date':       src.get('total_to_date', 0),
+                'current_percentage':  cur_pct,
+                'not_received_warning': False,
+            }
+
+            if wi is None:
+                row['matched']         = False
+                row['work_item']       = None
+                row['work_item_label'] = None
+                row['suggested_prior'] = 0
+                warnings.append(
+                    f'Item No. {src.get("item_no")} (Schedule {sch_letter}) not found in selected work.'
+                )
+            else:
+                prior_pct = prior_pct_map.get(wi.id, 0)
+                prior_qty = prior_qty_map.get(wi.id, 0)
+                expected_total = (prior_qty or 0) + (src.get('quantity') or 0)
+                pdf_total = src.get('total_to_date') or 0
+                if pdf_total and abs(pdf_total - expected_total) > 0.001:
+                    warnings.append(
+                        f'Item No. {src.get("item_no")}: PDF Total ({pdf_total}) does not match '
+                        f'DB prior qty ({prior_qty}) + this MB qty ({src.get("quantity")}) = {expected_total}.'
+                    )
+
+                # Check received status before payment
+                if cur_pct > 0:
+                    is_sch_a = sch_letter == 'A'
+                    if is_sch_a:
+                        received_qty = wi.supplied_quantity or 0
+                        if received_qty <= 0:
+                            row['not_received_warning'] = True
+                            warnings.append(
+                                f'⚠ Item No. {src.get("item_no")} (Sch A): Payment of {cur_pct}% is being made '
+                                f'but item has not been received (supplied quantity = 0). '
+                                f'Please receive the item first.'
+                            )
+                    else:
+                        executed_qty = wi.executed_quantity or 0
+                        if executed_qty <= 0:
+                            row['not_received_warning'] = True
+                            warnings.append(
+                                f'⚠ Item No. {src.get("item_no")} (Sch {sch_letter}): Payment of {cur_pct}% is being made '
+                                f'but item has not been executed (executed quantity = 0). '
+                                f'Please receive/execute the item first.'
+                            )
+
+                row['matched']         = True
+                row['work_item']       = wi.id
+                row['work_item_label'] = f'S.No {wi.serial_number} · {(wi.item_desc or "")[:80]}'
+                row['suggested_prior'] = prior_pct
+                row['unit_rate_below'] = wi.unit_rate_below or 0
+                row['contract_qty']    = wi.qty or 0
+                row['db_prior_qty']    = prior_qty
+
+            rows.append(row)
+
+        return Response({
+            'header':   header,
+            'items':    rows,
+            'warnings': warnings,
         })
