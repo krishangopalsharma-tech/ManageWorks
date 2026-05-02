@@ -1,9 +1,7 @@
 import { reactive, readonly } from 'vue'
 import axios from 'axios'
 
-const API = 'http://localhost:8000/api/auth'
-
-axios.defaults.withCredentials = true
+const API = '/api/auth'
 
 function getCsrfToken() {
   const match = document.cookie.match(/csrftoken=([^;]+)/)

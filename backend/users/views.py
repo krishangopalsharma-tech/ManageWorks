@@ -152,6 +152,35 @@ class AllUsersView(APIView):
         ])
 
 
+class UpdateRoleView(APIView):
+    def patch(self, request, user_id):
+        if not _is_admin(request.user):
+            return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
+        role = request.data.get('role', '').strip()
+        if role not in ('user', 'observer', 'consignee'):
+            return Response({'error': 'Invalid role.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            profile = UserProfile.objects.get(user_id=user_id)
+        except UserProfile.DoesNotExist:
+            return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+        profile.role = role
+        profile.save()
+        return Response({'message': 'Role updated.'})
+
+
+class RevokeUserView(APIView):
+    def post(self, request, user_id):
+        if not _is_admin(request.user):
+            return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            profile = UserProfile.objects.get(user_id=user_id)
+        except UserProfile.DoesNotExist:
+            return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+        profile.is_approved = False
+        profile.save()
+        return Response({'message': 'Access revoked.'})
+
+
 def _is_admin(user):
     if not user.is_authenticated:
         return False
