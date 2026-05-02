@@ -1,0 +1,21 @@
+[Unit]
+Description=ManageWorks Django Backend
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=adi
+WorkingDirectory=/home/adi/ManageWorks/backend
+Environment=DJANGO_SETTINGS_MODULE=config.settings.prod
+Environment=DB_NAME=manageworks
+Environment=DB_USER=managework
+Environment=DB_PASSWORD=Admin@123
+Environment=DB_HOST=localhost
+Environment=DB_PORT=5432
+ExecStart=/home/adi/ManageWorks/backend/venv/bin/python manage.py runserver 127.0.0.1:8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -13,6 +13,15 @@ const fmtDateTime = (val) => {
 }
 const uid = () => Math.random().toString(36).slice(2, 10)
 
+// Convert DD/MM/YYYY (or DD-MM-YYYY) from PDF to YYYY-MM-DD for <input type="date">
+const parseDateToIso = (str) => {
+  if (!str) return ''
+  const m = str.trim().match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/)
+  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str.trim())) return str.trim()
+  return ''
+}
+
 // Steps: 1=Select Work, 2=Upload PDF, 3=Review & Save
 const step = ref(1)
 
@@ -21,8 +30,9 @@ const workResults  = ref([])
 const selectedWork = ref(null)
 const isSearchingWorks = ref(false)
 
-const mbNumber = ref('')
-const notes    = ref('')
+const mbNumber       = ref('')
+const measurementDate = ref('')
+const notes          = ref('')
 
 const mbNumberDisplay = computed(() => {
   const v = String(mbNumber.value || '').trim()
@@ -49,9 +59,10 @@ const importWarnings = ref([])
 const unmatchedItems = ref([])
 
 // Edit modal state
-const editRecord     = ref(null)
-const editMbNumber   = ref('')
-const editNotes      = ref('')
+const editRecord          = ref(null)
+const editMbNumber        = ref('')
+const editMeasurementDate = ref('')
+const editNotes           = ref('')
 const editItems      = ref([])
 const editSaving     = ref(false)
 const editSaveStatus = ref('')
@@ -75,6 +86,7 @@ const searchWorks = async (q) => {
 const pickWork = (w) => {
   selectedWork.value = w
   step.value = 2
+  loadSummary()
 }
 
 // ── PDF Import ────────────────────────────────────────────────────────────
@@ -101,7 +113,7 @@ const importPdf = async (file) => {
     })
 
     if (data.header?.mb_number)          mbNumber.value = data.header.mb_number
-    if (data.header?.date_of_measurement) notes.value   = `Date of Measurement: ${data.header.date_of_measurement}`
+    if (data.header?.date_of_measurement) measurementDate.value = parseDateToIso(data.header.date_of_measurement)
 
     const matched   = []
     const unmatched = []
@@ -189,9 +201,10 @@ const saveMB = async () => {
   saveStatus.value = ''
   try {
     await axios.post('/api/mb-details/records/', {
-      work:      selectedWork.value.id,
-      mb_number: String(mbNumber.value || '').trim(),
-      notes:     notes.value,
+      work:             selectedWork.value.id,
+      mb_number:        String(mbNumber.value || '').trim(),
+      measurement_date: measurementDate.value || null,
+      notes:            notes.value,
       items:     pickedItems.value.map(r => ({
         work_item:          r.work_item,
         quantity:           parseFloat(r.quantity),
@@ -216,8 +229,9 @@ const resetFlow = () => {
   workQuery.value      = ''
   workResults.value    = []
   selectedWork.value   = null
-  mbNumber.value       = ''
-  notes.value          = ''
+  mbNumber.value        = ''
+  measurementDate.value = ''
+  notes.value           = ''
   pickedItems.value    = []
   bulkPct.value        = ''
   importWarnings.value = []
@@ -236,7 +250,8 @@ const loadRecords = async () => {
 
 const loadSummary = async () => {
   try {
-    const { data } = await axios.get('/api/mb-details/summary/')
+    const params = selectedWork.value ? { work_id: selectedWork.value.id } : {}
+    const { data } = await axios.get('/api/mb-details/summary/', { params })
     summary.value = data
   } catch (e) { console.error(e) }
 }
@@ -253,9 +268,10 @@ const deleteRecord = async (id) => {
 
 // ── Edit modal ────────────────────────────────────────────────────────────
 const openEdit = (record) => {
-  editRecord.value   = record
-  editMbNumber.value = record.mb_number
-  editNotes.value    = record.notes || ''
+  editRecord.value          = record
+  editMbNumber.value        = record.mb_number
+  editMeasurementDate.value = record.measurement_date || ''
+  editNotes.value           = record.notes || ''
   editItems.value    = record.items.map(i => ({
     work_item:          i.work_item,
     serial_number:      i.work_item_sno,
@@ -332,8 +348,9 @@ const saveEdit = async () => {
   editSaveStatus.value = ''
   try {
     await axios.patch(`/api/mb-details/records/${editRecord.value.id}/`, {
-      mb_number: editMbNumber.value,
-      notes:     editNotes.value,
+      mb_number:        editMbNumber.value,
+      measurement_date: editMeasurementDate.value || null,
+      notes:            editNotes.value,
       items:     editItems.value.map(r => ({
         work_item:          r.work_item,
         quantity:           parseFloat(r.quantity),
@@ -537,7 +554,9 @@ onMounted(() => {
                     </td>
                     <td class="px-4 py-2.5 text-right font-bold text-gray-900">{{ fmtAmt(rec.total_amount) }}</td>
                     <td class="px-4 py-2.5 text-right text-[10px] text-gray-400 hidden sm:table-cell">
-                      {{ fmtDateTime(rec.created_at) }}
+                      {{ rec.measurement_date
+                          ? new Date(rec.measurement_date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                          : fmtDateTime(rec.created_at) }}
                     </td>
                     <td class="px-4 py-2.5 text-right">
                       <div class="flex items-center justify-end gap-1.5">
@@ -580,6 +599,11 @@ onMounted(() => {
             <input v-model="mbNumber" type="text" placeholder="MB Number / Reference"
               class="text-sm font-bold text-gray-900 bg-transparent outline-none border-b border-transparent focus:border-[#0071e3] w-full truncate transition-colors"
               :title="mbNumber">
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] text-gray-400 whitespace-nowrap">Date of Measurement:</span>
+              <input v-model="measurementDate" type="date"
+                class="text-xs text-gray-600 bg-transparent outline-none border-b border-transparent focus:border-[#0071e3] transition-colors">
+            </div>
             <input v-model="notes" type="text" placeholder="Notes (optional)"
               class="text-xs text-gray-400 bg-transparent outline-none border-b border-transparent focus:border-gray-300 w-full transition-colors">
           </div>
@@ -724,6 +748,11 @@ onMounted(() => {
             <div class="flex items-center gap-3 flex-wrap">
               <input v-model="editMbNumber" type="text" placeholder="MB Number"
                 class="text-sm font-bold text-gray-900 bg-transparent outline-none border-b border-gray-200 focus:border-[#0071e3] transition-colors min-w-0 flex-1">
+              <div class="flex items-center gap-1.5 flex-shrink-0">
+                <span class="text-[10px] text-gray-400 whitespace-nowrap">Meas. Date:</span>
+                <input v-model="editMeasurementDate" type="date"
+                  class="text-xs text-gray-600 bg-transparent outline-none border-b border-gray-200 focus:border-[#0071e3] transition-colors">
+              </div>
               <input v-model="editNotes" type="text" placeholder="Notes (optional)"
                 class="text-xs text-gray-500 bg-transparent outline-none border-b border-gray-200 focus:border-gray-400 transition-colors min-w-0 flex-1">
             </div>

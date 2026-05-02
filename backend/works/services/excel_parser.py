@@ -34,12 +34,25 @@ def parse_and_save_work_excel(file_path):
 
     df_items = pd.read_excel(file_path, skiprows=7)
     
+    def clean_str(val):
+        """Convert pandas cell to string; strip float suffix and leading zeros (32.0→'32', 01→'1')."""
+        if pd.isna(val):
+            return ""
+        s = str(val).strip()
+        try:
+            f = float(s)
+            if f == int(f):
+                return str(int(f))
+        except (ValueError, TypeError):
+            pass
+        return s
+
     items_created = 0
     for _, row in df_items.iterrows():
         # Stop processing if key identifying columns are empty
         if pd.isna(row.iloc[0]) and pd.isna(row.iloc[2]) and pd.isna(row.iloc[3]):
             continue
-            
+
         def safe_float(val):
             try:
                 return float(val) if not pd.isna(val) else 0.0
@@ -48,8 +61,8 @@ def parse_and_save_work_excel(file_path):
 
         WorkItem.objects.create(
             work=work,
-            schedule=str(row.iloc[0]) if not pd.isna(row.iloc[0]) else "",
-            serial_number=str(row.iloc[1]) if not pd.isna(row.iloc[1]) else "",
+            schedule=clean_str(row.iloc[0]),
+            serial_number=clean_str(row.iloc[1]),
             item_desc=str(row.iloc[2]) if not pd.isna(row.iloc[2]) else "",
             qty=safe_float(row.iloc[3]),
             unit=str(row.iloc[4]) if not pd.isna(row.iloc[4]) else "",

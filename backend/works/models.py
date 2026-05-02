@@ -7,7 +7,7 @@ class UserProfile(models.Model):
         ('consignee', 'Consignee'),
         ('executor', 'Executor'),
     )
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='work_profile')
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='observer')
 
     def __str__(self):
@@ -104,6 +104,10 @@ class WorkItemEntry(models.Model):
     inspection_status            = models.CharField(max_length=20, blank=True, null=True, default='accepted')
     sample_test_officer_remarks  = models.TextField(blank=True, null=True)
     date_of_inspection           = models.DateField(blank=True, null=True)
+
+    # Receipt identification (from DMTR / Receive Note)
+    receive_note_no = models.CharField(max_length=255, blank=True, null=True)
+    date_of_receipt = models.DateField(blank=True, null=True)
 
     submitted_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
     submitted_at = models.DateTimeField(auto_now_add=True)

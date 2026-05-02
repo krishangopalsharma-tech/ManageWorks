@@ -37,7 +37,8 @@ def parse_and_save_work_excel(file_path):
         consignee=consignee,
     )
 
-    df_items = pd.read_excel(file_path, skiprows=9)
+    # skiprows=10: skip 9 metadata rows + 1 column-header row; header=None keeps positional access
+    df_items = pd.read_excel(file_path, header=None, skiprows=10)
 
     def safe_float(val):
         try:
@@ -45,17 +46,34 @@ def parse_and_save_work_excel(file_path):
         except Exception:
             return 0.0
 
+    def clean_str(val):
+        """Convert pandas cell to string; strip float suffix and leading zeros (32.0→'32', 01→'1')."""
+        if pd.isna(val):
+            return ""
+        s = str(val).strip()
+        try:
+            f = float(s)
+            if f == int(f):
+                return str(int(f))
+        except (ValueError, TypeError):
+            pass
+        return s
+
+    def is_blank(val):
+        return pd.isna(val) or str(val).strip() == ''
+
     items_created = 0
     for _, row in df_items.iterrows():
-        if pd.isna(row.iloc[0]) and pd.isna(row.iloc[2]) and pd.isna(row.iloc[3]):
+        # Skip rows with no serial number AND no item description (blank / continuation rows)
+        if is_blank(row.iloc[1]) and is_blank(row.iloc[2]):
             continue
         WorkItem.objects.create(
             work=work,
-            schedule=str(row.iloc[0]) if not pd.isna(row.iloc[0]) else "",
-            serial_number=str(row.iloc[1]) if not pd.isna(row.iloc[1]) else "",
-            item_desc=str(row.iloc[2]) if not pd.isna(row.iloc[2]) else "",
+            schedule=clean_str(row.iloc[0]),
+            serial_number=clean_str(row.iloc[1]),
+            item_desc=str(row.iloc[2]).strip() if not is_blank(row.iloc[2]) else "",
             qty=safe_float(row.iloc[3]),
-            unit=str(row.iloc[4]) if not pd.isna(row.iloc[4]) else "",
+            unit=str(row.iloc[4]).strip() if not is_blank(row.iloc[4]) else "",
             unit_rate_rs=safe_float(row.iloc[5]),
             unit_rate_below=safe_float(row.iloc[6]),
             total_amount=safe_float(row.iloc[7]),

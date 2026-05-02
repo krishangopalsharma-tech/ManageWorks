@@ -5,7 +5,7 @@ from datetime import timedelta
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from works.models import Work, WorkItem, WorkItemEntry
-from mb_details.models import MBItem
+from mb_details.models import MBItem, MBRecord
 
 
 class DashboardStatsView(APIView):
@@ -91,34 +91,79 @@ class ProgressTrendView(APIView):
 
         cfg = self.PERIOD_CONFIG.get(period, self.PERIOD_CONFIG['monthly'])
 
-        item_qs        = WorkItem.objects.filter(work_id=loa_id) if loa_id else WorkItem.objects.all()
-        total_required = item_qs.aggregate(t=Sum('qty'))['t'] or 0
+        item_qs   = WorkItem.objects.filter(work_id=loa_id) if loa_id else WorkItem.objects.all()
+        sch_a_qty = item_qs.filter(schedule__istartswith='A').aggregate(t=Sum('qty'))['t'] or 0
+        sch_b_qty = item_qs.filter(schedule__istartswith='B').aggregate(t=Sum('qty'))['t'] or 0
 
-        # Only count progress-relevant entries
-        entries = WorkItemEntry.objects.filter(
-            Q(work_item__schedule__istartswith='A', entry_type='supply') |
-            Q(work_item__schedule__istartswith='B', entry_type='execution')
+        cutoff = timezone.now() - timedelta(days=cfg['cutoff_days']) if cfg['cutoff_days'] else None
+
+        supply_qs = WorkItemEntry.objects.filter(
+            work_item__schedule__istartswith='A', entry_type='supply'
+        )
+        exec_qs = WorkItemEntry.objects.filter(
+            work_item__schedule__istartswith='B', entry_type='execution'
         )
         if loa_id:
-            entries = entries.filter(work_item__work_id=loa_id)
-        if cfg['cutoff_days']:
-            cutoff  = timezone.now() - timedelta(days=cfg['cutoff_days'])
-            entries = entries.filter(submitted_at__gte=cutoff)
+            supply_qs = supply_qs.filter(work_item__work_id=loa_id)
+            exec_qs   = exec_qs.filter(work_item__work_id=loa_id)
 
-        rows = (
-            entries
-            .annotate(bucket=cfg['trunc']('submitted_at'))
-            .values('bucket')
-            .annotate(total=Sum('quantity'))
-            .order_by('bucket')
-        )
+        supply_totals = {}
+        exec_totals   = {}
 
-        data = []
-        for row in rows:
+        def _acc(rows, bucket_dict):
+            for row in rows:
+                bucket = row['bucket']
+                if bucket is None:
+                    continue
+                sort_key = bucket.date() if hasattr(bucket, 'date') and callable(bucket.date) else bucket
+                bucket_dict[sort_key] = bucket_dict.get(sort_key, 0) + (row['total'] or 0)
+
+        # Supply with date_of_receipt
+        sq_with = supply_qs.filter(date_of_receipt__isnull=False)
+        if cutoff:
+            sq_with = sq_with.filter(date_of_receipt__gte=cutoff.date())
+        _acc(sq_with.annotate(bucket=cfg['trunc']('date_of_receipt'))
+             .values('bucket').annotate(total=Sum('quantity')), supply_totals)
+
+        # Supply without date_of_receipt → fall back to submitted_at
+        sq_without = supply_qs.filter(date_of_receipt__isnull=True)
+        if cutoff:
+            sq_without = sq_without.filter(submitted_at__gte=cutoff)
+        _acc(sq_without.annotate(bucket=cfg['trunc']('submitted_at'))
+             .values('bucket').annotate(total=Sum('quantity')), supply_totals)
+
+        # Execution
+        eq = exec_qs.filter(submitted_at__gte=cutoff) if cutoff else exec_qs
+        _acc(eq.annotate(bucket=cfg['trunc']('submitted_at'))
+             .values('bucket').annotate(total=Sum('quantity')), exec_totals)
+
+        # Financial: MB items grouped by MB record's measurement_date
+        total_work_amount = item_qs.aggregate(t=Sum('total_amount'))['t'] or 0
+        fin_totals = {}
+        mb_qs = MBItem.objects.filter(mb_record__measurement_date__isnull=False)
+        if loa_id:
+            mb_qs = mb_qs.filter(mb_record__work_id=loa_id)
+        if cutoff:
+            mb_qs = mb_qs.filter(mb_record__measurement_date__gte=cutoff.date())
+        for row in (mb_qs
+                    .annotate(bucket=cfg['trunc']('mb_record__measurement_date'))
+                    .values('bucket').annotate(total=Sum('amount'))):
             if row['bucket'] is None:
                 continue
-            qty = row['total'] or 0
-            pct = round(qty / total_required * 100, 2) if total_required > 0 else 0
-            data.append({'label': row['bucket'].strftime(cfg['fmt']), 'value': pct})
+            k = row['bucket'].date() if hasattr(row['bucket'], 'date') and callable(row['bucket'].date) else row['bucket']
+            fin_totals[k] = fin_totals.get(k, 0) + (row['total'] or 0)
+
+        all_keys = sorted(supply_totals.keys() | exec_totals.keys() | fin_totals.keys())
+        data = []
+        for k in all_keys:
+            s_qty = supply_totals.get(k, 0)
+            e_qty = exec_totals.get(k, 0)
+            f_amt = fin_totals.get(k, 0)
+            data.append({
+                'label':     k.strftime(cfg['fmt']),
+                'supply':    round(s_qty / sch_a_qty * 100, 2) if sch_a_qty else 0,
+                'execution': round(e_qty / sch_b_qty * 100, 2) if sch_b_qty else 0,
+                'financial': round(f_amt / total_work_amount * 100, 2) if total_work_amount else 0,
+            })
 
         return Response(data)

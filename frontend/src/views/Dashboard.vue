@@ -47,25 +47,58 @@ const finData     = computed(() => mkDoughnut(stats.value?.financial  || 0, '#ff
 // ── Bar chart ──────────────────────────────────────────────────────────────
 const barData = computed(() => ({
   labels: trendData.value.map(d => d.label),
-  datasets: [{
-    label: 'Qty Submitted',
-    data:  trendData.value.map(d => d.value),
-    backgroundColor: 'rgba(0, 113, 227, 0.85)',
-    hoverBackgroundColor: '#0071e3',
-    borderRadius: 6,
-    borderSkipped: false,
-    maxBarThickness: 40,
-  }],
+  datasets: [
+    {
+      label: 'Supply',
+      data:  trendData.value.map(d => d.supply ?? 0),
+      backgroundColor: 'rgba(0, 113, 227, 0.85)',
+      hoverBackgroundColor: '#0071e3',
+      borderRadius: 6,
+      borderSkipped: false,
+      maxBarThickness: 32,
+    },
+    {
+      label: 'Execution',
+      data:  trendData.value.map(d => d.execution ?? 0),
+      backgroundColor: 'rgba(52, 199, 89, 0.85)',
+      hoverBackgroundColor: '#34c759',
+      borderRadius: 6,
+      borderSkipped: false,
+      maxBarThickness: 32,
+    },
+    {
+      label: 'Financial',
+      data:  trendData.value.map(d => d.financial ?? 0),
+      backgroundColor: 'rgba(255, 149, 0, 0.85)',
+      hoverBackgroundColor: '#ff9500',
+      borderRadius: 6,
+      borderSkipped: false,
+      maxBarThickness: 32,
+    },
+  ],
 }))
 
 const barOptions = {
   responsive: true,
   maintainAspectRatio: false,
   plugins: {
-    legend: { display: false },
+    legend: {
+      display: true,
+      position: 'top',
+      align: 'end',
+      labels: {
+        boxWidth: 10,
+        boxHeight: 10,
+        borderRadius: 3,
+        useBorderRadius: true,
+        font: { size: 11, family: '-apple-system, BlinkMacSystemFont, Inter, sans-serif' },
+        color: '#6e6e73',
+        padding: 16,
+      },
+    },
     tooltip: {
       callbacks: {
-        label: ctx => ` ${ctx.raw}% of total work`,
+        label: ctx => ` ${ctx.dataset.label}: ${ctx.raw}%`,
       },
     },
   },

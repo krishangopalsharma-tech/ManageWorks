@@ -1,3 +1,4 @@
+from django.db import models as db_models
 from django.db.models import Sum
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -6,11 +7,12 @@ from rest_framework.exceptions import PermissionDenied
 
 from works.models import Work, WorkItem, WorkItemEntry, WorkExtension
 from works.serializers import WorkItemEntrySerializer, WorkEditSerializer
+from .pdf_parser import parse_receipt_pdf
 
 
 def _check_not_observer(user):
     if user.is_authenticated and hasattr(user, 'profile') and user.profile.role == 'observer':
-        raise PermissionDenied("Observers are not authorized to make changes.")
+        raise PermissionDenied("Observers are not authorised to make changes.")
 
 
 def _sync_item_quantities(work_item):
@@ -68,7 +70,14 @@ class WorkItemEntryView(APIView):
     """
 
     def get(self, request, item_id):
-        entries = WorkItemEntry.objects.filter(work_item_id=item_id).order_by('submitted_at')
+        entries = (
+            WorkItemEntry.objects
+            .filter(work_item_id=item_id)
+            .order_by(
+                db_models.F('date_of_receipt').asc(nulls_last=True),
+                'submitted_at',
+            )
+        )
         serializer = WorkItemEntrySerializer(entries, many=True)
         return Response(serializer.data)
 
@@ -80,7 +89,6 @@ class WorkItemEntryView(APIView):
         except WorkItem.DoesNotExist:
             return Response({'error': 'Item not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Validate quantity
         qty = request.data.get('quantity')
         if qty is None or qty == '':
             return Response({'error': 'quantity is required.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -95,14 +103,29 @@ class WorkItemEntryView(APIView):
         if entry_type not in ('supply', 'execution'):
             entry_type = 'supply'
 
+        receive_note_no = (request.data.get('receive_note_no') or '').strip()
+        if entry_type == 'supply' and receive_note_no:
+            if WorkItemEntry.objects.filter(
+                entry_type='supply',
+                receive_note_no=receive_note_no,
+            ).exists():
+                return Response(
+                    {'error': f'Receive Note No. "{receive_note_no}" already exists. Consignee cannot accept the same receipt twice.'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
         entry = WorkItemEntry.objects.create(
             work_item=work_item,
             entry_type=entry_type,
             quantity=qty,
-            challan_no=request.data.get('challan_no', '') or '',
-            udm_entry=request.data.get('udm_entry', '') or '',
-            location=request.data.get('location', '') or '',
-            remarks=request.data.get('remarks', '') or '',
+            # Supply fields
+            receive_note_no=receive_note_no,
+            date_of_receipt=request.data.get('date_of_receipt') or None,
+            challan_no=request.data.get('challan_no') or '',
+            udm_entry=request.data.get('udm_entry') or '',
+            # Execution fields
+            location=request.data.get('location') or '',
+            remarks=request.data.get('remarks') or '',
             submitted_by=request.user if request.user.is_authenticated else None,
         )
 
@@ -112,21 +135,21 @@ class WorkItemEntryView(APIView):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
-# ── Entry edit (owner only) ───────────────────────────────────────────────────
+# ── Entry edit ────────────────────────────────────────────────────────────────
 
 class WorkItemEntryUpdateView(APIView):
-    """PATCH /api/update-work/entries/<entry_id>/  – edit own submitted entry."""
+    """PATCH /api/update-work/entries/<entry_id>/  – any non-observer may edit."""
 
     def patch(self, request, entry_id):
+        if not request.user.is_authenticated:
+            raise PermissionDenied("Authentication required.")
+        _check_not_observer(request.user)
+
         try:
             entry = WorkItemEntry.objects.select_related('work_item').get(pk=entry_id)
         except WorkItemEntry.DoesNotExist:
             return Response({'error': 'Entry not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        if not request.user.is_authenticated or entry.submitted_by != request.user:
-            raise PermissionDenied("You can only edit entries that you submitted.")
-
-        # Update quantity
         if 'quantity' in request.data:
             try:
                 qty = float(request.data['quantity'])
@@ -136,13 +159,80 @@ class WorkItemEntryUpdateView(APIView):
             except (ValueError, TypeError):
                 return Response({'error': 'quantity must be a positive number.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Update type-specific fields
-        for field in ('challan_no', 'udm_entry', 'location', 'remarks'):
+        for field in ('challan_no', 'udm_entry', 'receive_note_no', 'location', 'remarks'):
             if field in request.data:
                 setattr(entry, field, request.data[field] or '')
+
+        if 'date_of_receipt' in request.data:
+            entry.date_of_receipt = request.data['date_of_receipt'] or None
 
         entry.save()
         _sync_item_quantities(entry.work_item)
 
         serializer = WorkItemEntrySerializer(entry)
         return Response(serializer.data)
+
+
+# ── PDF parsing ───────────────────────────────────────────────────────────────
+
+class ParsePDFsView(APIView):
+    """
+    POST /api/update-work/parse-pdfs/
+    Accepts one or more PDF files (field name: 'files').
+    Returns a list of parsed receipt data for user review before submission.
+    """
+
+    def post(self, request):
+        _check_not_observer(request.user)
+
+        files = request.FILES.getlist('files')
+        if not files:
+            return Response({'error': 'No files provided.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        work = None
+        work_id = request.data.get('work_id')
+        if work_id:
+            try:
+                work = Work.objects.get(pk=work_id)
+            except Work.DoesNotExist:
+                return Response({'error': 'Work not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        results = []
+        for f in files:
+            try:
+                parsed = parse_receipt_pdf(f)
+                parsed['filename'] = f.name
+            except Exception as exc:
+                parsed = {
+                    'filename': f.name,
+                    'parse_warnings': [f'Failed to parse: {exc}'],
+                    'error': True,
+                }
+                results.append(parsed)
+                continue
+
+            if work and not parsed.get('error'):
+                mismatch = []
+                pdf_loa = (parsed.get('loa_number') or '').strip().lower()
+                work_loa = (work.loa_number or '').strip().lower()
+                if pdf_loa and work_loa and pdf_loa != work_loa:
+                    mismatch.append(
+                        f'LOA No. mismatch: PDF has "{parsed["loa_number"]}" '
+                        f'but this work has "{work.loa_number}".'
+                    )
+
+                pdf_ca = (parsed.get('contract_agreement') or '').strip().lower()
+                work_ca = (work.contract_agreement or '').strip().lower()
+                if pdf_ca and work_ca and pdf_ca != work_ca:
+                    mismatch.append(
+                        f'Contract Agreement No. mismatch: PDF has "{parsed["contract_agreement"]}" '
+                        f'but this work has "{work.contract_agreement}".'
+                    )
+
+                if mismatch:
+                    parsed['error'] = True
+                    parsed['parse_warnings'] = (parsed.get('parse_warnings') or []) + mismatch
+
+            results.append(parsed)
+
+        return Response(results)

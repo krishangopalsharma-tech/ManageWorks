@@ -31,7 +31,7 @@ class MBRecordSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = MBRecord
-        fields = ['id', 'work', 'mb_number', 'notes',
+        fields = ['id', 'work', 'mb_number', 'measurement_date', 'notes',
                   'work_loa', 'work_tender', 'contractor', 'work_name',
                   'created_by_username', 'created_at',
                   'items', 'total_amount']

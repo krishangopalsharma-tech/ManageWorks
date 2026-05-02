@@ -5,11 +5,12 @@ from works.models import Work, WorkItem
 
 class MBRecord(models.Model):
     """A Measurement Book. Holds line items billed (can mix Sch A and Sch B)."""
-    work       = models.ForeignKey(Work, on_delete=models.CASCADE, related_name='mb_records')
-    mb_number  = models.CharField(max_length=500, help_text='User-entered MB number/reference (free text)')
-    notes      = models.TextField(blank=True, null=True)
-    created_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
-    created_at = models.DateTimeField(auto_now_add=True)
+    work             = models.ForeignKey(Work, on_delete=models.CASCADE, related_name='mb_records')
+    mb_number        = models.CharField(max_length=500, help_text='User-entered MB number/reference (free text)')
+    measurement_date = models.DateField(null=True, blank=True, help_text='Date of measurement as recorded in the MB')
+    notes            = models.TextField(blank=True, null=True)
+    created_by       = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at       = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ['work_id', 'mb_number']

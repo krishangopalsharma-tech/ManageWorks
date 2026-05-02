@@ -1,5 +1,6 @@
 import { defineConfig, presetUno, presetAttributify, presetIcons } from 'unocss'
 import presetWebFonts from '@unocss/preset-web-fonts'
+import { icons as carbonIcons } from '@iconify-json/carbon'
 
 export default defineConfig({
   presets: [
@@ -8,6 +9,9 @@ export default defineConfig({
     presetIcons({
       scale: 1.2,
       warn: true,
+      collections: {
+        carbon: () => carbonIcons,
+      },
     }),
     presetWebFonts({
       provider: 'google',
@@ -169,5 +173,47 @@ export default defineConfig({
     'animate-spin',
     // Dark mode class on <html>
     'dark',
+    // Carbon icons used dynamically (e.g. :class="item.icon" in Sidebar)
+    'i-carbon-dashboard',
+    'i-carbon-catalog',
+    'i-carbon-chart-bar',
+    'i-carbon-edit',
+    'i-carbon-receipt',
+    'i-carbon-document',
+    'i-carbon-document-pdf',
+    'i-carbon-document-unknown',
+    'i-carbon-add-alt',
+    'i-carbon-add',
+    'i-carbon-add-filled',
+    'i-carbon-settings',
+    'i-carbon-flash',
+    'i-carbon-user',
+    'i-carbon-overflow-menu-vertical',
+    'i-carbon-chevron-down',
+    'i-carbon-chevron-right',
+    'i-carbon-chevron-up',
+    'i-carbon-arrow-left',
+    'i-carbon-arrow-down',
+    'i-carbon-arrows-vertical',
+    'i-carbon-search',
+    'i-carbon-filter',
+    'i-carbon-close',
+    'i-carbon-trash-can',
+    'i-carbon-checkmark',
+    'i-carbon-checkmark-filled',
+    'i-carbon-checkmark-outline',
+    'i-carbon-warning-alt',
+    'i-carbon-warning-filled',
+    'i-carbon-circle-dash',
+    'i-carbon-upload',
+    'i-carbon-tag',
+    'i-carbon-link',
+    'i-carbon-list',
+    'i-carbon-location',
+    'i-carbon-package',
+    'i-carbon-calendar',
+    'i-carbon-construction',
+    'i-carbon-chart-evaluation',
+    'i-carbon-chat',
   ],
 })

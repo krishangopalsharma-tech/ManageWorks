@@ -22,7 +22,6 @@ const romanOrdinal = (n) => {
   return `${n}th`
 }
 
-// Progress uses supplied_quantity for A items, executed_quantity for B items
 const progressPct = (item) => {
   const req = item.qty || 0
   if (!req) return 0
@@ -31,7 +30,6 @@ const progressPct = (item) => {
   return Math.min(Math.round((done / req) * 100), 999)
 }
 
-// Recompute item supply / execution totals from its entries array (client-side sync)
 const recalcItemQtys = (item) => {
   const entries = item.entries || []
   item.supplied_quantity = entries.filter(e => e.entry_type === 'supply').reduce((s, e) => s + (e.quantity || 0), 0)
@@ -46,12 +44,24 @@ const selectedWork = ref(null)
 const isLoading    = ref(true)
 const currentUser  = ref(null)
 
+const isObserver = computed(() => currentUser.value?.role === 'observer')
+
 // Lot entry popup
 const lotPopupItem = ref(null)
-const entryForm    = ref({ entry_type: 'supply', quantity: '', challan_no: '', udm_entry: '', location: '', remarks: '', isSubmitting: false, status: '' })
+const entryForm    = ref({
+  entry_type: 'supply',
+  quantity: '', receive_note_no: '', date_of_receipt: '',
+  challan_no: '', udm_entry: '',
+  location: '', remarks: '',
+  isSubmitting: false, status: '',
+})
+
+// Single PDF fill state
+const pdfFilling = ref(false)
+const pdfFillWarnings = ref([])
 
 // Inline entry editing
-const editingEntry    = ref(null)  // copy of entry being edited
+const editingEntry    = ref(null)
 const isSavingEntry   = ref(false)
 const entrySaveStatus = ref('')
 
@@ -61,6 +71,185 @@ const isSavingWork      = ref(false)
 const workSaveStatus    = ref('')
 const showDeleteConfirm = ref(false)
 const isDeletingWork    = ref(false)
+
+// ── Batch PDF Modal ────────────────────────────────────────────────────────
+const batchModal      = ref(false)
+const batchParsing    = ref(false)
+const batchResults    = ref([])   // [{filename, date_of_receipt, receive_note_no, serial_number, item_desc, challan_no, quantity, unit, parse_warnings, matchedItemId, include, submitting, done, error}]
+const batchSubmitting = ref(false)
+const batchDone       = ref(false)
+
+// Strip leading zeros: "01" → "1", "32" → "32"
+const normalizeItemNum = (s) => {
+  const n = parseInt(s, 10)
+  return isNaN(n) ? s : String(n)
+}
+
+// Parse "A-32-" or "A-01-" → { schedule: "A", itemNum: "32" / "1" }
+const parsePdfSerial = (raw) => {
+  const s = (raw || '').trim().replace(/[\s\-/]+$/, '').toUpperCase()
+  const m = s.match(/^([A-Z]+)-(\d+)$/)
+  if (m) return { schedule: m[1], itemNum: normalizeItemNum(m[2]) }
+  return { schedule: null, itemNum: normalizeItemNum(s) }
+}
+
+// Word-overlap ratio between two description strings (0–1)
+const descScore = (a, b) => {
+  if (!a || !b) return 0
+  const wa = new Set((a.toLowerCase().match(/\w+/g) || []).filter(w => w.length > 2))
+  const wb = new Set((b.toLowerCase().match(/\w+/g) || []).filter(w => w.length > 2))
+  let overlap = 0
+  for (const w of wa) if (wb.has(w)) overlap++
+  return overlap / Math.max(wa.size, wb.size, 1)
+}
+
+// Normalize "32.0" → "32" (pandas float artifact in existing DB records)
+const normalizeNum = (s) => {
+  const f = parseFloat(s)
+  return (!isNaN(f) && f === Math.floor(f)) ? String(Math.floor(f)) : s
+}
+
+// Parse item serial_number from DB ("32.0" → "32", "01" → "1", "A-32" → {schedule,itemNum})
+const parseItemSerial = (raw) => {
+  const s = (raw || '').trim().replace(/[\s\-/]+$/, '').toUpperCase()
+  const m = s.match(/^([A-Z]+)-(\d+)$/)
+  if (m) return { schedule: m[1], itemNum: normalizeItemNum(m[2]) }
+  return { schedule: null, itemNum: normalizeItemNum(normalizeNum(s)) }
+}
+
+// Match a PDF receipt to a WorkItem using schedule, item number, and description
+const findBestMatch = (pdfSerial, pdfDesc) => {
+  const items = selectedWork.value?.items || []
+  if (!items.length) return null
+  const { schedule, itemNum } = parsePdfSerial(pdfSerial)
+
+  // Stage 1: schedule + item number both match (handles "A-32" in DB or "32" in DB)
+  let candidates = items.filter(item => {
+    const { schedule: iSch, itemNum: iNum } = parseItemSerial(item.serial_number)
+    const dbSch = iSch || (item.schedule || '').trim().toUpperCase()
+    return schedule && itemNum && dbSch === schedule && iNum === itemNum
+  })
+
+  // Stage 2: item number only across all schedules
+  if (!candidates.length && itemNum) {
+    candidates = items.filter(item => parseItemSerial(item.serial_number).itemNum === itemNum)
+  }
+
+  if (!candidates.length) return null
+  if (candidates.length === 1) return candidates[0]
+
+  // Tiebreak by description overlap
+  let best = null, bestScore = -1
+  for (const item of candidates) {
+    const s = descScore(pdfDesc, item.item_desc)
+    if (s > bestScore) { bestScore = s; best = item }
+  }
+  return best
+}
+
+const openBatchModal = () => {
+  batchResults.value = []
+  batchParsing.value = false
+  batchDone.value    = false
+  batchParseError.value = ''
+  batchModal.value   = true
+}
+const closeBatchModal = () => { batchModal.value = false }
+
+const batchParseError = ref('')
+
+const onBatchFilesSelected = async (evt) => {
+  const files = Array.from(evt.target.files || [])
+  if (!files.length) return
+  batchParsing.value = true
+  batchParseError.value = ''
+  batchDone.value = false
+
+  // Chunk files into ≤800 KB batches so each request stays under nginx body limits
+  const MAX_CHUNK_BYTES = 800 * 1024
+  const chunks = []
+  let chunk = [], chunkSize = 0
+  for (const f of files) {
+    if (chunk.length && chunkSize + f.size > MAX_CHUNK_BYTES) {
+      chunks.push(chunk)
+      chunk = []
+      chunkSize = 0
+    }
+    chunk.push(f)
+    chunkSize += f.size
+  }
+  if (chunk.length) chunks.push(chunk)
+
+  try {
+    for (const chunkFiles of chunks) {
+      const fd = new FormData()
+      for (const f of chunkFiles) fd.append('files', f)
+      if (selectedWork.value?.id) fd.append('work_id', selectedWork.value.id)
+      const res = await axios.post('/api/update-work/parse-pdfs/', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      const newResults = res.data.map(r => {
+        const matchedItem = findBestMatch(r.serial_number, r.item_desc)
+        return {
+          ...r,
+          matchedItemId: matchedItem ? matchedItem.id : '',
+          include: !r.error,
+          submitting: false, done: false, submitError: '',
+        }
+      })
+      batchResults.value = [...batchResults.value, ...newResults]
+    }
+  } catch (e) {
+    const st = e.response?.status
+    if (st === 413) {
+      batchParseError.value = 'One or more PDFs are too large to upload individually.'
+    } else {
+      batchParseError.value = 'Upload failed. Please try again.'
+    }
+    console.error(e)
+  } finally {
+    batchParsing.value = false
+    evt.target.value = ''
+  }
+}
+
+const submitBatchEntries = async () => {
+  batchSubmitting.value = true
+  const toSubmit = batchResults.value.filter(r => r.include && r.matchedItemId && !r.done)
+
+  for (const r of toSubmit) {
+    r.submitting = true
+    r.submitError = ''
+    const payload = {
+      entry_type:      'supply',
+      quantity:        r.quantity,
+      receive_note_no: r.receive_note_no || '',
+      date_of_receipt: r.date_of_receipt || null,
+      challan_no:      r.challan_no || '',
+      udm_entry:       '',
+    }
+    try {
+      const res = await axios.post(`/api/update-work/items/${r.matchedItemId}/entries/`, payload)
+      // Update item in selected work
+      const item = (selectedWork.value?.items || []).find(i => i.id === r.matchedItemId)
+      if (item) {
+        if (!item.entries) item.entries = []
+        item.entries.push(res.data)
+        recalcItemQtys(item)
+      }
+      r.done = true
+    } catch (e) {
+      const status = e.response?.status
+      if (status === 403) r.submitError = 'Access denied'
+      else if (status === 409) r.submitError = 'Duplicate receipt no.'
+      else r.submitError = 'Failed'
+    } finally {
+      r.submitting = false
+    }
+  }
+  batchSubmitting.value = false
+  batchDone.value = toSubmit.every(r => r.done)
+}
 
 // ── Load ───────────────────────────────────────────────────────────────────
 const loadWorks = async () => {
@@ -114,8 +303,18 @@ const sortIcon = (key) => {
   if (sortKey.value !== key) return 'i-carbon-arrows-vertical'
   return sortDir.value === 'asc' ? 'i-carbon-arrow-up' : 'i-carbon-arrow-down'
 }
+const _cmpSerial = (a, b) => {
+  const sa = (a.schedule || '').toUpperCase()
+  const sb = (b.schedule || '').toUpperCase()
+  if (sa !== sb) return sa.localeCompare(sb)
+  const an = parseInt(a.serial_number, 10)
+  const bn = parseInt(b.serial_number, 10)
+  if (!isNaN(an) && !isNaN(bn)) return an - bn
+  return (a.serial_number || '').localeCompare(b.serial_number || '')
+}
+
 const sortedItems = computed(() => {
-  if (!sortKey.value) return filteredItems.value
+  if (!sortKey.value) return [...filteredItems.value].sort(_cmpSerial)
   return [...filteredItems.value].sort((a, b) => {
     let av, bv
     if      (sortKey.value === 'qty')       { av = a.qty || 0;               bv = b.qty || 0 }
@@ -126,11 +325,22 @@ const sortedItems = computed(() => {
 })
 
 // ── Select a work ──────────────────────────────────────────────────────────
-const selectWork = (work) => {
+const selectWork = async (work) => {
   itemFilter.value   = ''
   sortKey.value      = ''
   lotPopupItem.value = null
+  // Optimistically show what we have, then refresh from server
   selectedWork.value = { ...work, items: work.items.map(i => ({ ...i, entries: (i.entries || []).map(e => ({ ...e })) })) }
+  try {
+    const res = await axios.get(`/api/work-details/${work.id}/`)
+    const fresh = res.data
+    selectedWork.value = { ...fresh, items: fresh.items.map(i => ({ ...i, entries: (i.entries || []).map(e => ({ ...e })) })) }
+    // Keep allWorks in sync
+    const idx = allWorks.value.findIndex(w => w.id === fresh.id)
+    if (idx !== -1) allWorks.value[idx] = fresh
+  } catch (e) {
+    console.error('Failed to refresh work data:', e)
+  }
 }
 
 // ── Lot entry popup ────────────────────────────────────────────────────────
@@ -143,11 +353,47 @@ const openLotPopup = (item) => {
   lotPopupItem.value = item
   editingEntry.value    = null
   entrySaveStatus.value = ''
-  const sch = String(item.schedule || '').toUpperCase().trim()
-  const defaultType = sch.startsWith('A') ? 'supply' : 'supply'
-  entryForm.value = { entry_type: defaultType, quantity: '', challan_no: '', udm_entry: '', location: '', remarks: '', isSubmitting: false, status: '' }
+  pdfFillWarnings.value = []
+  entryForm.value = {
+    entry_type: 'supply', quantity: '',
+    receive_note_no: '', date_of_receipt: '',
+    challan_no: '', udm_entry: '',
+    location: '', remarks: '',
+    isSubmitting: false, status: '',
+  }
 }
 const closeLotPopup = () => { lotPopupItem.value = null; editingEntry.value = null }
+
+// ── Fill form from a single PDF ────────────────────────────────────────────
+const fillFromPdf = async (evt) => {
+  const file = evt.target.files?.[0]
+  if (!file) return
+  pdfFilling.value      = true
+  pdfFillWarnings.value = []
+  const fd = new FormData()
+  fd.append('files', file)
+  if (selectedWork.value?.id) fd.append('work_id', selectedWork.value.id)
+  try {
+    const res = await axios.post('/api/update-work/parse-pdfs/', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    const parsed = res.data[0]
+    if (parsed.error) {
+      pdfFillWarnings.value = parsed.parse_warnings || ['Failed to parse PDF.']
+    } else {
+      entryForm.value.receive_note_no = parsed.receive_note_no || ''
+      entryForm.value.date_of_receipt = parsed.date_of_receipt || ''
+      entryForm.value.challan_no      = parsed.challan_no      || ''
+      entryForm.value.quantity        = parsed.quantity != null ? String(parsed.quantity) : ''
+      pdfFillWarnings.value = parsed.parse_warnings || []
+    }
+  } catch (e) {
+    pdfFillWarnings.value = ['Upload failed. Please try again.']
+  } finally {
+    pdfFilling.value = false
+    evt.target.value = ''
+  }
+}
 
 const submitEntry = async () => {
   const item = lotPopupItem.value
@@ -168,8 +414,10 @@ const submitEntry = async () => {
       quantity:   parseFloat(form.quantity),
     }
     if (form.entry_type === 'supply') {
-      payload.challan_no = form.challan_no
-      payload.udm_entry  = form.udm_entry
+      payload.receive_note_no = form.receive_note_no
+      payload.date_of_receipt = form.date_of_receipt || null
+      payload.challan_no      = form.challan_no
+      payload.udm_entry       = form.udm_entry
     } else {
       payload.location = form.location
       payload.remarks  = form.remarks
@@ -180,13 +428,16 @@ const submitEntry = async () => {
     item.entries.push(res.data)
     recalcItemQtys(item)
 
-    form.quantity = ''; form.challan_no = ''; form.udm_entry = ''; form.location = ''; form.remarks = ''
+    form.quantity = ''; form.receive_note_no = ''; form.date_of_receipt = ''
+    form.challan_no = ''; form.udm_entry = ''; form.location = ''; form.remarks = ''
+    pdfFillWarnings.value = []
     form.status = 'ok'
     setTimeout(() => { form.status = '' }, 2500)
   } catch (e) {
     console.error(e)
-    form.status = e.response?.status === 403 ? 'denied' : 'error'
-    setTimeout(() => { form.status = '' }, 2500)
+    const st = e.response?.status
+    form.status = st === 403 ? 'denied' : st === 409 ? 'duplicate' : 'error'
+    setTimeout(() => { form.status = '' }, 3500)
   } finally {
     form.isSubmitting = false
   }
@@ -196,13 +447,15 @@ const submitEntry = async () => {
 const openEditEntry = (entry) => {
   entrySaveStatus.value = ''
   editingEntry.value = {
-    id:         entry.id,
-    entry_type: entry.entry_type,
-    quantity:   entry.quantity,
-    challan_no: entry.challan_no || '',
-    udm_entry:  entry.udm_entry  || '',
-    location:   entry.location   || '',
-    remarks:    entry.remarks    || '',
+    id:              entry.id,
+    entry_type:      entry.entry_type,
+    quantity:        entry.quantity,
+    receive_note_no: entry.receive_note_no || '',
+    date_of_receipt: entry.date_of_receipt || '',
+    challan_no:      entry.challan_no || '',
+    udm_entry:       entry.udm_entry  || '',
+    location:        entry.location   || '',
+    remarks:         entry.remarks    || '',
   }
 }
 const closeEditEntry = () => { editingEntry.value = null; entrySaveStatus.value = '' }
@@ -217,15 +470,16 @@ const saveEditEntry = async () => {
   try {
     const payload = { quantity: parseFloat(e.quantity) }
     if (e.entry_type === 'supply') {
-      payload.challan_no = e.challan_no
-      payload.udm_entry  = e.udm_entry
+      payload.receive_note_no = e.receive_note_no
+      payload.date_of_receipt = e.date_of_receipt || null
+      payload.challan_no      = e.challan_no
+      payload.udm_entry       = e.udm_entry
     } else {
       payload.location = e.location
       payload.remarks  = e.remarks
     }
     const res = await axios.patch(`/api/update-work/entries/${e.id}/`, payload)
 
-    // Update the entry in the list
     const idx = (item.entries || []).findIndex(x => x.id === e.id)
     if (idx !== -1) item.entries[idx] = res.data
     recalcItemQtys(item)
@@ -403,10 +657,18 @@ const deleteWork = async () => {
                 </div>
               </div>
             </div>
-            <div class="flex-shrink-0 flex items-center bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 w-56 focus-within:ring-2 focus-within:ring-[#0071e3]/20 focus-within:border-[#0071e3] transition-all">
-              <div class="i-carbon-filter text-gray-400 mr-2 text-sm"></div>
-              <input v-model="itemFilter" type="text" placeholder="Filter items..."
-                class="bg-transparent outline-none w-full text-xs text-gray-700 placeholder-gray-400 font-medium">
+            <!-- Filter + Batch Upload -->
+            <div class="flex-shrink-0 flex items-center gap-2">
+              <button v-if="!isObserver" @click="openBatchModal"
+                class="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#0071e3]/10 hover:bg-[#0071e3]/20 text-[#0071e3] text-xs font-semibold transition-all">
+                <div class="i-carbon-document-pdf text-sm"></div>
+                Upload PDF Receipts
+              </button>
+              <div class="flex items-center bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 w-48 focus-within:ring-2 focus-within:ring-[#0071e3]/20 focus-within:border-[#0071e3] transition-all">
+                <div class="i-carbon-filter text-gray-400 mr-2 text-sm"></div>
+                <input v-model="itemFilter" type="text" placeholder="Filter items..."
+                  class="bg-transparent outline-none w-full text-xs text-gray-700 placeholder-gray-400 font-medium">
+              </div>
             </div>
           </div>
         </div>
@@ -536,7 +798,6 @@ const deleteWork = async () => {
               </div>
             </div>
 
-            <!-- Extension Dates -->
             <div class="rounded-2xl border border-gray-100 bg-gray-50/60 p-4">
               <div class="flex items-center justify-between mb-3">
                 <div class="flex items-center gap-2">
@@ -561,7 +822,6 @@ const deleteWork = async () => {
                 </div>
               </div>
             </div>
-
           </div>
 
           <div class="px-7 pb-6 pt-3 flex items-center justify-between gap-3 border-t border-gray-100">
@@ -602,7 +862,7 @@ const deleteWork = async () => {
         style="background:rgba(0,0,0,0.45);backdrop-filter:blur(8px);" @click.self="closeLotPopup">
         <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col animate-modal">
 
-          <!-- Popup header: item info + stats -->
+          <!-- Popup header -->
           <div class="px-8 pt-7 pb-5 border-b border-gray-100 flex-shrink-0">
             <div class="flex items-start justify-between gap-4">
               <div class="min-w-0 flex-1">
@@ -661,9 +921,28 @@ const deleteWork = async () => {
 
             <!-- ── Submit New Entry ── -->
             <div>
-              <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                <div class="i-carbon-add-filled text-[#0071e3]"></div> Submit New Entry
-              </h3>
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
+                  <div class="i-carbon-add-filled text-[#0071e3]"></div> Submit New Entry
+                </h3>
+                <!-- Fill from PDF button -->
+                <label v-if="!isObserver && entryForm.entry_type === 'supply'"
+                  class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 text-[11px] font-semibold cursor-pointer transition-all"
+                  :class="{ 'opacity-60 pointer-events-none': pdfFilling }">
+                  <div v-if="pdfFilling" class="i-carbon-circle-dash animate-spin text-xs"></div>
+                  <div v-else class="i-carbon-document-pdf text-xs"></div>
+                  {{ pdfFilling ? 'Reading PDF…' : 'Fill from PDF' }}
+                  <input type="file" accept=".pdf" class="hidden" @change="fillFromPdf">
+                </label>
+              </div>
+
+              <!-- PDF fill warnings -->
+              <div v-if="pdfFillWarnings.length" class="mb-3 rounded-xl bg-amber-50 border border-amber-200 px-4 py-2.5">
+                <p class="text-[11px] font-semibold text-amber-700 mb-1">PDF parse notes:</p>
+                <ul class="list-disc list-inside space-y-0.5">
+                  <li v-for="w in pdfFillWarnings" :key="w" class="text-[11px] text-amber-600">{{ w }}</li>
+                </ul>
+              </div>
 
               <!-- Entry type selector (Schedule B only) -->
               <div v-if="!popupIsSchA" class="flex gap-1 p-1 bg-gray-100 rounded-xl mb-4">
@@ -680,20 +959,37 @@ const deleteWork = async () => {
               </div>
 
               <!-- Supply form -->
-              <div v-if="entryForm.entry_type === 'supply'" class="grid grid-cols-3 gap-3 mb-4">
-                <div class="flex flex-col gap-1.5">
-                  <label class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Quantity <span class="text-red-400">*</span></label>
-                  <input v-model="entryForm.quantity" type="number" step="0.01" min="0.01" placeholder="e.g. 20"
-                    class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-semibold text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
+              <div v-if="entryForm.entry_type === 'supply'" class="flex flex-col gap-3 mb-4">
+                <!-- Row 1: Receive Note No + Date of Receipt -->
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="flex flex-col gap-1.5">
+                    <label class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Receive Note No. (DMTR)</label>
+                    <input v-model="entryForm.receive_note_no" type="text" placeholder="56091-26-00049"
+                      class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
+                  </div>
+                  <div class="flex flex-col gap-1.5">
+                    <label class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Date of Receipt <span class="text-red-400">*</span></label>
+                    <input v-model="entryForm.date_of_receipt" type="date"
+                      class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
+                  </div>
                 </div>
-                <div class="flex flex-col gap-1.5">
-                  <label class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Challan No.</label>
-                  <input v-model="entryForm.challan_no" type="text" placeholder="RN.56091..."
-                    class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
+                <!-- Row 2: Quantity + Challan -->
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="flex flex-col gap-1.5">
+                    <label class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Quantity <span class="text-red-400">*</span></label>
+                    <input v-model="entryForm.quantity" type="number" step="0.01" min="0.01" placeholder="e.g. 20"
+                      class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-semibold text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
+                  </div>
+                  <div class="flex flex-col gap-1.5">
+                    <label class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Challan No. &amp; Date</label>
+                    <input v-model="entryForm.challan_no" type="text" placeholder="MEEPL/26-27/... dt.20-04-2026"
+                      class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
+                  </div>
                 </div>
+                <!-- Row 3: UDM -->
                 <div class="flex flex-col gap-1.5">
                   <label class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">UDM Entry</label>
-                  <input v-model="entryForm.udm_entry" type="text" placeholder="dt. 05-01..."
+                  <input v-model="entryForm.udm_entry" type="text" placeholder="UDM register entry…"
                     class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
                 </div>
               </div>
@@ -719,16 +1015,17 @@ const deleteWork = async () => {
                 </div>
               </div>
 
-              <button @click="submitEntry" :disabled="entryForm.isSubmitting"
+              <button @click="submitEntry" :disabled="entryForm.isSubmitting || isObserver"
                 class="w-full py-3 rounded-2xl text-white text-sm font-bold shadow shadow-black/15 hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center justify-center gap-2"
                 :class="{
                   'bg-dark-active':    !entryForm.status && entryForm.entry_type === 'supply',
                   'bg-[#34c759]':      (!entryForm.status && entryForm.entry_type === 'execution') || entryForm.status === 'ok',
-                  'bg-[#ff3b30]':      ['error','denied','invalid','noloc'].includes(entryForm.status),
+                  'bg-[#ff3b30]':      ['error','denied','invalid','noloc','duplicate'].includes(entryForm.status),
                 }">
                 <div v-if="entryForm.isSubmitting" class="i-carbon-circle-dash animate-spin"></div>
                 <span v-else-if="entryForm.status === 'ok'">Entry Submitted!</span>
                 <span v-else-if="entryForm.status === 'denied'">Access Denied</span>
+                <span v-else-if="entryForm.status === 'duplicate'">Receive Note already exists — duplicate rejected</span>
                 <span v-else-if="entryForm.status === 'invalid'">Enter a quantity greater than 0</span>
                 <span v-else-if="entryForm.status === 'noloc'">Location is required for execution entries</span>
                 <span v-else-if="entryForm.status === 'error'">Submission Failed — Try Again</span>
@@ -745,7 +1042,6 @@ const deleteWork = async () => {
                 </span>
               </h3>
 
-              <!-- Save status for edit -->
               <div v-if="entrySaveStatus === 'error'" class="mb-2 text-xs font-medium text-[#ff3b30]">Failed to save edit.</div>
               <div v-if="entrySaveStatus === 'denied'" class="mb-2 text-xs font-medium text-[#ff3b30]">Permission denied.</div>
 
@@ -757,14 +1053,13 @@ const deleteWork = async () => {
                 <table class="w-full text-xs">
                   <thead class="bg-gray-50 text-[10px] text-gray-400 font-bold uppercase tracking-widest border-b border-gray-100">
                     <tr>
-                      <th class="px-3 py-2.5 text-left w-8">#</th>
-                      <th class="px-3 py-2.5 text-left w-20">Type</th>
-                      <th class="px-3 py-2.5 text-right w-20">Qty</th>
-                      <th class="px-3 py-2.5 text-left">Challan / Location</th>
-                      <th class="px-3 py-2.5 text-left">UDM / Remarks</th>
-                      <th class="px-3 py-2.5 text-left w-24">By</th>
-                      <th class="px-3 py-2.5 text-left w-28">Date</th>
-                      <th class="px-3 py-2.5 text-center w-16">Edit</th>
+                      <th class="px-3 py-2.5 text-left w-7">#</th>
+                      <th class="px-3 py-2.5 text-left w-16">Type</th>
+                      <th class="px-3 py-2.5 text-right w-16">Qty</th>
+                      <th class="px-3 py-2.5 text-left">Rcv Note / Date</th>
+                      <th class="px-3 py-2.5 text-left">Challan</th>
+                      <th class="px-3 py-2.5 text-left w-20">By</th>
+                      <th class="px-3 py-2.5 text-center w-14">Edit</th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-gray-50">
@@ -776,27 +1071,40 @@ const deleteWork = async () => {
                         <td class="px-3 py-2">
                           <span class="text-[10px] font-bold px-1.5 py-0.5 rounded"
                             :class="entry.entry_type === 'supply' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'">
-                            {{ entry.entry_type === 'supply' ? 'Supply' : 'Exec' }}
+                            {{ entry.entry_type === 'supply' ? 'Sup' : 'Exe' }}
                           </span>
                         </td>
                         <td class="px-3 py-2">
                           <input v-model="editingEntry.quantity" type="number" step="0.01" min="0.01"
-                            class="w-16 bg-white border border-[#0071e3]/30 rounded-lg px-2 py-1 text-xs font-semibold text-gray-800 outline-none focus:border-[#0071e3] text-right">
+                            class="w-14 bg-white border border-[#0071e3]/30 rounded-lg px-2 py-1 text-xs font-semibold text-gray-800 outline-none focus:border-[#0071e3] text-right">
                         </td>
-                        <td class="px-3 py-2">
-                          <input v-if="entry.entry_type === 'supply'" v-model="editingEntry.challan_no" type="text"
-                            class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-700 outline-none focus:border-[#0071e3]">
-                          <input v-else v-model="editingEntry.location" type="text"
-                            class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-700 outline-none focus:border-[#34c759]">
-                        </td>
-                        <td class="px-3 py-2">
-                          <input v-if="entry.entry_type === 'supply'" v-model="editingEntry.udm_entry" type="text"
-                            class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-700 outline-none focus:border-[#0071e3]">
-                          <input v-else v-model="editingEntry.remarks" type="text"
-                            class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-700 outline-none focus:border-[#34c759]">
-                        </td>
+                        <!-- Supply edit fields -->
+                        <template v-if="entry.entry_type === 'supply'">
+                          <td class="px-3 py-2">
+                            <div class="flex flex-col gap-1">
+                              <input v-model="editingEntry.receive_note_no" type="text" placeholder="DMTR No."
+                                class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-700 outline-none focus:border-[#0071e3]">
+                              <input v-model="editingEntry.date_of_receipt" type="date"
+                                class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-700 outline-none focus:border-[#0071e3]">
+                            </div>
+                          </td>
+                          <td class="px-3 py-2">
+                            <input v-model="editingEntry.challan_no" type="text"
+                              class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-700 outline-none focus:border-[#0071e3]">
+                          </td>
+                        </template>
+                        <!-- Execution edit fields -->
+                        <template v-else>
+                          <td class="px-3 py-2">
+                            <input v-model="editingEntry.location" type="text"
+                              class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-700 outline-none focus:border-[#34c759]">
+                          </td>
+                          <td class="px-3 py-2">
+                            <input v-model="editingEntry.remarks" type="text"
+                              class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-700 outline-none focus:border-[#34c759]">
+                          </td>
+                        </template>
                         <td class="px-3 py-2 text-gray-500">{{ entry.submitted_by_user?.username || '—' }}</td>
-                        <td class="px-3 py-2 text-gray-400">{{ fmtDateTime(entry.submitted_at) }}</td>
                         <td class="px-3 py-2">
                           <div class="flex items-center gap-1">
                             <button @click="saveEditEntry" :disabled="isSavingEntry"
@@ -816,26 +1124,30 @@ const deleteWork = async () => {
                         <td class="px-3 py-2.5">
                           <span class="text-[10px] font-bold px-1.5 py-0.5 rounded"
                             :class="entry.entry_type === 'supply' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'">
-                            {{ entry.entry_type === 'supply' ? 'Supply' : 'Exec' }}
+                            {{ entry.entry_type === 'supply' ? 'Sup' : 'Exe' }}
                           </span>
                         </td>
                         <td class="px-3 py-2.5 text-right font-bold text-gray-800">
-                          {{ entry.quantity }} <span class="text-gray-400 font-normal">{{ lotPopupItem.unit }}</span>
+                          {{ entry.quantity }} <span class="text-gray-400 font-normal text-[10px]">{{ lotPopupItem.unit }}</span>
                         </td>
-                        <td class="px-3 py-2.5 text-gray-600 font-medium max-w-[100px] truncate">
-                          {{ entry.entry_type === 'supply' ? (entry.challan_no || '—') : (entry.location || '—') }}
+                        <!-- Supply: show receive note + date of receipt -->
+                        <td v-if="entry.entry_type === 'supply'" class="px-3 py-2.5">
+                          <p class="font-semibold text-gray-700 truncate max-w-[120px]">{{ entry.receive_note_no || '—' }}</p>
+                          <p class="text-[10px] text-[#0071e3] font-medium mt-0.5">{{ fmtDate(entry.date_of_receipt) }}</p>
                         </td>
-                        <td class="px-3 py-2.5 text-gray-600 font-medium max-w-[100px] truncate">
-                          {{ entry.entry_type === 'supply' ? (entry.udm_entry || '—') : (entry.remarks || '—') }}
+                        <!-- Execution: show location -->
+                        <td v-else class="px-3 py-2.5 text-gray-600 font-medium max-w-[120px] truncate">
+                          {{ entry.location || '—' }}
                         </td>
-                        <td class="px-3 py-2.5 text-gray-600 font-medium">{{ entry.submitted_by_user?.username || '—' }}</td>
-                        <td class="px-3 py-2.5 text-gray-400">{{ fmtDateTime(entry.submitted_at) }}</td>
+                        <td class="px-3 py-2.5 text-gray-500 max-w-[120px] truncate text-[11px]">
+                          {{ entry.entry_type === 'supply' ? (entry.challan_no || '—') : (entry.remarks || '—') }}
+                        </td>
+                        <td class="px-3 py-2.5 text-gray-500 text-[11px]">{{ entry.submitted_by_user?.username || '—' }}</td>
                         <td class="px-3 py-2.5 text-center">
-                          <button
-                            v-if="currentUser?.username && entry.submitted_by_user?.username === currentUser.username"
+                          <button v-if="!isObserver"
                             @click="openEditEntry(entry)"
                             class="px-2 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 text-[10px] font-bold transition-all flex items-center gap-1 mx-auto">
-                            <div class="i-carbon-edit text-[10px]"></div> Edit
+                            <div class="i-carbon-edit text-[10px]"></div>
                           </button>
                           <span v-else class="text-gray-200">—</span>
                         </td>
@@ -854,7 +1166,7 @@ const deleteWork = async () => {
                           <span class="text-[10px] text-gray-400 font-normal"> exe</span>
                         </template>
                       </td>
-                      <td colspan="5"></td>
+                      <td colspan="4"></td>
                     </tr>
                   </tfoot>
                 </table>
@@ -862,6 +1174,142 @@ const deleteWork = async () => {
             </div>
 
           </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ══ BATCH PDF UPLOAD MODAL ════════════════════════════════════ -->
+    <Teleport to="body">
+      <div v-if="batchModal" class="fixed inset-0 z-50 flex items-center justify-center p-6"
+        style="background:rgba(0,0,0,0.45);backdrop-filter:blur(8px);" @click.self="closeBatchModal">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col animate-modal">
+
+          <!-- Header -->
+          <div class="flex items-center justify-between px-7 pt-5 pb-4 border-b border-gray-100 flex-shrink-0">
+            <div>
+              <h2 class="text-base font-bold text-gray-900">Batch PDF Receipt Upload</h2>
+              <p class="text-[11px] text-gray-400 mt-0.5">Select one or more receipt PDFs. Fields are extracted automatically.</p>
+            </div>
+            <button @click="closeBatchModal" class="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-all">
+              <div class="i-carbon-close text-sm"></div>
+            </button>
+          </div>
+
+          <div class="flex-1 overflow-y-auto px-7 py-5 flex flex-col gap-5">
+
+            <!-- Parse error -->
+            <div v-if="batchParseError" class="rounded-xl bg-red-50 border border-red-200 px-4 py-3 flex items-center gap-2">
+              <div class="i-carbon-warning-filled text-red-500 flex-shrink-0"></div>
+              <p class="text-xs font-semibold text-red-600">{{ batchParseError }}</p>
+            </div>
+
+            <!-- Upload zone -->
+            <label v-if="!batchParsing && batchResults.length === 0"
+              class="flex flex-col items-center justify-center border-2 border-dashed border-gray-200 hover:border-[#0071e3]/50 rounded-2xl py-12 cursor-pointer transition-all group">
+              <div class="i-carbon-document-pdf text-4xl text-gray-300 group-hover:text-[#0071e3]/60 transition-colors mb-3"></div>
+              <p class="text-sm font-semibold text-gray-500 group-hover:text-gray-700">Click to select PDF receipts</p>
+              <p class="text-xs text-gray-400 mt-1">Multiple files supported</p>
+              <input type="file" accept=".pdf" multiple class="hidden" @change="onBatchFilesSelected">
+            </label>
+
+            <!-- Parsing loader -->
+            <div v-if="batchParsing" class="flex flex-col items-center py-12 gap-3">
+              <div class="i-carbon-circle-dash animate-spin text-3xl text-[#0071e3]"></div>
+              <p class="text-sm font-medium text-gray-500">Parsing PDFs…</p>
+            </div>
+
+            <!-- Results -->
+            <template v-if="batchResults.length > 0">
+              <div class="flex items-center justify-between">
+                <p class="text-xs font-bold text-gray-500 uppercase tracking-wide">{{ batchResults.length }} PDF{{ batchResults.length > 1 ? 's' : '' }} parsed</p>
+                <label class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 text-[11px] font-semibold cursor-pointer transition-all">
+                  <div class="i-carbon-add text-xs"></div> Add more PDFs
+                  <input type="file" accept=".pdf" multiple class="hidden" @change="onBatchFilesSelected">
+                </label>
+              </div>
+
+              <div class="flex flex-col gap-3">
+                <div v-for="(r, i) in batchResults" :key="i"
+                  class="rounded-2xl border px-5 py-4 transition-all"
+                  :class="r.done ? 'border-[#34c759]/30 bg-[#34c759]/5' : (r.error ? 'border-[#ff3b30]/30 bg-[#ff3b30]/5' : 'border-gray-100 bg-gray-50/40')">
+
+                  <!-- Row top: filename + include toggle -->
+                  <div class="flex items-center justify-between gap-3 mb-3">
+                    <div class="flex items-center gap-2 min-w-0">
+                      <div v-if="r.done" class="i-carbon-checkmark-filled text-[#34c759] text-base flex-shrink-0"></div>
+                      <div v-else-if="r.error" class="i-carbon-warning-filled text-[#ff3b30] text-base flex-shrink-0"></div>
+                      <div v-else class="i-carbon-document-pdf text-gray-400 text-base flex-shrink-0"></div>
+                      <p class="text-xs font-semibold text-gray-700 truncate">{{ r.filename }}</p>
+                    </div>
+                    <label v-if="!r.done && !r.error" class="flex items-center gap-1.5 cursor-pointer flex-shrink-0">
+                      <input type="checkbox" v-model="r.include" class="w-3.5 h-3.5 accent-[#0071e3]">
+                      <span class="text-[11px] font-medium text-gray-500">Include</span>
+                    </label>
+                    <span v-if="r.done" class="text-[11px] font-semibold text-[#34c759]">Submitted</span>
+                    <span v-if="r.submitError" class="text-[11px] font-semibold text-[#ff3b30]">{{ r.submitError }}</span>
+                  </div>
+
+                  <!-- Parse warnings -->
+                  <div v-if="(r.parse_warnings || []).length" class="mb-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+                    <ul class="space-y-0.5">
+                      <li v-for="w in r.parse_warnings" :key="w" class="text-[10px] text-amber-700">⚠ {{ w }}</li>
+                    </ul>
+                  </div>
+
+                  <!-- Extracted fields -->
+                  <div v-if="!r.error" class="grid grid-cols-2 gap-x-6 gap-y-2">
+                    <!-- Item match -->
+                    <div class="col-span-2 flex flex-col gap-1">
+                      <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Match to Item (Serial: {{ r.serial_number || '—' }})</label>
+                      <select v-model="r.matchedItemId"
+                        class="bg-white border rounded-xl px-3 py-2 text-xs font-medium text-gray-700 outline-none focus:border-[#0071e3]"
+                        :class="r.matchedItemId ? 'border-gray-200' : 'border-amber-300'">
+                        <option value="">— Select item —</option>
+                        <option v-for="item in selectedWork.items" :key="item.id" :value="item.id">
+                          [{{ item.serial_number }}] {{ item.item_desc?.slice(0, 60) }}…
+                        </option>
+                      </select>
+                    </div>
+                    <div>
+                      <p class="text-[10px] text-gray-400 font-medium">Receive Note No.</p>
+                      <p class="text-xs font-semibold text-gray-700 mt-0.5">{{ r.receive_note_no || '—' }}</p>
+                    </div>
+                    <div>
+                      <p class="text-[10px] text-gray-400 font-medium">Date of Receipt</p>
+                      <p class="text-xs font-semibold text-gray-700 mt-0.5">{{ fmtDate(r.date_of_receipt) }}</p>
+                    </div>
+                    <div>
+                      <p class="text-[10px] text-gray-400 font-medium">Quantity</p>
+                      <p class="text-xs font-semibold text-gray-700 mt-0.5">{{ r.quantity ?? '—' }} <span class="font-normal text-gray-400">{{ r.unit || '' }}</span></p>
+                    </div>
+                    <div>
+                      <p class="text-[10px] text-gray-400 font-medium">Challan No. &amp; Date</p>
+                      <p class="text-xs font-semibold text-gray-700 mt-0.5 truncate">{{ r.challan_no || '—' }}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+          </div>
+
+          <!-- Footer -->
+          <div v-if="batchResults.length > 0 && !batchParsing"
+            class="px-7 pb-6 pt-3 flex items-center justify-between gap-3 border-t border-gray-100 flex-shrink-0">
+            <p class="text-xs text-gray-400 font-medium">
+              {{ batchResults.filter(r => r.include && r.matchedItemId && !r.done).length }} entr{{ batchResults.filter(r => r.include && r.matchedItemId && !r.done).length === 1 ? 'y' : 'ies' }} ready to submit
+            </p>
+            <div class="flex items-center gap-3">
+              <button @click="closeBatchModal" class="px-5 py-2.5 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-800 text-sm font-semibold transition-all">Close</button>
+              <button @click="submitBatchEntries"
+                :disabled="batchSubmitting || !batchResults.some(r => r.include && r.matchedItemId && !r.done)"
+                class="px-5 py-2.5 rounded-full bg-dark-active text-white text-sm font-semibold shadow shadow-black/20 hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center gap-2">
+                <div v-if="batchSubmitting" class="i-carbon-circle-dash animate-spin"></div>
+                <span>Submit Selected</span>
+              </button>
+            </div>
+          </div>
+
         </div>
       </div>
     </Teleport>

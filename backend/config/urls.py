@@ -13,7 +13,7 @@ urlpatterns = [
     path('api/update-work/', include('update_work.urls')),
     path('api/add-work/', include('add_work.urls')),
     path('api/documents/', include('documents.urls')),
-    path('api/users/', include('users.urls')),
+    path('api/auth/', include('users.urls')),
     path('api/item-progress/', include('item_progress.urls')),
     path('api/mb-details/', include('mb_details.urls')),
 ]

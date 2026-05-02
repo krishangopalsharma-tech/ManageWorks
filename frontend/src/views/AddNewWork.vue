@@ -7,11 +7,14 @@ const selectedFile = ref(null)
 const sheetLink = ref('')
 const isUploading = ref(false)
 const uploadStatus = ref('')
+const uploadProgress = ref(0)
+const uploadPhase = ref('')  // 'uploading' | 'processing' | ''
 
 const handleFileSelect = (e) => {
   const file = e.target.files[0]
   if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls'))) {
     selectedFile.value = file
+    uploadStatus.value = ''
   } else {
     alert('Please upload a valid Excel file (.xlsx or .xls)')
   }
@@ -26,7 +29,9 @@ const submitData = async () => {
   }
 
   isUploading.value = true
-  uploadStatus.value = 'Uploading...'
+  uploadStatus.value = ''
+  uploadProgress.value = 0
+  uploadPhase.value = selectedFile.value ? 'uploading' : 'processing'
 
   const formData = new FormData()
   if (selectedFile.value) {
@@ -38,19 +43,25 @@ const submitData = async () => {
 
   try {
     const apiUrl = '/api/add-work/upload/'
-    const response = await axios.post(apiUrl, formData)
-    uploadStatus.value = `Success: Uploaded document`
+    await axios.post(apiUrl, formData, {
+      onUploadProgress: (evt) => {
+        if (evt.total) {
+          const pct = Math.round((evt.loaded / evt.total) * 100)
+          uploadProgress.value = pct
+          if (pct === 100) uploadPhase.value = 'processing'
+        }
+      },
+    })
+    uploadProgress.value = 100
+    uploadStatus.value = 'Success: Uploaded document'
     selectedFile.value = null
     sheetLink.value = ''
   } catch (error) {
     console.error(error)
-    if (error.response && error.response.data && error.response.data.error) {
-      uploadStatus.value = error.response.data.error
-    } else {
-      uploadStatus.value = 'Failed to upload document.'
-    }
+    uploadStatus.value = error.response?.data?.error || 'Failed to upload document.'
   } finally {
     isUploading.value = false
+    uploadPhase.value = ''
   }
 }
 </script>
@@ -102,16 +113,35 @@ const submitData = async () => {
 
       <!-- Submit -->
       <div class="pt-6 flex flex-col items-center gap-4">
-        <button 
+        <button
           @click="submitData"
           :disabled="isUploading"
           class="w-full max-w-xs px-8 py-4 rounded-full bg-dark-active text-white shadow-lg shadow-black/20 hover:shadow-xl transition-all hover:-translate-y-0.5 font-semibold tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex-center gap-2"
         >
           <div v-if="isUploading" class="i-carbon-circle-dash animate-spin"></div>
-          {{ isUploading ? 'Processing...' : 'Upload Work Data' }}
+          {{ isUploading ? (uploadPhase === 'processing' ? 'Processing...' : 'Uploading...') : 'Upload Work Data' }}
         </button>
-        
-        <p v-if="uploadStatus" class="text-sm font-medium" :class="uploadStatus.startsWith('Success') ? 'text-green-600' : 'text-red-500'">
+
+        <!-- Progress bar -->
+        <div v-if="isUploading" class="w-full max-w-xs flex flex-col gap-1.5">
+          <div class="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+            <!-- Determinate bar for file upload -->
+            <div v-if="selectedFile && uploadPhase === 'uploading'"
+              class="h-full bg-[#0071e3] rounded-full transition-all duration-300"
+              :style="{ width: uploadProgress + '%' }">
+            </div>
+            <!-- Indeterminate animated bar for sheet fetch / server processing -->
+            <div v-else
+              class="h-full bg-[#0071e3] rounded-full animate-indeterminate">
+            </div>
+          </div>
+          <p class="text-xs text-center text-gray-400 font-medium">
+            <template v-if="uploadPhase === 'uploading'">Uploading file… {{ uploadProgress }}%</template>
+            <template v-else>Fetching &amp; parsing sheet — this may take a few seconds</template>
+          </p>
+        </div>
+
+        <p v-if="uploadStatus" class="text-sm font-medium text-center" :class="uploadStatus.startsWith('Success') ? 'text-green-600' : 'text-red-500'">
           {{ uploadStatus }}
         </p>
       </div>
@@ -119,3 +149,16 @@ const submitData = async () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+@keyframes indeterminate {
+  0%   { transform: translateX(-100%) scaleX(0.4); }
+  50%  { transform: translateX(50%)   scaleX(0.6); }
+  100% { transform: translateX(200%)  scaleX(0.4); }
+}
+.animate-indeterminate {
+  width: 60%;
+  animation: indeterminate 1.4s ease-in-out infinite;
+  transform-origin: left center;
+}
+</style>

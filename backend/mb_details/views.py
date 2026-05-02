@@ -144,9 +144,12 @@ class MBRecordListCreateView(generics.ListCreateAPIView):
             return Response({'error': f'MB number "{mb_number}" already exists for this work.'},
                             status=status.HTTP_400_BAD_REQUEST)
 
+        measurement_date = request.data.get('measurement_date') or None
+
         record = MBRecord.objects.create(
             work=work,
             mb_number=mb_number,
+            measurement_date=measurement_date,
             notes=notes,
             created_by=request.user if request.user.is_authenticated else None,
         )
@@ -202,9 +205,10 @@ class MBRecordDetailView(generics.RetrieveDestroyAPIView):
         _check_not_observer(request.user)
         record = self.get_object()
 
-        mb_number  = str(request.data.get('mb_number', record.mb_number) or '').strip()
-        notes      = request.data.get('notes', record.notes) or ''
-        items_data = request.data.get('items')
+        mb_number        = str(request.data.get('mb_number', record.mb_number) or '').strip()
+        measurement_date = request.data.get('measurement_date', record.measurement_date) or None
+        notes            = request.data.get('notes', record.notes) or ''
+        items_data       = request.data.get('items')
 
         if not mb_number:
             return Response({'error': 'mb_number is required.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -217,8 +221,9 @@ class MBRecordDetailView(generics.RetrieveDestroyAPIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        record.mb_number = mb_number
-        record.notes     = notes
+        record.mb_number        = mb_number
+        record.measurement_date = measurement_date
+        record.notes            = notes
         record.save()
 
         if items_data is not None:
