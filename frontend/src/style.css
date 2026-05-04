@@ -578,7 +578,48 @@ select.form-field {
 
 /* ── 9. DARK MODE ADAPTATION ─────────────────────────────────────────────── */
 
-/* html.dark toggles dark mode (bind via Vue composable on <html>) */
 html.dark { color-scheme: dark; }
 html.dark body { background-color: #000000; }
-/* All CSS variables in [data-theme='dark'] above drive the rest automatically */
+
+/* ── 10. DARK MODE — TAILWIND/UNOCSS CLASS OVERRIDES ────────────────────── */
+/* Catches hardcoded Tailwind classes in views that aren't using CSS variables */
+
+[data-theme='dark'] .bg-white { background-color: var(--color-surface) !important; }
+[data-theme='dark'] .bg-gray-50 { background-color: var(--color-surface-secondary) !important; }
+[data-theme='dark'] .bg-light-bg { background-color: var(--color-bg) !important; }
+[data-theme='dark'] .bg-light-surface { background-color: var(--color-surface) !important; }
+
+[data-theme='dark'] .text-gray-900 { color: var(--color-text-primary) !important; }
+[data-theme='dark'] .text-gray-800 { color: var(--color-text-primary) !important; }
+[data-theme='dark'] .text-gray-700 { color: var(--color-text-secondary) !important; }
+[data-theme='dark'] .text-gray-600 { color: var(--color-text-secondary) !important; }
+[data-theme='dark'] .text-gray-500 { color: var(--color-text-secondary) !important; }
+[data-theme='dark'] .text-gray-400 { color: var(--color-text-tertiary) !important; }
+
+[data-theme='dark'] .border-gray-100 { border-color: var(--color-border) !important; }
+[data-theme='dark'] .border-gray-200 { border-color: var(--color-border-strong) !important; }
+
+[data-theme='dark'] .divide-gray-100 > * + * { border-color: var(--color-border) !important; }
+[data-theme='dark'] .divide-gray-200 > * + * { border-color: var(--color-border-strong) !important; }
+
+/* Table rows */
+[data-theme='dark'] .hover\:bg-gray-50:hover { background-color: var(--color-surface-secondary) !important; }
+[data-theme='dark'] .hover\:bg-white:hover { background-color: var(--color-surface-elevated) !important; }
+
+/* Form inputs in dark mode */
+[data-theme='dark'] input,
+[data-theme='dark'] select,
+[data-theme='dark'] textarea {
+  color-scheme: dark;
+  color: var(--color-text-primary);
+  background-color: var(--color-surface-secondary);
+}
+
+/* Stripe rows in tables */
+[data-theme='dark'] .odd\:bg-white:nth-child(odd),
+[data-theme='dark'] .even\:bg-gray-50:nth-child(even) {
+  background-color: var(--color-surface) !important;
+}
+[data-theme='dark'] .even\:bg-gray-50:nth-child(even) {
+  background-color: var(--color-surface-secondary) !important;
+}

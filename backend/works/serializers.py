@@ -29,10 +29,22 @@ class WorkExtensionSerializer(serializers.ModelSerializer):
 class WorkSerializer(serializers.ModelSerializer):
     items = WorkItemSerializer(many=True, read_only=True)
     extensions = WorkExtensionSerializer(many=True, read_only=True)
+    mb_billing = serializers.SerializerMethodField()
 
     class Meta:
         model = Work
         fields = '__all__'
+
+    def get_mb_billing(self, obj):
+        return [
+            {
+                'date': str(mb.measurement_date) if mb.measurement_date else None,
+                'amount': round(sum(item.amount or 0 for item in mb.items.all()), 2),
+                'mb_number': mb.mb_number,
+            }
+            for mb in obj.mb_records.all()
+            if mb.measurement_date
+        ]
 
 
 class WorkEditSerializer(serializers.ModelSerializer):

@@ -2,10 +2,13 @@
 import { ref, watchEffect, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
+import { useTheme } from '../composables/useTheme'
+import ManageWorksIcon from './ManageWorksIcon.vue'
 
 const router = useRouter()
 const route  = useRoute()
 const { state, logout } = useAuth()
+const { isDark, toggle: toggleTheme } = useTheme()
 
 const isAdmin = computed(() => state.user?.role === 'admin' || state.user?.is_staff)
 
@@ -76,9 +79,9 @@ const visibleSubItems = (item) => {
 <template>
   <aside class="w-72 h-full p-6 flex flex-col gap-6">
     <!-- Logo -->
-    <div class="flex flex-center gap-2 mb-6 pt-2">
-      <div class="i-carbon-flash text-2xl text-dark-active"></div>
-      <span class="text-xl font-bold text-gray-800 tracking-tight">ManageWorks</span>
+    <div class="flex items-center gap-2.5 mb-6 pt-2">
+      <ManageWorksIcon :size="28" style="color: var(--color-text-primary);" />
+      <span class="text-xl font-bold tracking-tight" style="color: var(--color-text-primary);">ManageWorks</span>
     </div>
 
     <!-- Navigation -->
@@ -99,14 +102,16 @@ const visibleSubItems = (item) => {
           </div>
         </div>
 
-        <!-- Sub Items (filtered by admin) -->
+        <!-- Sub Items -->
         <div v-show="item.subItems && item.expanded && visibleSubItems(item).length" class="flex flex-col gap-1 pl-11 pr-2 pt-1 pb-2">
           <div
             v-for="sub in visibleSubItems(item)"
             :key="sub.name"
             @click="handleSubItemClick(item, sub)"
             class="px-4 py-2.5 rounded-xl text-sm transition-all duration-300 font-medium cursor-pointer select-none"
-            :class="activeSubItem === sub.name ? 'bg-[#111] text-white shadow-md' : 'text-gray-500 hover:text-gray-800 hover:bg-white/60'"
+            :class="activeSubItem === sub.name
+              ? 'bg-[#111] dark:bg-[#f5f5f7] text-white dark:text-[#1d1d1f] shadow-md'
+              : 'text-[#86868b] dark:text-[#aeaeb2] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] hover:bg-white/60 dark:hover:bg-[#2c2c2e]/60'"
           >
             {{ sub.name }}
           </div>
@@ -116,19 +121,43 @@ const visibleSubItems = (item) => {
     </nav>
 
     <!-- User Profile Area -->
-    <div class="mt-auto pt-4 border-t border-gray-200">
-      <div class="flex items-center gap-3 p-2 rounded-xl hover:bg-white soft-shadow transition-all">
-        <div class="w-10 h-10 rounded-full bg-light-bg soft-shadow-inset flex-center overflow-hidden shrink-0">
-          <div class="i-carbon-user text-xl text-gray-500"></div>
+    <div class="mt-auto pt-4" style="border-top: 1px solid var(--color-separator);">
+      <!-- Theme toggle -->
+      <div class="flex items-center justify-between px-2 py-1.5 mb-2">
+        <span class="text-xs font-semibold" style="color: var(--color-text-tertiary);">
+          {{ isDark ? 'Dark mode' : 'Light mode' }}
+        </span>
+        <button
+          @click="toggleTheme"
+          class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-all duration-200 cursor-pointer"
+          style="color: var(--color-text-secondary);"
+          :style="{ backgroundColor: 'var(--color-surface-secondary)' }"
+          :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
+        >
+          <div :class="isDark ? 'i-carbon-sun' : 'i-carbon-moon'" class="text-base"></div>
+        </button>
+      </div>
+
+      <div
+        class="flex items-center gap-3 p-2 rounded-xl transition-all cursor-default"
+        style="hover-bg: var(--color-surface-secondary);"
+        :style="{ '&:hover': { backgroundColor: 'var(--color-surface-secondary)' } }"
+      >
+        <div
+          class="w-10 h-10 rounded-full flex-center overflow-hidden shrink-0"
+          style="background-color: var(--color-surface-secondary);"
+        >
+          <div class="i-carbon-user text-xl" style="color: var(--color-text-tertiary);"></div>
         </div>
         <div class="flex-1 min-w-0">
-          <p class="text-sm font-semibold text-gray-800 truncate">{{ state.user?.name || 'User' }}</p>
-          <p class="text-xs text-gray-500 truncate">{{ state.user?.designation || state.user?.hrms_id }}</p>
+          <p class="text-sm font-semibold truncate" style="color: var(--color-text-primary);">{{ state.user?.name || 'User' }}</p>
+          <p class="text-xs truncate" style="color: var(--color-text-secondary);">{{ state.user?.designation || state.user?.hrms_id }}</p>
         </div>
         <button
           @click="handleLogout"
           title="Sign out"
-          class="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors cursor-pointer"
+          class="p-1.5 rounded-lg transition-colors cursor-pointer hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-500"
+          style="color: var(--color-text-tertiary);"
         >
           <div class="i-carbon-logout text-lg"></div>
         </button>

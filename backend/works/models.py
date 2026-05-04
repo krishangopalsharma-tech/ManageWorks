@@ -23,6 +23,7 @@ class Work(models.Model):
     contractor_address = models.TextField(null=True, blank=True)
     date_of_completion = models.CharField(max_length=255, null=True, blank=True)
     consignee = models.CharField(max_length=255, null=True, blank=True)
+    hrms_id = models.CharField(max_length=255, null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -41,6 +42,7 @@ class WorkItem(models.Model):
     total_amount = models.FloatField(null=True, blank=True)
 
     technical_specification = models.CharField(max_length=255, null=True, blank=True)
+    inspection_agency = models.CharField(max_length=255, null=True, blank=True)
     supplied_quantity = models.FloatField(null=True, blank=True)
     challan_no = models.CharField(max_length=255, null=True, blank=True)
     udm_entry = models.CharField(max_length=255, null=True, blank=True)

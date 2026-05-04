@@ -7,6 +7,7 @@ const selectedFile = ref(null)
 const sheetLink = ref('')
 const isUploading = ref(false)
 const uploadStatus = ref('')
+const uploadStatusType = ref('')  // 'created' | 'updated' | 'no_changes' | 'error'
 const uploadProgress = ref(0)
 const uploadPhase = ref('')  // 'uploading' | 'processing' | ''
 
@@ -30,6 +31,7 @@ const submitData = async () => {
 
   isUploading.value = true
   uploadStatus.value = ''
+  uploadStatusType.value = ''
   uploadProgress.value = 0
   uploadPhase.value = selectedFile.value ? 'uploading' : 'processing'
 
@@ -41,9 +43,12 @@ const submitData = async () => {
     formData.append('link', sheetLink.value)
   }
 
+  const csrfToken = document.cookie.match(/csrftoken=([^;]+)/)?.[1] ?? ''
+
   try {
     const apiUrl = '/api/add-work/upload/'
-    await axios.post(apiUrl, formData, {
+    const res = await axios.post(apiUrl, formData, {
+      headers: { 'X-CSRFToken': csrfToken },
       onUploadProgress: (evt) => {
         if (evt.total) {
           const pct = Math.round((evt.loaded / evt.total) * 100)
@@ -53,11 +58,15 @@ const submitData = async () => {
       },
     })
     uploadProgress.value = 100
-    uploadStatus.value = 'Success: Uploaded document'
-    selectedFile.value = null
-    sheetLink.value = ''
+    uploadStatusType.value = res.data.status   // 'created' | 'updated' | 'no_changes'
+    uploadStatus.value = res.data.message
+    if (res.data.status === 'created') {
+      selectedFile.value = null
+      sheetLink.value = ''
+    }
   } catch (error) {
     console.error(error)
+    uploadStatusType.value = 'error'
     uploadStatus.value = error.response?.data?.error || 'Failed to upload document.'
   } finally {
     isUploading.value = false
@@ -141,9 +150,31 @@ const submitData = async () => {
           </p>
         </div>
 
-        <p v-if="uploadStatus" class="text-sm font-medium text-center" :class="uploadStatus.startsWith('Success') ? 'text-green-600' : 'text-red-500'">
-          {{ uploadStatus }}
-        </p>
+        <div v-if="uploadStatus" class="w-full max-w-sm rounded-xl px-4 py-3 flex items-start gap-3"
+          :class="{
+            'bg-green-50 border border-green-200': uploadStatusType === 'created',
+            'bg-blue-50 border border-blue-200':   uploadStatusType === 'updated',
+            'bg-gray-50 border border-gray-200':   uploadStatusType === 'no_changes',
+            'bg-red-50 border border-red-200':     uploadStatusType === 'error',
+          }">
+          <div class="mt-0.5 flex-shrink-0 text-base"
+            :class="{
+              'i-carbon-checkmark-filled text-green-500': uploadStatusType === 'created',
+              'i-carbon-update-now text-blue-500':        uploadStatusType === 'updated',
+              'i-carbon-information text-gray-400':       uploadStatusType === 'no_changes',
+              'i-carbon-warning-filled text-red-500':     uploadStatusType === 'error',
+            }">
+          </div>
+          <p class="text-sm font-medium"
+            :class="{
+              'text-green-700': uploadStatusType === 'created',
+              'text-blue-700':  uploadStatusType === 'updated',
+              'text-gray-600':  uploadStatusType === 'no_changes',
+              'text-red-600':   uploadStatusType === 'error',
+            }">
+            {{ uploadStatus }}
+          </p>
+        </div>
       </div>
 
     </div>

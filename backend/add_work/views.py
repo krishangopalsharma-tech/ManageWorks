@@ -54,6 +54,26 @@ def _download_google_sheet(sheet_id, tmp_path):
         )
 
 
+def _parse_response(result):
+    """Convert parser result dict → (response_data, http_status)."""
+    s = result['status']
+    if s == 'created':
+        return (
+            {'status': 'created', 'message': f"{result['items']} items uploaded successfully."},
+            status.HTTP_201_CREATED,
+        )
+    if s == 'updated':
+        return (
+            {'status': 'updated', 'message': f"Work updated — {result['changes']} change(s) applied across {result['items']} items."},
+            status.HTTP_200_OK,
+        )
+    # no_changes
+    return (
+        {'status': 'no_changes', 'message': f"Work already up to date — no changes found ({result['items']} items)."},
+        status.HTTP_200_OK,
+    )
+
+
 class UploadWorkView(APIView):
     def post(self, request, *args, **kwargs):
         file_obj = request.FILES.get('file')
@@ -68,9 +88,10 @@ class UploadWorkView(APIView):
                     tmp.write(chunk)
                 tmp_path = tmp.name
             try:
-                items_created = parse_and_save_work_excel(tmp_path)
+                result = parse_and_save_work_excel(tmp_path)
                 os.remove(tmp_path)
-                return Response({'success': items_created}, status=status.HTTP_201_CREATED)
+                data, http_status = _parse_response(result)
+                return Response(data, status=http_status)
             except Exception as e:
                 if os.path.exists(tmp_path):
                     os.remove(tmp_path)
@@ -83,9 +104,10 @@ class UploadWorkView(APIView):
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
                     tmp_path = tmp.name
                 _download_google_sheet(sheet_id, tmp_path)
-                items_created = parse_and_save_work_excel(tmp_path)
+                result = parse_and_save_work_excel(tmp_path)
                 os.remove(tmp_path)
-                return Response({'success': items_created}, status=status.HTTP_201_CREATED)
+                data, http_status = _parse_response(result)
+                return Response(data, status=http_status)
             except Exception as e:
                 if tmp_path and os.path.exists(tmp_path):
                     os.remove(tmp_path)

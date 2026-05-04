@@ -2,6 +2,9 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import Sidebar from './components/Sidebar.vue'
+import { useTheme } from './composables/useTheme'
+
+useTheme()
 
 const route = useRoute()
 const authRoutes = ['/login', '/register']
@@ -9,10 +12,16 @@ const showSidebar = computed(() => !authRoutes.includes(route.path))
 </script>
 
 <template>
-  <div class="h-screen w-screen bg-light-bg font-sans flex overflow-hidden text-gray-800">
+  <div
+    class="h-screen w-screen font-sans flex overflow-hidden"
+    style="background-color: var(--color-bg); color: var(--color-text-primary);"
+  >
     <!-- Sidebar (hidden on auth pages) -->
     <div v-if="showSidebar" class="h-full py-6 pl-6 shrink-0 z-10 relative">
-      <div class="h-full bg-light-surface rounded-2xl soft-shadow overflow-hidden">
+      <div
+        class="h-full rounded-2xl soft-shadow overflow-hidden"
+        style="background-color: var(--color-surface);"
+      >
         <Sidebar />
       </div>
     </div>

@@ -16,6 +16,7 @@ def _base_queryset():
     return Work.objects.prefetch_related(
         Prefetch('items', queryset=_items_queryset()),
         'extensions',
+        'mb_records__items',
     )
 
 

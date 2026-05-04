@@ -124,14 +124,14 @@ export default defineConfig({
     'lift-shadow':  'shadow-[0_16px_40px_rgba(0,0,0,0.10)]',
 
     // Sidebar navigation items
-    'nav-item':        'flex items-center gap-3 px-4 py-3 rounded-xl text-[#86868b] hover:bg-[#f5f5f7] hover:text-[#1d1d1f] transition-all duration-300 font-medium cursor-pointer select-none',
-    'nav-item-active': 'flex items-center gap-3 px-4 py-3 rounded-xl bg-[#0071e3]/10 text-[#0071e3] transition-all duration-300 font-medium cursor-pointer select-none',
+    'nav-item':        'flex items-center gap-3 px-4 py-3 rounded-xl text-[#86868b] hover:bg-[#f5f5f7] hover:text-[#1d1d1f] dark:text-[#aeaeb2] dark:hover:bg-[#2c2c2e] dark:hover:text-[#f5f5f7] transition-all duration-300 font-medium cursor-pointer select-none',
+    'nav-item-active': 'flex items-center gap-3 px-4 py-3 rounded-xl bg-[#0071e3]/10 text-[#0071e3] dark:bg-[#2997ff]/15 dark:text-[#2997ff] transition-all duration-300 font-medium cursor-pointer select-none',
 
     // Page card wrapper (the white rounded card that fills each page)
-    'page-card': 'bg-white rounded-2xl soft-shadow min-h-full w-full flex flex-col overflow-hidden',
+    'page-card': 'bg-white dark:bg-[#1c1c1e] rounded-2xl soft-shadow min-h-full w-full flex flex-col overflow-hidden',
 
     // Page header block inside a page-card
-    'page-header': 'px-8 pt-7 pb-5 border-b border-gray-100',
+    'page-header': 'px-8 pt-7 pb-5 border-b border-gray-100 dark:border-[#3a3a3c]',
 
     // Apple-style pill button — primary blue
     'btn-apple': 'inline-flex items-center justify-center gap-1.5 rounded-full bg-[#0071e3] text-white font-semibold text-sm px-5 py-2.5 transition-all hover:bg-[#0077ed] hover:-translate-y-px hover:shadow-[0_8px_20px_rgba(0,113,227,0.22)] active:bg-[#006ecd] active:translate-y-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none',
@@ -143,20 +143,20 @@ export default defineConfig({
     'btn-apple-ghost': 'inline-flex items-center justify-center gap-1.5 rounded-full text-[#0071e3] font-semibold text-sm px-4 py-2 transition-all hover:bg-[#0071e3]/10 active:opacity-70',
 
     // Apple-style search / input wrap
-    'input-apple': 'flex items-center bg-gray-50 border border-gray-200 rounded-2xl px-5 py-3 focus-within:ring-2 focus-within:ring-[#0071e3]/20 focus-within:border-[#0071e3] focus-within:bg-white transition-all',
+    'input-apple': 'flex items-center bg-gray-50 dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c] rounded-2xl px-5 py-3 focus-within:ring-2 focus-within:ring-[#0071e3]/20 focus-within:border-[#0071e3] focus-within:bg-white dark:focus-within:bg-[#1c1c1e] transition-all',
 
     // Card (white surface, soft shadow, rounded-2xl)
-    'card-apple':          'bg-white rounded-2xl soft-shadow border border-gray-100 overflow-hidden',
-    'card-apple-hover':    'bg-white rounded-2xl soft-shadow border border-gray-100 overflow-hidden transition-all hover:-translate-y-1 hover:med-shadow cursor-pointer',
+    'card-apple':          'bg-white dark:bg-[#1c1c1e] rounded-2xl soft-shadow border border-gray-100 dark:border-[#3a3a3c] overflow-hidden',
+    'card-apple-hover':    'bg-white dark:bg-[#1c1c1e] rounded-2xl soft-shadow border border-gray-100 dark:border-[#3a3a3c] overflow-hidden transition-all hover:-translate-y-1 hover:med-shadow cursor-pointer',
 
     // Stat / pill badge
-    'badge-blue':   'flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-xl px-4 py-2 text-xs font-semibold text-blue-700',
-    'badge-green':  'flex items-center gap-2 bg-green-50 border border-green-100 rounded-xl px-4 py-2 text-xs font-semibold text-green-700',
-    'badge-orange': 'flex items-center gap-2 bg-orange-50 border border-orange-100 rounded-xl px-4 py-2 text-xs font-semibold text-orange-700',
-    'badge-gray':   'flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs font-semibold text-gray-600',
+    'badge-blue':   'flex items-center gap-2 bg-blue-50 dark:bg-[#2997ff]/15 border border-blue-100 dark:border-[#2997ff]/25 rounded-xl px-4 py-2 text-xs font-semibold text-blue-700 dark:text-[#2997ff]',
+    'badge-green':  'flex items-center gap-2 bg-green-50 dark:bg-[#34c759]/15 border border-green-100 dark:border-[#34c759]/25 rounded-xl px-4 py-2 text-xs font-semibold text-green-700 dark:text-[#34c759]',
+    'badge-orange': 'flex items-center gap-2 bg-orange-50 dark:bg-[#ff9500]/15 border border-orange-100 dark:border-[#ff9500]/25 rounded-xl px-4 py-2 text-xs font-semibold text-orange-700 dark:text-[#ff9500]',
+    'badge-gray':   'flex items-center gap-2 bg-gray-50 dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c] rounded-xl px-4 py-2 text-xs font-semibold text-gray-600 dark:text-[#aeaeb2]',
 
     // Glass surface (frosted, for modals / overlays)
-    'glass-surface': 'bg-white/80 backdrop-blur-xl border border-white/60',
+    'glass-surface': 'bg-white/80 dark:bg-[#1c1c1e]/80 backdrop-blur-xl border border-white/60 dark:border-white/10',
 
     // Section label (tiny uppercase, Apple style)
     'section-label': 'text-[10px] font-bold text-gray-400 uppercase tracking-widest',
@@ -187,6 +187,8 @@ export default defineConfig({
     'i-carbon-add-filled',
     'i-carbon-settings',
     'i-carbon-flash',
+    'i-carbon-moon',
+    'i-carbon-sun',
     'i-carbon-user',
     'i-carbon-overflow-menu-vertical',
     'i-carbon-chevron-down',

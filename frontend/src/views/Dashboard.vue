@@ -9,10 +9,31 @@ ChartJS.register(Title, Tooltip, Legend, ArcElement, CategoryScale, LinearScale,
 const stats     = ref(null)
 const loas      = ref([])
 const trendData = ref([])
-const activeLoa    = ref(null)
+const selectedLoas = ref([])
+const searchQuery  = ref('')
 const activePeriod = ref('monthly')
 const isLoading      = ref(true)
 const isTrendLoading = ref(false)
+
+const filteredLoas = computed(() =>
+  loas.value.filter(l => l.label.toLowerCase().includes(searchQuery.value.toLowerCase()))
+)
+
+const isAllSelected = computed(() => selectedLoas.value.length === 0)
+
+function toggleLoa(id) {
+  const idx = selectedLoas.value.indexOf(id)
+  if (idx === -1) selectedLoas.value.push(id)
+  else selectedLoas.value.splice(idx, 1)
+}
+
+function selectAll() {
+  selectedLoas.value = []
+}
+
+const loaIdsParam = computed(() =>
+  selectedLoas.value.length > 0 ? selectedLoas.value.join(',') : null
+)
 
 const periods = [
   { label: 'Daily',   value: 'daily'   },
@@ -125,8 +146,9 @@ const barOptions = {
 const fetchStats = async () => {
   isLoading.value = true
   try {
-    const url = activeLoa.value ? `/api/dashboard/?loa_id=${activeLoa.value}` : '/api/dashboard/'
-    const res = await axios.get(url)
+    const params = {}
+    if (loaIdsParam.value) params.loa_ids = loaIdsParam.value
+    const res = await axios.get('/api/dashboard/', { params })
     stats.value = res.data
     loas.value  = res.data.loas
   } catch (e) {
@@ -140,7 +162,7 @@ const fetchTrend = async () => {
   isTrendLoading.value = true
   try {
     const params = { period: activePeriod.value }
-    if (activeLoa.value) params.loa_id = activeLoa.value
+    if (loaIdsParam.value) params.loa_ids = loaIdsParam.value
     const res = await axios.get('/api/dashboard/trend/', { params })
     trendData.value = res.data
   } catch (e) {
@@ -150,7 +172,7 @@ const fetchTrend = async () => {
   }
 }
 
-watch(activeLoa,    () => { fetchStats(); fetchTrend() })
+watch(selectedLoas, () => { fetchStats(); fetchTrend() }, { deep: true })
 watch(activePeriod, () => fetchTrend())
 onMounted(() => { fetchStats(); fetchTrend() })
 </script>
@@ -253,26 +275,44 @@ onMounted(() => { fetchStats(); fetchTrend() })
       </div>
     </div>
 
-    <!-- ── Right: LOA Selection ───────────────────────────────────────── -->
+    <!-- ── Right: Work Context ───────────────────────────────────────── -->
     <div class="w-[40%] bg-light-surface rounded-2xl soft-shadow flex flex-col overflow-hidden">
 
       <div class="px-7 pt-6 pb-4 border-b border-gray-100 flex-shrink-0">
-        <h2 class="text-base font-bold text-gray-800">View Context</h2>
-        <p class="text-xs text-gray-400 font-medium mt-0.5">Filter all charts by a specific work</p>
+        <h2 class="text-base font-bold text-gray-800">Work Context</h2>
+        <!-- Search bar -->
+        <div class="relative mt-3">
+          <div class="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+            <div class="i-carbon-search text-gray-400 text-sm"></div>
+          </div>
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="Search works..."
+            class="w-full pl-8 pr-3 py-2 text-xs rounded-lg border border-gray-200 bg-white focus:outline-none focus:border-[#0071e3] transition-colors placeholder-gray-400"
+          />
+        </div>
       </div>
 
       <div class="flex-1 min-h-0 flex flex-col overflow-hidden p-5 gap-3">
 
         <!-- Total aggregation option -->
         <div
-          @click="activeLoa = null"
-          class="px-4 py-3 rounded-xl cursor-pointer border transition-all flex-shrink-0"
-          :class="activeLoa === null
+          @click="selectAll"
+          class="px-4 py-3 rounded-xl cursor-pointer border transition-all flex-shrink-0 flex items-center gap-3"
+          :class="isAllSelected
             ? 'bg-[#0071e3]/10 border-[#0071e3] text-[#0071e3]'
             : 'bg-[#f5f5f7] border-transparent text-gray-600 hover:border-gray-300'">
-          <div class="font-bold text-sm tracking-wide">Total Aggregation</div>
-          <div class="text-xs mt-0.5" :class="activeLoa === null ? 'text-[#0071e3]/80' : 'text-gray-400'">
-            All works combined
+          <div
+            class="w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition-all"
+            :class="isAllSelected ? 'bg-[#0071e3] border-[#0071e3]' : 'border-gray-300 bg-white'">
+            <div v-if="isAllSelected" class="i-carbon-checkmark text-white text-[10px]"></div>
+          </div>
+          <div>
+            <div class="font-bold text-sm tracking-wide">Total Aggregation</div>
+            <div class="text-xs mt-0.5" :class="isAllSelected ? 'text-[#0071e3]/80' : 'text-gray-400'">
+              All works combined
+            </div>
           </div>
         </div>
 
@@ -281,19 +321,52 @@ onMounted(() => { fetchStats(); fetchTrend() })
         <!-- LOA list -->
         <div class="flex flex-col gap-2 overflow-y-auto flex-1 pr-1" style="scrollbar-width: thin;">
           <div
-            v-for="loa in loas" :key="loa.id"
-            @click="activeLoa = loa.id"
-            class="px-4 py-3 rounded-xl cursor-pointer border transition-all text-sm leading-snug flex-shrink-0"
-            :class="activeLoa === loa.id
-              ? 'bg-[#0071e3] text-white border-[#0071e3] shadow-lg shadow-[#0071e3]/20'
+            v-for="loa in filteredLoas" :key="loa.id"
+            @click="toggleLoa(loa.id)"
+            class="relative px-4 py-3 rounded-xl cursor-pointer border transition-all text-sm leading-snug flex-shrink-0 flex items-start gap-3"
+            :class="selectedLoas.includes(loa.id)
+              ? 'bg-[#0071e3]/10 border-[#0071e3] text-[#0071e3]'
               : 'bg-white border-gray-200 hover:border-[#0071e3]/40 text-gray-700'">
-            {{ loa.label }}
+
+            <!-- Checkbox -->
+            <div
+              class="w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center mt-0.5 transition-all"
+              :class="selectedLoas.includes(loa.id) ? 'bg-[#0071e3] border-[#0071e3]' : 'border-gray-300 bg-white'">
+              <div v-if="selectedLoas.includes(loa.id)" class="i-carbon-checkmark text-white text-[10px]"></div>
+            </div>
+
+            <!-- Label -->
+            <span class="flex-1 min-w-0">{{ loa.label }}</span>
+
+            <!-- Update dots -->
+            <div class="flex gap-1 items-center flex-shrink-0 mt-0.5">
+              <div
+                v-if="loa.supply_update"
+                class="w-2 h-2 rounded-full bg-[#0071e3]"
+                title="Recent supply update">
+              </div>
+              <div
+                v-if="loa.execution_update"
+                class="w-2 h-2 rounded-full bg-[#34c759]"
+                title="Recent execution update">
+              </div>
+            </div>
+          </div>
+
+          <div v-if="filteredLoas.length === 0 && loas.length > 0"
+            class="text-center p-4 text-xs font-medium text-gray-400 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+            No works match search.
           </div>
 
           <div v-if="loas.length === 0"
             class="text-center p-4 text-xs font-medium text-gray-400 bg-gray-50 rounded-lg border border-dashed border-gray-200">
             No configured LOAs found. Upload data first.
           </div>
+        </div>
+
+        <!-- Multi-select summary -->
+        <div v-if="selectedLoas.length > 0" class="flex-shrink-0 px-3 py-2 bg-[#0071e3]/5 rounded-lg border border-[#0071e3]/20 text-xs text-[#0071e3] font-medium">
+          {{ selectedLoas.length }} work{{ selectedLoas.length > 1 ? 's' : '' }} selected — showing combined view
         </div>
 
       </div>

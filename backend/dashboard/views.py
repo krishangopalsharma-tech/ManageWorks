@@ -10,9 +10,13 @@ from mb_details.models import MBItem, MBRecord
 
 class DashboardStatsView(APIView):
     def get(self, request):
+        loa_ids_param = request.query_params.get('loa_ids')
         loa_id = request.query_params.get('loa_id')
 
-        if loa_id:
+        if loa_ids_param:
+            ids = [int(x) for x in loa_ids_param.split(',') if x.strip().isdigit()]
+            items = WorkItem.objects.filter(work_id__in=ids)
+        elif loa_id:
             items = WorkItem.objects.filter(work_id=loa_id)
         else:
             items = WorkItem.objects.all()
@@ -44,7 +48,10 @@ class DashboardStatsView(APIView):
         overall_avg = ((supply_progress_sum + exec_progress_sum) / overall_cnt * 100) if overall_cnt > 0 else 0
 
         # Financial progress — sourced from MB items
-        if loa_id:
+        if loa_ids_param and ids:
+            total_work_amount = WorkItem.objects.filter(work_id__in=ids).aggregate(t=Sum('total_amount'))['t'] or 0
+            mb_total          = MBItem.objects.filter(mb_record__work_id__in=ids).aggregate(t=Sum('amount'))['t'] or 0
+        elif loa_id:
             total_work_amount = WorkItem.objects.filter(work_id=loa_id).aggregate(t=Sum('total_amount'))['t'] or 0
             mb_total          = MBItem.objects.filter(mb_record__work_id=loa_id).aggregate(t=Sum('amount'))['t'] or 0
         else:
@@ -53,10 +60,22 @@ class DashboardStatsView(APIView):
 
         fin_prog = (mb_total / total_work_amount * 100) if total_work_amount > 0 else 0
 
+        recent_cutoff = timezone.now() - timedelta(days=7)
+        recent_supply_ids = set(
+            WorkItemEntry.objects.filter(entry_type='supply', submitted_at__gte=recent_cutoff)
+            .values_list('work_item__work_id', flat=True).distinct()
+        )
+        recent_exec_ids = set(
+            WorkItemEntry.objects.filter(entry_type='execution', submitted_at__gte=recent_cutoff)
+            .values_list('work_item__work_id', flat=True).distinct()
+        )
+
         loa_list = [
             {
-                'id':    w.id,
-                'label': f"{w.tender_number or 'Unknown Tender'} | {w.loa_number or 'Unknown LOA'} | {w.contractor_name or 'Unknown'}"
+                'id':               w.id,
+                'label':            f"{w.tender_number or 'Unknown Tender'} | {w.loa_number or 'Unknown LOA'} | {w.contractor_name or 'Unknown'}",
+                'supply_update':    w.id in recent_supply_ids,
+                'execution_update': w.id in recent_exec_ids,
             }
             for w in Work.objects.all()
         ]
@@ -87,11 +106,19 @@ class ProgressTrendView(APIView):
 
     def get(self, request):
         period = request.query_params.get('period', 'monthly')
+        loa_ids_param = request.query_params.get('loa_ids')
         loa_id = request.query_params.get('loa_id')
 
         cfg = self.PERIOD_CONFIG.get(period, self.PERIOD_CONFIG['monthly'])
 
-        item_qs   = WorkItem.objects.filter(work_id=loa_id) if loa_id else WorkItem.objects.all()
+        if loa_ids_param:
+            ids = [int(x) for x in loa_ids_param.split(',') if x.strip().isdigit()]
+            item_qs = WorkItem.objects.filter(work_id__in=ids)
+        elif loa_id:
+            item_qs = WorkItem.objects.filter(work_id=loa_id)
+        else:
+            item_qs = WorkItem.objects.all()
+
         sch_a_qty = item_qs.filter(schedule__istartswith='A').aggregate(t=Sum('qty'))['t'] or 0
         sch_b_qty = item_qs.filter(schedule__istartswith='B').aggregate(t=Sum('qty'))['t'] or 0
 
@@ -103,7 +130,10 @@ class ProgressTrendView(APIView):
         exec_qs = WorkItemEntry.objects.filter(
             work_item__schedule__istartswith='B', entry_type='execution'
         )
-        if loa_id:
+        if loa_ids_param and ids:
+            supply_qs = supply_qs.filter(work_item__work_id__in=ids)
+            exec_qs   = exec_qs.filter(work_item__work_id__in=ids)
+        elif loa_id:
             supply_qs = supply_qs.filter(work_item__work_id=loa_id)
             exec_qs   = exec_qs.filter(work_item__work_id=loa_id)
 
@@ -141,7 +171,9 @@ class ProgressTrendView(APIView):
         total_work_amount = item_qs.aggregate(t=Sum('total_amount'))['t'] or 0
         fin_totals = {}
         mb_qs = MBItem.objects.filter(mb_record__measurement_date__isnull=False)
-        if loa_id:
+        if loa_ids_param and ids:
+            mb_qs = mb_qs.filter(mb_record__work_id__in=ids)
+        elif loa_id:
             mb_qs = mb_qs.filter(mb_record__work_id=loa_id)
         if cutoff:
             mb_qs = mb_qs.filter(mb_record__measurement_date__gte=cutoff.date())

@@ -147,6 +147,169 @@ const sortedResults = computed(() => {
     return sortDir.value === 'asc' ? av - bv : bv - av
   })
 })
+
+// ── PDF Export ─────────────────────────────────────────────────────────────
+const isGeneratingPDF = ref(false)
+
+const generateItemPDF = async () => {
+  if (!sortedResults.value.length) return
+  isGeneratingPDF.value = true
+  try {
+    const { jsPDF } = await import('jspdf')
+    const { default: autoTable } = await import('jspdf-autotable')
+
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+    const pw = doc.internal.pageSize.getWidth()
+    const ph = doc.internal.pageSize.getHeight()
+    const mg = 12
+    const cw = pw - mg * 2
+
+    const C_TEAL  = [29, 95, 94]
+    const C_AMBER = [193, 120, 65]
+    const C_BLUE  = [0, 113, 227]
+    const C_GRAY  = [107, 114, 128]
+
+    const items = sortedResults.value
+    const st    = stats.value
+    const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+
+    const addPageHeader = () => {
+      doc.setFillColor(...C_TEAL)
+      doc.rect(0, 0, pw, 12, 'F')
+      doc.setTextColor(255, 255, 255)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(8.5)
+      doc.text('Item Progress Report', mg, 8)
+      if (itemSearch.value) {
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(7.5)
+        doc.text(`Search: "${itemSearch.value}"`, pw / 2, 8, { align: 'center' })
+      }
+      doc.setFontSize(7)
+      doc.text(today, pw - mg, 8, { align: 'right' })
+    }
+
+    addPageHeader()
+
+    // Stats summary
+    autoTable(doc, {
+      startY: 16,
+      margin: { left: mg, right: mg },
+      head: [['Supply Progress (Sch A)', 'Execution Progress (Sch B)', 'Supply Items', 'Exec Items', 'Total Items Found']],
+      body: [[
+        `${st.supplyPct}%`,
+        `${st.execPct}%`,
+        String(st.supplyCount),
+        String(st.execCount),
+        String(items.length),
+      ]],
+      headStyles: { fillColor: C_TEAL, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold', halign: 'center' },
+      bodyStyles: { fontSize: 10, fontStyle: 'bold', halign: 'center', minCellHeight: 9 },
+      columnStyles: {
+        0: { textColor: C_TEAL },
+        1: { textColor: C_AMBER },
+      },
+      tableLineColor: [229, 231, 235],
+      tableLineWidth: 0.2,
+    })
+
+    let y = doc.lastAutoTable.finalY + 6
+
+    for (const item of items) {
+      const sch = String(item.schedule || '').toUpperCase().trim()
+      const isB = sch.startsWith('B')
+      const done = isB ? (item.executed_quantity || 0) : (item.supplied_quantity || 0)
+      const pct = item.qty ? Math.min(done / item.qty * 100, 999).toFixed(0) : '0'
+      const pctNum = parseFloat(pct)
+
+      // Estimate space needed: item header ~7mm + entries * ~5mm + gap 4mm
+      const neededH = 8 + (item.entries || []).length * 5 + 4
+      if (y + Math.min(neededH, 30) > ph - 12) {
+        doc.addPage()
+        addPageHeader()
+        y = 16
+      }
+
+      // Item header block
+      autoTable(doc, {
+        startY: y,
+        margin: { left: mg, right: mg },
+        head: [[
+          { content: `${item.loa_number || '—'}  ·  ${item.schedule}  ·  S.No ${item.serial_number}`, styles: { fillColor: [235, 245, 244], textColor: C_TEAL, fontStyle: 'bold', fontSize: 7.5 } },
+          { content: `Required: ${item.qty} ${item.unit}`, styles: { fillColor: [235, 245, 244], textColor: C_GRAY, fontSize: 7.5, halign: 'right' } },
+          { content: `${isB ? 'Executed' : 'Supplied'}: ${done} ${item.unit}`, styles: { fillColor: [235, 245, 244], textColor: C_GRAY, fontSize: 7.5, halign: 'right' } },
+          { content: `${pct}%`, styles: { fillColor: [235, 245, 244], textColor: pctNum >= 99 ? C_TEAL : pctNum > 0 ? C_BLUE : C_GRAY, fontStyle: 'bold', fontSize: 8, halign: 'right' } },
+        ]],
+        body: [[{ content: item.item_desc || '', colSpan: 4, styles: { fontSize: 7.5, textColor: [50, 50, 50], cellPadding: { top: 2, bottom: 2, left: 3, right: 3 } } }]],
+        columnStyles: {
+          0: { cellWidth: 'auto' },
+          1: { cellWidth: 38 },
+          2: { cellWidth: 40 },
+          3: { cellWidth: 22 },
+        },
+        tableLineColor: [209, 231, 229],
+        tableLineWidth: 0.2,
+      })
+
+      y = doc.lastAutoTable.finalY
+
+      if ((item.entries || []).length > 0) {
+        autoTable(doc, {
+          startY: y,
+          margin: { left: mg + 3, right: mg },
+          head: [['#', 'Type', 'Qty', 'Receive Note / Challan', 'UDM Entry', 'Submitted By', 'Date']],
+          body: item.entries.map((e, idx) => [
+            idx + 1,
+            e.entry_type === 'execution' ? 'Exec' : 'Supply',
+            `${e.quantity} ${item.unit}`,
+            [e.receive_note_no, e.challan_no].filter(Boolean).join(' / ') || '—',
+            e.udm_entry || '—',
+            e.submitted_by_user?.username || '—',
+            e.date_of_receipt ? String(e.date_of_receipt).substring(0, 10) : fmtDateTime(e.submitted_at),
+          ]),
+          headStyles: { fillColor: [241, 245, 249], textColor: C_GRAY, fontSize: 7, fontStyle: 'bold' },
+          bodyStyles: { fontSize: 7 },
+          columnStyles: {
+            0: { cellWidth: 8, halign: 'center' },
+            1: { cellWidth: 16 },
+            2: { cellWidth: 24, halign: 'right' },
+            3: { cellWidth: 'auto' },
+            4: { cellWidth: 28 },
+            5: { cellWidth: 30 },
+            6: { cellWidth: 28 },
+          },
+          tableLineColor: [229, 231, 235],
+          tableLineWidth: 0.15,
+          didParseCell: (data) => {
+            if (data.column.index === 1 && data.section === 'body') {
+              data.cell.styles.textColor = data.cell.raw === 'Exec' ? C_AMBER : C_TEAL
+              data.cell.styles.fontStyle = 'bold'
+            }
+          },
+        })
+        y = doc.lastAutoTable.finalY + 5
+      } else {
+        y += 5
+      }
+    }
+
+    // Page numbers
+    const totalPages = doc.getNumberOfPages()
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7)
+      doc.setTextColor(...C_GRAY)
+      doc.text(`Page ${i} of ${totalPages}`, pw - mg, ph - 4, { align: 'right' })
+      doc.text('ManageWorks — Item Progress Report', mg, ph - 4)
+    }
+
+    const safeName = (itemSearch.value || 'export').replace(/[^a-z0-9]/gi, '_').substring(0, 30)
+    doc.save(`Item_Progress_${safeName}_${new Date().toISOString().substring(0, 10)}.pdf`)
+  } finally {
+    isGeneratingPDF.value = false
+  }
+}
 </script>
 
 <template>
@@ -212,8 +375,8 @@ const sortedResults = computed(() => {
         </div>
       </div>
 
-      <!-- Progress stats pills -->
-      <div v-if="searchResults.length > 0" class="mt-4 flex flex-wrap gap-3">
+      <!-- Progress stats pills + Export -->
+      <div v-if="searchResults.length > 0" class="mt-4 flex flex-wrap items-center gap-3">
         <div class="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-xl px-4 py-2">
           <div class="w-2 h-2 rounded-full bg-[#0071e3]"></div>
           <span class="text-xs font-semibold text-blue-700">
@@ -232,6 +395,12 @@ const sortedResults = computed(() => {
           <div class="i-carbon-list text-gray-400 text-sm"></div>
           <span class="text-xs font-semibold text-gray-600">{{ searchResults.length }} items found</span>
         </div>
+
+        <button @click="generateItemPDF" :disabled="isGeneratingPDF"
+          class="ml-auto flex items-center gap-1.5 px-4 py-2 rounded-xl border border-gray-300 text-xs font-semibold text-gray-600 hover:bg-gray-100 hover:border-gray-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0">
+          <div :class="isGeneratingPDF ? 'i-carbon-circle-dash animate-spin' : 'i-carbon-document-pdf'" class="text-sm"></div>
+          {{ isGeneratingPDF ? 'Generating…' : 'Export PDF' }}
+        </button>
       </div>
     </div>
 
