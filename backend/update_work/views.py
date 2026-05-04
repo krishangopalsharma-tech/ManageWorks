@@ -137,8 +137,17 @@ class WorkItemEntryView(APIView):
 
 # ── Entry edit ────────────────────────────────────────────────────────────────
 
+def _is_admin(user):
+    if not user.is_authenticated:
+        return False
+    if user.is_staff:
+        return True
+    profile = getattr(user, 'profile', None)
+    return profile is not None and profile.role == 'admin'
+
+
 class WorkItemEntryUpdateView(APIView):
-    """PATCH /api/update-work/entries/<entry_id>/  – any non-observer may edit."""
+    """PATCH /api/update-work/entries/<entry_id>/  – only submitter or admin may edit."""
 
     def patch(self, request, entry_id):
         if not request.user.is_authenticated:
@@ -149,6 +158,9 @@ class WorkItemEntryUpdateView(APIView):
             entry = WorkItemEntry.objects.select_related('work_item').get(pk=entry_id)
         except WorkItemEntry.DoesNotExist:
             return Response({'error': 'Entry not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if not _is_admin(request.user) and entry.submitted_by_id != request.user.id:
+            raise PermissionDenied("You can only edit entries you submitted.")
 
         if 'quantity' in request.data:
             try:

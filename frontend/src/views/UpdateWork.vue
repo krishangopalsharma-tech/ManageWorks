@@ -45,6 +45,14 @@ const isLoading    = ref(true)
 const currentUser  = ref(null)
 
 const isObserver = computed(() => currentUser.value?.role === 'observer')
+const isAdmin    = computed(() => currentUser.value?.role === 'admin' || currentUser.value?.is_staff)
+
+const canEditEntry = (entry) => {
+  if (!currentUser.value) return false
+  if (isObserver.value) return false
+  if (isAdmin.value) return true
+  return entry.submitted_by_user?.id === currentUser.value.id
+}
 
 // Lot entry popup
 const lotPopupItem = ref(null)
@@ -255,12 +263,12 @@ const submitBatchEntries = async () => {
 const loadWorks = async () => {
   isLoading.value = true
   try {
-    const [worksRes, meRes] = await Promise.all([
+    const [worksRes, meRes] = await Promise.allSettled([
       axios.get('/api/work-details/search/'),
-      axios.get('/api/users/me/'),
+      axios.get('/api/auth/me/'),
     ])
-    allWorks.value    = worksRes.data
-    currentUser.value = meRes.data
+    if (worksRes.status === 'fulfilled') allWorks.value    = worksRes.value.data
+    if (meRes.status    === 'fulfilled') currentUser.value = meRes.value.data
   } catch (e) {
     console.error(e)
   } finally {
@@ -1144,7 +1152,7 @@ const deleteWork = async () => {
                         </td>
                         <td class="px-3 py-2.5 text-gray-500 text-[11px]">{{ entry.submitted_by_user?.username || '—' }}</td>
                         <td class="px-3 py-2.5 text-center">
-                          <button v-if="!isObserver"
+                          <button v-if="canEditEntry(entry)"
                             @click="openEditEntry(entry)"
                             class="px-2 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 text-[10px] font-bold transition-all flex items-center gap-1 mx-auto">
                             <div class="i-carbon-edit text-[10px]"></div>
