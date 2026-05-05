@@ -125,7 +125,7 @@ const submitData = async () => {
         <button
           @click="submitData"
           :disabled="isUploading"
-          class="w-full max-w-xs px-8 py-4 rounded-full bg-dark-active text-white shadow-lg shadow-black/20 hover:shadow-xl transition-all hover:-translate-y-0.5 font-semibold tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex-center gap-2"
+          class="w-full max-w-xs px-8 py-4 rounded-full bg-[#1d1d1f] text-white shadow-lg shadow-black/20 hover:shadow-xl transition-all hover:-translate-y-0.5 font-semibold tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex-center gap-2"
         >
           <div v-if="isUploading" class="i-carbon-circle-dash animate-spin"></div>
           {{ isUploading ? (uploadPhase === 'processing' ? 'Processing...' : 'Uploading...') : 'Upload Work Data' }}

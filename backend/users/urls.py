@@ -2,7 +2,7 @@ from django.urls import path
 from .views import (
     RegisterView, LoginView, LogoutView, MeView,
     PendingUsersView, ApproveUserView, RejectUserView, AllUsersView,
-    UpdateRoleView, RevokeUserView,
+    UpdateRoleView, RevokeUserView, UpdateUserView, WorksListView, AssignWorkView,
 )
 
 urlpatterns = [
@@ -16,4 +16,7 @@ urlpatterns = [
     path('revoke/<int:user_id>/',      RevokeUserView.as_view(),   name='auth_revoke'),
     path('role/<int:user_id>/',        UpdateRoleView.as_view(),   name='auth_role'),
     path('all/',                       AllUsersView.as_view(),     name='auth_all'),
+    path('update/<int:user_id>/',      UpdateUserView.as_view(),   name='auth_update_user'),
+    path('works/',                     WorksListView.as_view(),    name='auth_works_list'),
+    path('assign-work/',               AssignWorkView.as_view(),   name='auth_assign_work'),
 ]

@@ -1,6 +1,10 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import axios from 'axios'
+import { useAuth } from '../composables/useAuth'
+
+const { state: authState } = useAuth()
+const isAdmin = computed(() => authState.user?.role === 'admin' || authState.user?.is_staff)
 
 const fmtAmt = (val) => {
   if (!val && val !== 0) return '—'
@@ -483,8 +487,8 @@ onMounted(() => {
           <input ref="pdfFileInput" type="file" accept="application/pdf" @change="onPdfSelected" class="hidden">
 
           <div class="border border-gray-200 rounded-xl overflow-hidden">
-            <!-- Upload card — compact -->
-            <div class="bg-gray-50 border-b border-dashed border-gray-300 hover:border-[#0071e3] px-4 py-3 flex items-center gap-3 transition-colors cursor-pointer"
+            <!-- Upload card — consignee only -->
+            <div v-if="!isAdmin" class="bg-gray-50 border-b border-dashed border-gray-300 hover:border-[#0071e3] px-4 py-3 flex items-center gap-3 transition-colors cursor-pointer"
               :class="selectedWork && workRecords(selectedWork.id).length > 0 ? 'border-b' : 'border-b-0'"
               @click="triggerPdfPicker">
               <div v-if="isImporting" class="i-carbon-circle-dash animate-spin text-[#0071e3] text-xl flex-shrink-0"></div>
@@ -560,14 +564,17 @@ onMounted(() => {
                     </td>
                     <td class="px-4 py-2.5 text-right">
                       <div class="flex items-center justify-end gap-1.5">
-                        <button @click="openEdit(rec)" title="Edit"
-                          class="w-6 h-6 rounded-full bg-gray-100 hover:bg-[#0071e3]/10 hover:text-[#0071e3] text-gray-400 flex items-center justify-center transition-all">
-                          <div class="i-carbon-edit text-[10px]"></div>
-                        </button>
-                        <button @click="deleteRecord(rec.id)" title="Delete"
-                          class="w-6 h-6 rounded-full bg-gray-100 hover:bg-[#ff3b30]/10 hover:text-[#ff3b30] text-gray-400 flex items-center justify-center transition-all">
-                          <div class="i-carbon-trash-can text-[10px]"></div>
-                        </button>
+                        <template v-if="!isAdmin">
+                          <button @click="openEdit(rec)" title="Edit"
+                            class="w-7 h-7 rounded-full bg-gray-100 hover:bg-[#0071e3]/10 hover:text-[#0071e3] text-gray-500 flex items-center justify-center transition-all">
+                            <div class="i-carbon-edit text-xs"></div>
+                          </button>
+                          <button @click="deleteRecord(rec.id)" title="Delete"
+                            class="w-7 h-7 rounded-full bg-gray-100 hover:bg-[#ff3b30]/10 hover:text-[#ff3b30] text-gray-500 flex items-center justify-center transition-all">
+                            <div class="i-carbon-trash-can text-xs"></div>
+                          </button>
+                        </template>
+                        <span v-else class="text-[10px] text-gray-400 italic">View only</span>
                       </div>
                     </td>
                   </tr>
@@ -608,10 +615,10 @@ onMounted(() => {
               class="text-xs text-gray-400 bg-transparent outline-none border-b border-transparent focus:border-gray-300 w-full transition-colors">
           </div>
 
-          <div class="flex items-center gap-2 flex-shrink-0">
+          <div v-if="!isAdmin" class="flex items-center gap-2 flex-shrink-0">
             <p v-if="saveStatus && saveStatus !== 'saved'" class="text-xs font-medium text-[#ff3b30]">{{ saveStatus }}</p>
             <button @click="saveMB" :disabled="!canSave || isSaving"
-              :class="saveStatus === 'saved' ? 'bg-[#34c759] shadow-[#34c759]/30' : 'bg-dark-active shadow-black/20'"
+              :class="saveStatus === 'saved' ? 'bg-[#34c759] shadow-[#34c759]/30' : 'bg-[#1d1d1f] shadow-black/20'"
               class="px-5 py-2.5 rounded-full text-white text-sm font-semibold shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center gap-2">
               <div v-if="isSaving" class="i-carbon-circle-dash animate-spin"></div>
               <span>{{ saveStatus === 'saved' ? 'Saved!' : 'Save MB Record' }}</span>
@@ -760,7 +767,7 @@ onMounted(() => {
           <div class="flex items-center gap-2 flex-shrink-0">
             <p v-if="editSaveStatus && editSaveStatus !== 'saved'" class="text-xs font-medium text-[#ff3b30]">{{ editSaveStatus }}</p>
             <button @click="saveEdit" :disabled="!editCanSave || editSaving"
-              :class="editSaveStatus === 'saved' ? 'bg-[#34c759] shadow-[#34c759]/30' : 'bg-dark-active shadow-black/20'"
+              :class="editSaveStatus === 'saved' ? 'bg-[#34c759] shadow-[#34c759]/30' : 'bg-[#1d1d1f] shadow-black/20'"
               class="px-4 py-2 rounded-full text-white text-xs font-semibold shadow hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center gap-2">
               <div v-if="editSaving" class="i-carbon-circle-dash animate-spin"></div>
               <span>{{ editSaveStatus === 'saved' ? 'Saved!' : 'Save Changes' }}</span>

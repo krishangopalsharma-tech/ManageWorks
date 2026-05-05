@@ -1,0 +1,1226 @@
+{
+  "nodes": [
+    {
+      "id": "app_vue",
+      "label": "App.vue",
+      "file_type": "code",
+      "source_file": "App.vue",
+      "source_location": "L1"
+    },
+    {
+      "id": "main_js",
+      "label": "main.js",
+      "file_type": "code",
+      "source_file": "main.js",
+      "source_location": "L1"
+    },
+    {
+      "id": "components_sidebar_vue",
+      "label": "Sidebar.vue",
+      "file_type": "code",
+      "source_file": "components/Sidebar.vue",
+      "source_location": "L1"
+    },
+    {
+      "id": "components_sidebar_if",
+      "label": "if()",
+      "file_type": "code",
+      "source_file": "components/Sidebar.vue",
+      "source_location": "L38"
+    },
+    {
+      "id": "components_sidebar_for",
+      "label": "for()",
+      "file_type": "code",
+      "source_file": "components/Sidebar.vue",
+      "source_location": "L44"
+    },
+    {
+      "id": "components_manageworksicon_vue",
+      "label": "ManageWorksIcon.vue",
+      "file_type": "code",
+      "source_file": "components/ManageWorksIcon.vue",
+      "source_location": "L1"
+    },
+    {
+      "id": "components_topbar_vue",
+      "label": "Topbar.vue",
+      "file_type": "code",
+      "source_file": "components/Topbar.vue",
+      "source_location": "L1"
+    },
+    {
+      "id": "components_helloworld_vue",
+      "label": "HelloWorld.vue",
+      "file_type": "code",
+      "source_file": "components/HelloWorld.vue",
+      "source_location": "L1"
+    },
+    {
+      "id": "composables_usetheme_js",
+      "label": "useTheme.js",
+      "file_type": "code",
+      "source_file": "composables/useTheme.js",
+      "source_location": "L1"
+    },
+    {
+      "id": "composables_usetheme_apply",
+      "label": "apply()",
+      "file_type": "code",
+      "source_file": "composables/useTheme.js",
+      "source_location": "L5"
+    },
+    {
+      "id": "composables_usetheme_usetheme",
+      "label": "useTheme()",
+      "file_type": "code",
+      "source_file": "composables/useTheme.js",
+      "source_location": "L19"
+    },
+    {
+      "id": "composables_useauth_js",
+      "label": "useAuth.js",
+      "file_type": "code",
+      "source_file": "composables/useAuth.js",
+      "source_location": "L1"
+    },
+    {
+      "id": "composables_useauth_getcsrftoken",
+      "label": "getCsrfToken()",
+      "file_type": "code",
+      "source_file": "composables/useAuth.js",
+      "source_location": "L6"
+    },
+    {
+      "id": "composables_useauth_authheaders",
+      "label": "authHeaders()",
+      "file_type": "code",
+      "source_file": "composables/useAuth.js",
+      "source_location": "L11"
+    },
+    {
+      "id": "composables_useauth_fetchme",
+      "label": "fetchMe()",
+      "file_type": "code",
+      "source_file": "composables/useAuth.js",
+      "source_location": "L21"
+    },
+    {
+      "id": "composables_useauth_login",
+      "label": "login()",
+      "file_type": "code",
+      "source_file": "composables/useAuth.js",
+      "source_location": "L39"
+    },
+    {
+      "id": "composables_useauth_register",
+      "label": "register()",
+      "file_type": "code",
+      "source_file": "composables/useAuth.js",
+      "source_location": "L46"
+    },
+    {
+      "id": "composables_useauth_logout",
+      "label": "logout()",
+      "file_type": "code",
+      "source_file": "composables/useAuth.js",
+      "source_location": "L51"
+    },
+    {
+      "id": "composables_useauth_useauth",
+      "label": "useAuth()",
+      "file_type": "code",
+      "source_file": "composables/useAuth.js",
+      "source_location": "L57"
+    },
+    {
+      "id": "views_itemprogress_vue",
+      "label": "ItemProgress.vue",
+      "file_type": "code",
+      "source_file": "views/ItemProgress.vue",
+      "source_location": "L1"
+    },
+    {
+      "id": "views_dashboard_vue",
+      "label": "Dashboard.vue",
+      "file_type": "code",
+      "source_file": "views/Dashboard.vue",
+      "source_location": "L1"
+    },
+    {
+      "id": "views_dashboard_toggleloa",
+      "label": "toggleLoa()",
+      "file_type": "code",
+      "source_file": "views/Dashboard.vue",
+      "source_location": "L24"
+    },
+    {
+      "id": "views_dashboard_selectall",
+      "label": "selectAll()",
+      "file_type": "code",
+      "source_file": "views/Dashboard.vue",
+      "source_location": "L30"
+    },
+    {
+      "id": "views_dashboard_mkdoughnut",
+      "label": "mkDoughnut()",
+      "file_type": "code",
+      "source_file": "views/Dashboard.vue",
+      "source_location": "L53"
+    },
+    {
+      "id": "views_dashboard_fetchstats",
+      "label": "fetchStats()",
+      "file_type": "code",
+      "source_file": "views/Dashboard.vue",
+      "source_location": "L146"
+    },
+    {
+      "id": "views_dashboard_fetchtrend",
+      "label": "fetchTrend()",
+      "file_type": "code",
+      "source_file": "views/Dashboard.vue",
+      "source_location": "L161"
+    },
+    {
+      "id": "views_login_vue",
+      "label": "Login.vue",
+      "file_type": "code",
+      "source_file": "views/Login.vue",
+      "source_location": "L1"
+    },
+    {
+      "id": "views_mbdetails_vue",
+      "label": "MBDetails.vue",
+      "file_type": "code",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L1"
+    },
+    {
+      "id": "views_mbdetails_parsedatetoiso",
+      "label": "parseDateToIso()",
+      "file_type": "code",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L17"
+    },
+    {
+      "id": "views_mbdetails_searchworks",
+      "label": "searchWorks()",
+      "file_type": "code",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L77"
+    },
+    {
+      "id": "views_mbdetails_pickwork",
+      "label": "pickWork()",
+      "file_type": "code",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L86"
+    },
+    {
+      "id": "views_mbdetails_triggerpdfpicker",
+      "label": "triggerPdfPicker()",
+      "file_type": "code",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L93"
+    },
+    {
+      "id": "views_mbdetails_onpdfselected",
+      "label": "onPdfSelected()",
+      "file_type": "code",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L95"
+    },
+    {
+      "id": "views_mbdetails_importpdf",
+      "label": "importPdf()",
+      "file_type": "code",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L102"
+    },
+    {
+      "id": "views_mbdetails_rowamount",
+      "label": "rowAmount()",
+      "file_type": "code",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L162"
+    },
+    {
+      "id": "views_mbdetails_rowisvalid",
+      "label": "rowIsValid()",
+      "file_type": "code",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L174"
+    },
+    {
+      "id": "views_mbdetails_selectall",
+      "label": "selectAll()",
+      "file_type": "code",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L186"
+    },
+    {
+      "id": "views_mbdetails_selectnone",
+      "label": "selectNone()",
+      "file_type": "code",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L187"
+    },
+    {
+      "id": "views_mbdetails_applybulkpct",
+      "label": "applyBulkPct()",
+      "file_type": "code",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L189"
+    },
+    {
+      "id": "views_mbdetails_savemb",
+      "label": "saveMB()",
+      "file_type": "code",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L198"
+    },
+    {
+      "id": "views_mbdetails_resetflow",
+      "label": "resetFlow()",
+      "file_type": "code",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L227"
+    },
+    {
+      "id": "views_mbdetails_loadrecords",
+      "label": "loadRecords()",
+      "file_type": "code",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L244"
+    },
+    {
+      "id": "views_mbdetails_loadsummary",
+      "label": "loadSummary()",
+      "file_type": "code",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L251"
+    },
+    {
+      "id": "views_mbdetails_deleterecord",
+      "label": "deleteRecord()",
+      "file_type": "code",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L259"
+    },
+    {
+      "id": "views_mbdetails_openedit",
+      "label": "openEdit()",
+      "file_type": "code",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L270"
+    },
+    {
+      "id": "views_mbdetails_closeedit",
+      "label": "closeEdit()",
+      "file_type": "code",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L290"
+    },
+    {
+      "id": "views_mbdetails_editrowamount",
+      "label": "editRowAmount()",
+      "file_type": "code",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L295"
+    },
+    {
+      "id": "views_mbdetails_editrowisvalid",
+      "label": "editRowIsValid()",
+      "file_type": "code",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L303"
+    },
+    {
+      "id": "views_mbdetails_togglesort",
+      "label": "toggleSort()",
+      "file_type": "code",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L317"
+    },
+    {
+      "id": "views_mbdetails_workrecords",
+      "label": "workRecords()",
+      "file_type": "code",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L322"
+    },
+    {
+      "id": "views_mbdetails_fmtmbnum",
+      "label": "fmtMbNum()",
+      "file_type": "code",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L343"
+    },
+    {
+      "id": "views_mbdetails_saveedit",
+      "label": "saveEdit()",
+      "file_type": "code",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L345"
+    },
+    {
+      "id": "views_updatework_vue",
+      "label": "UpdateWork.vue",
+      "file_type": "code",
+      "source_file": "views/UpdateWork.vue",
+      "source_location": "L1"
+    },
+    {
+      "id": "views_updatework_if",
+      "label": "if()",
+      "file_type": "code",
+      "source_file": "views/UpdateWork.vue",
+      "source_location": "L181"
+    },
+    {
+      "id": "views_addnewwork_vue",
+      "label": "AddNewWork.vue",
+      "file_type": "code",
+      "source_file": "views/AddNewWork.vue",
+      "source_location": "L1"
+    },
+    {
+      "id": "views_addnewwork_triggerfileinput",
+      "label": "triggerFileInput()",
+      "file_type": "code",
+      "source_file": "views/AddNewWork.vue",
+      "source_location": "L24"
+    },
+    {
+      "id": "views_workdetails_vue",
+      "label": "WorkDetails.vue",
+      "file_type": "code",
+      "source_file": "views/WorkDetails.vue",
+      "source_location": "L1"
+    },
+    {
+      "id": "views_workdetails_initonechart",
+      "label": "initOneChart()",
+      "file_type": "code",
+      "source_file": "views/WorkDetails.vue",
+      "source_location": "L276"
+    },
+    {
+      "id": "views_workdetails_destroycharts",
+      "label": "destroyCharts()",
+      "file_type": "code",
+      "source_file": "views/WorkDetails.vue",
+      "source_location": "L288"
+    },
+    {
+      "id": "views_workdetails_handleresize",
+      "label": "handleResize()",
+      "file_type": "code",
+      "source_file": "views/WorkDetails.vue",
+      "source_location": "L295"
+    },
+    {
+      "id": "views_workdetails_l",
+      "label": "L()",
+      "file_type": "code",
+      "source_file": "views/WorkDetails.vue",
+      "source_location": "L297"
+    },
+    {
+      "id": "views_workdetails_initcharts",
+      "label": "initCharts()",
+      "file_type": "code",
+      "source_file": "views/WorkDetails.vue",
+      "source_location": "L299"
+    },
+    {
+      "id": "views_placeholder_vue",
+      "label": "Placeholder.vue",
+      "file_type": "code",
+      "source_file": "views/Placeholder.vue",
+      "source_location": "L1"
+    },
+    {
+      "id": "views_register_vue",
+      "label": "Register.vue",
+      "file_type": "code",
+      "source_file": "views/Register.vue",
+      "source_location": "L1"
+    },
+    {
+      "id": "views_usermanagement_vue",
+      "label": "UserManagement.vue",
+      "file_type": "code",
+      "source_file": "views/UserManagement.vue",
+      "source_location": "L1"
+    },
+    {
+      "id": "router_index_js",
+      "label": "index.js",
+      "file_type": "code",
+      "source_file": "router/index.js",
+      "source_location": "L1"
+    }
+  ],
+  "edges": [
+    {
+      "source": "main_js",
+      "target": "vue",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "main.js",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "main_js",
+      "target": "home_adi_manageworks_frontend_src_style_css",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "main.js",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "main_js",
+      "target": "virtual_uno_css",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "main.js",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "main_js",
+      "target": "app_vue",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "main.js",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "main_js",
+      "target": "home_adi_manageworks_frontend_src_router",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "main.js",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "components_sidebar_vue",
+      "target": "components_sidebar_if",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components/Sidebar.vue",
+      "source_location": "L38",
+      "weight": 1.0
+    },
+    {
+      "source": "components_sidebar_vue",
+      "target": "components_sidebar_for",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components/Sidebar.vue",
+      "source_location": "L44",
+      "weight": 1.0
+    },
+    {
+      "source": "composables_usetheme_js",
+      "target": "vue",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "composables/useTheme.js",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "composables_usetheme_js",
+      "target": "composables_usetheme_apply",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "composables/useTheme.js",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "composables_usetheme_js",
+      "target": "composables_usetheme_usetheme",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "composables/useTheme.js",
+      "source_location": "L19",
+      "weight": 1.0
+    },
+    {
+      "source": "composables_useauth_js",
+      "target": "vue",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "composables/useAuth.js",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "composables_useauth_js",
+      "target": "axios",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "composables/useAuth.js",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "composables_useauth_js",
+      "target": "composables_useauth_getcsrftoken",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "composables/useAuth.js",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "composables_useauth_js",
+      "target": "composables_useauth_authheaders",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "composables/useAuth.js",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "composables_useauth_js",
+      "target": "composables_useauth_fetchme",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "composables/useAuth.js",
+      "source_location": "L21",
+      "weight": 1.0
+    },
+    {
+      "source": "composables_useauth_js",
+      "target": "composables_useauth_login",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "composables/useAuth.js",
+      "source_location": "L39",
+      "weight": 1.0
+    },
+    {
+      "source": "composables_useauth_js",
+      "target": "composables_useauth_register",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "composables/useAuth.js",
+      "source_location": "L46",
+      "weight": 1.0
+    },
+    {
+      "source": "composables_useauth_js",
+      "target": "composables_useauth_logout",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "composables/useAuth.js",
+      "source_location": "L51",
+      "weight": 1.0
+    },
+    {
+      "source": "composables_useauth_js",
+      "target": "composables_useauth_useauth",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "composables/useAuth.js",
+      "source_location": "L57",
+      "weight": 1.0
+    },
+    {
+      "source": "composables_useauth_authheaders",
+      "target": "composables_useauth_getcsrftoken",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "composables/useAuth.js",
+      "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "composables_useauth_login",
+      "target": "composables_useauth_authheaders",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "composables/useAuth.js",
+      "source_location": "L40",
+      "weight": 1.0
+    },
+    {
+      "source": "composables_useauth_register",
+      "target": "composables_useauth_authheaders",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "composables/useAuth.js",
+      "source_location": "L47",
+      "weight": 1.0
+    },
+    {
+      "source": "composables_useauth_logout",
+      "target": "composables_useauth_authheaders",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "composables/useAuth.js",
+      "source_location": "L52",
+      "weight": 1.0
+    },
+    {
+      "source": "views_dashboard_vue",
+      "target": "views_dashboard_toggleloa",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/Dashboard.vue",
+      "source_location": "L24",
+      "weight": 1.0
+    },
+    {
+      "source": "views_dashboard_vue",
+      "target": "views_dashboard_selectall",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/Dashboard.vue",
+      "source_location": "L30",
+      "weight": 1.0
+    },
+    {
+      "source": "views_dashboard_vue",
+      "target": "views_dashboard_mkdoughnut",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/Dashboard.vue",
+      "source_location": "L53",
+      "weight": 1.0
+    },
+    {
+      "source": "views_dashboard_vue",
+      "target": "views_dashboard_fetchstats",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/Dashboard.vue",
+      "source_location": "L146",
+      "weight": 1.0
+    },
+    {
+      "source": "views_dashboard_vue",
+      "target": "views_dashboard_fetchtrend",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/Dashboard.vue",
+      "source_location": "L161",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_vue",
+      "target": "views_mbdetails_parsedatetoiso",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_vue",
+      "target": "views_mbdetails_searchworks",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L77",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_vue",
+      "target": "views_mbdetails_pickwork",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L86",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_vue",
+      "target": "views_mbdetails_triggerpdfpicker",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L93",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_vue",
+      "target": "views_mbdetails_onpdfselected",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L95",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_vue",
+      "target": "views_mbdetails_importpdf",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L102",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_vue",
+      "target": "views_mbdetails_rowamount",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L162",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_vue",
+      "target": "views_mbdetails_rowisvalid",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L174",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_vue",
+      "target": "views_mbdetails_selectall",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L186",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_vue",
+      "target": "views_mbdetails_selectnone",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L187",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_vue",
+      "target": "views_mbdetails_applybulkpct",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L189",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_vue",
+      "target": "views_mbdetails_savemb",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L198",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_vue",
+      "target": "views_mbdetails_resetflow",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L227",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_vue",
+      "target": "views_mbdetails_loadrecords",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L244",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_vue",
+      "target": "views_mbdetails_loadsummary",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L251",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_vue",
+      "target": "views_mbdetails_deleterecord",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L259",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_vue",
+      "target": "views_mbdetails_openedit",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L270",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_vue",
+      "target": "views_mbdetails_closeedit",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L290",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_vue",
+      "target": "views_mbdetails_editrowamount",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L295",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_vue",
+      "target": "views_mbdetails_editrowisvalid",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L303",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_vue",
+      "target": "views_mbdetails_togglesort",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L317",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_vue",
+      "target": "views_mbdetails_workrecords",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L322",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_vue",
+      "target": "views_mbdetails_fmtmbnum",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L343",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_vue",
+      "target": "views_mbdetails_saveedit",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L345",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_pickwork",
+      "target": "views_mbdetails_loadsummary",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L89",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_onpdfselected",
+      "target": "views_mbdetails_importpdf",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L98",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_importpdf",
+      "target": "views_mbdetails_parsedatetoiso",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L116",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_savemb",
+      "target": "views_mbdetails_loadrecords",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L216",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_savemb",
+      "target": "views_mbdetails_loadsummary",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L216",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_resetflow",
+      "target": "views_mbdetails_searchworks",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L240",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_deleterecord",
+      "target": "views_mbdetails_loadrecords",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L263",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_deleterecord",
+      "target": "views_mbdetails_loadsummary",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L263",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_saveedit",
+      "target": "views_mbdetails_loadrecords",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L362",
+      "weight": 1.0
+    },
+    {
+      "source": "views_mbdetails_saveedit",
+      "target": "views_mbdetails_loadsummary",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "views/MBDetails.vue",
+      "source_location": "L362",
+      "weight": 1.0
+    },
+    {
+      "source": "views_updatework_vue",
+      "target": "views_updatework_if",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/UpdateWork.vue",
+      "source_location": "L181",
+      "weight": 1.0
+    },
+    {
+      "source": "views_updatework_vue",
+      "target": "views_updatework_if",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/UpdateWork.vue",
+      "source_location": "L307",
+      "weight": 1.0
+    },
+    {
+      "source": "views_addnewwork_vue",
+      "target": "views_addnewwork_triggerfileinput",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/AddNewWork.vue",
+      "source_location": "L24",
+      "weight": 1.0
+    },
+    {
+      "source": "views_workdetails_vue",
+      "target": "views_workdetails_initonechart",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/WorkDetails.vue",
+      "source_location": "L276",
+      "weight": 1.0
+    },
+    {
+      "source": "views_workdetails_vue",
+      "target": "views_workdetails_destroycharts",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/WorkDetails.vue",
+      "source_location": "L288",
+      "weight": 1.0
+    },
+    {
+      "source": "views_workdetails_vue",
+      "target": "views_workdetails_handleresize",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/WorkDetails.vue",
+      "source_location": "L295",
+      "weight": 1.0
+    },
+    {
+      "source": "views_workdetails_vue",
+      "target": "views_workdetails_l",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/WorkDetails.vue",
+      "source_location": "L297",
+      "weight": 1.0
+    },
+    {
+      "source": "views_workdetails_vue",
+      "target": "views_workdetails_initcharts",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "views/WorkDetails.vue",
+      "source_location": "L299",
+      "weight": 1.0
+    },
+    {
+      "source": "views_workdetails_initcharts",
+      "target": "views_workdetails_initonechart",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "views/WorkDetails.vue",
+      "source_location": "L305",
+      "weight": 1.0
+    },
+    {
+      "source": "views_workdetails_initcharts",
+      "target": "views_workdetails_l",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "views/WorkDetails.vue",
+      "source_location": "L348",
+      "weight": 1.0
+    },
+    {
+      "source": "router_index_js",
+      "target": "vue_router",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "router/index.js",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "router_index_js",
+      "target": "home_adi_manageworks_frontend_src_composables_useauth",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "router/index.js",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "router_index_js",
+      "target": "views_dashboard_vue",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "router/index.js",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "router_index_js",
+      "target": "views_workdetails_vue",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "router/index.js",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "router_index_js",
+      "target": "views_itemprogress_vue",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "router/index.js",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "router_index_js",
+      "target": "views_addnewwork_vue",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "router/index.js",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "router_index_js",
+      "target": "views_updatework_vue",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "router/index.js",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "router_index_js",
+      "target": "views_mbdetails_vue",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "router/index.js",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "router_index_js",
+      "target": "views_placeholder_vue",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "router/index.js",
+      "source_location": "L9",
+      "weight": 1.0
+    },
+    {
+      "source": "router_index_js",
+      "target": "views_login_vue",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "router/index.js",
+      "source_location": "L10",
+      "weight": 1.0
+    },
+    {
+      "source": "router_index_js",
+      "target": "views_register_vue",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "router/index.js",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "router_index_js",
+      "target": "views_usermanagement_vue",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "router/index.js",
+      "source_location": "L12",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

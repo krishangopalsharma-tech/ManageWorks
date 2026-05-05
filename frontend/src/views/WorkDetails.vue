@@ -848,7 +848,7 @@ const generateWorkPDF = async () => {
                 </td>
                 <td class="px-4 py-4 text-right">
                   <button @click="selectWork(work)"
-                    class="px-3.5 py-2 rounded-full bg-dark-active text-white text-xs font-semibold shadow shadow-black/20 hover:shadow-md hover:-translate-y-0.5 transition-all flex items-center gap-1 ml-auto">
+                    class="px-3.5 py-2 rounded-full bg-[#1d1d1f] text-white text-xs font-semibold shadow shadow-black/20 hover:shadow-md hover:-translate-y-0.5 transition-all flex items-center gap-1 ml-auto">
                     View Details <div class="i-carbon-chevron-right text-xs"></div>
                   </button>
                 </td>
@@ -897,7 +897,7 @@ const generateWorkPDF = async () => {
           <div class="flex gap-1.5">
             <button @click="activeTab = 'analytics'"
               :class="activeTab === 'analytics'
-                ? 'bg-dark-active text-white shadow shadow-black/15'
+                ? 'bg-[#1d1d1f] text-white shadow shadow-black/15'
                 : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'"
               class="px-4 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-1.5">
               <div class="i-carbon-analytics text-[11px]"></div>
@@ -905,7 +905,7 @@ const generateWorkPDF = async () => {
             </button>
             <button @click="activeTab = 'items'"
               :class="activeTab === 'items'
-                ? 'bg-dark-active text-white shadow shadow-black/15'
+                ? 'bg-[#1d1d1f] text-white shadow shadow-black/15'
                 : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'"
               class="px-4 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-1.5">
               <div class="i-carbon-list-boxes text-[11px]"></div>

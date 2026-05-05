@@ -53,5 +53,5 @@ class WorkEditSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'loa_number', 'tender_number', 'date',
             'contract_agreement', 'name_of_work', 'contractor_name',
-            'contractor_address', 'date_of_completion', 'consignee',
+            'contractor_address', 'date_of_completion', 'consignee', 'hrms_id',
         ]

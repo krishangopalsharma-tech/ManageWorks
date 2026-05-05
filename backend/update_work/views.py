@@ -10,9 +10,21 @@ from works.serializers import WorkItemEntrySerializer, WorkEditSerializer
 from .pdf_parser import parse_receipt_pdf
 
 
-def _check_not_observer(user):
-    if user.is_authenticated and hasattr(user, 'profile') and user.profile.role == 'observer':
-        raise PermissionDenied("Observers are not authorised to make changes.")
+def _check_authenticated(user):
+    if not user.is_authenticated:
+        raise PermissionDenied("Authentication required.")
+
+
+def _check_can_modify_work(user):
+    """Only admin (is_staff or role='admin') and consignee may update or delete works."""
+    if not user.is_authenticated:
+        raise PermissionDenied("Authentication required.")
+    if user.is_staff:
+        return
+    profile = getattr(user, 'profile', None)
+    if profile and profile.role in ('admin', 'consignee'):
+        return
+    raise PermissionDenied("Only admins and consignees are authorised to update or delete works.")
 
 
 def _sync_item_quantities(work_item):
@@ -40,7 +52,7 @@ class WorkUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = WorkEditSerializer
 
     def partial_update(self, request, *args, **kwargs):
-        _check_not_observer(request.user)
+        _check_can_modify_work(request.user)
         instance = self.get_object()
 
         serializer = WorkEditSerializer(instance, data=request.data, partial=True)
@@ -57,7 +69,7 @@ class WorkUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
         return Response(serializer.data)
 
     def perform_destroy(self, instance):
-        _check_not_observer(self.request.user)
+        _check_can_modify_work(self.request.user)
         instance.delete()
 
 
@@ -82,7 +94,7 @@ class WorkItemEntryView(APIView):
         return Response(serializer.data)
 
     def post(self, request, item_id):
-        _check_not_observer(request.user)
+        _check_authenticated(request.user)
 
         try:
             work_item = WorkItem.objects.get(pk=item_id)
@@ -152,15 +164,15 @@ class WorkItemEntryUpdateView(APIView):
     def patch(self, request, entry_id):
         if not request.user.is_authenticated:
             raise PermissionDenied("Authentication required.")
-        _check_not_observer(request.user)
+        _check_authenticated(request.user)
 
         try:
             entry = WorkItemEntry.objects.select_related('work_item').get(pk=entry_id)
         except WorkItemEntry.DoesNotExist:
             return Response({'error': 'Entry not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        if not _is_admin(request.user) and entry.submitted_by_id != request.user.id:
-            raise PermissionDenied("You can only edit entries you submitted.")
+        if entry.submitted_by_id != request.user.id:
+            raise PermissionDenied("Only the consignee who submitted this entry can edit it.")
 
         if 'quantity' in request.data:
             try:
@@ -195,7 +207,7 @@ class ParsePDFsView(APIView):
     """
 
     def post(self, request):
-        _check_not_observer(request.user)
+        _check_authenticated(request.user)
 
         files = request.FILES.getlist('files')
         if not files:

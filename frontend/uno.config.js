@@ -15,86 +15,88 @@ export default defineConfig({
     }),
     presetWebFonts({
       provider: 'google',
-      // Inter as the web-font fallback — SF Pro renders natively on Apple devices
-      // via the system font stack defined in style.css
       fonts: {
-        sans: 'Inter:300,400,500,600,700',
+        sans:    'Manrope:300,400,500,600,700,800',
+        display: 'Manrope:300,400,500,600,700,800',
+        mono:    'JetBrains Mono:400,500,600',
       },
     }),
   ],
 
-  // ── Theme tokens — mirrors CSS custom properties in style.css ──────────────
+  // ── Theme tokens — Premium Enterprise Data aesthetic ───────────────────────
   theme: {
     colors: {
-      // Page & surface
-      bg:      '#f5f5f7',           // Apple light page background
-      surface: '#ffffff',
-      'surface-secondary': '#f5f5f7',
+      // Warm Backgrounds & Surfaces
+      bg:            '#F5F3EE',   // Warm off-white (paper)
+      surface:       '#FFFFFF',   // Pure white card background
+      'surface-soft':'#FBFAF6',   // Slight warm tint for hover states
 
-      // Text scale
+      // Text (Warm Inks)
       text: {
-        primary:   '#1d1d1f',
-        secondary: '#6e6e73',
-        tertiary:  '#86868b',
-        disabled:  '#c7c7cc',
+        primary:   '#141414',   // Deep ink
+        secondary: '#5B5A52',   // Soft ink
+        tertiary:  '#8F8C81',   // Faint ink
+        disabled:  '#CFC9B8',   // Disabled/border-strong
       },
 
-      // Apple accent blue family
+      // Domain Accents — Schedule A / Supply / Primary Data
       accent: {
-        DEFAULT: '#0071e3',
-        hover:   '#0077ed',
-        active:  '#006ecd',
-        subtle:  'rgba(0,113,227,0.10)',
+        DEFAULT: '#1D5F5E',
+        hover:   '#174E4D',
+        soft:    '#D4E4E2',
       },
 
-      // Semantic
-      success: '#34c759',
-      warning: '#ff9500',
-      danger:  '#ff3b30',
-      purple:  '#5856d6',
+      // Domain Accents — Schedule B / Execution / Primary Action
+      'accent-b': {
+        DEFAULT: '#C17841',
+        hover:   '#A9653A',
+        soft:    '#F2DFCC',
+      },
+
+      // Semantic (muted, professional)
+      success: '#5E8858',
+      warning: '#D89B3C',
+      danger:  '#B63A2E',
+      neutral: '#9B958A',
 
       // Borders
-      border:    'rgba(0,0,0,0.08)',
-      separator: '#e5e5ea',
+      border:         '#E6E2D7',
+      'border-strong':'#CFC9B8',
 
-      // Dark mode surfaces (use with .dark class)
+      // Dark mode surfaces
       dark: {
-        bg:        '#000000',
-        surface:   '#1c1c1e',
-        elevated:  '#2c2c2e',
-        active:    '#1d1d1f',        // kept for existing usage
-        accent:    '#2997ff',        // Apple blue shifts on dark bg
+        bg:            '#141414',
+        surface:       '#1E1E1E',
+        elevated:      '#2A2A2A',
+        'surface-soft':'#252525',
+        accent:        '#2A9D8F',  // Lighter teal for dark bg
+        'accent-b':    '#D4915A',  // Lighter orange for dark bg
       },
 
-      // Legacy aliases (kept so existing templates don't break)
-      light: {
-        bg:      '#f5f5f7',
-        surface: '#ffffff',
-      },
-      brand: {
-        primary: '#0071e3',
-      },
+      // Legacy aliases (kept for compatibility)
+      light: { bg: '#F5F3EE', surface: '#FFFFFF' },
+      brand: { primary: '#1D5F5E' },
     },
 
-    // Border radii matching CSS custom props
+    // Sharper radii for data-dense UI
     borderRadius: {
-      sm:   '8px',
-      md:   '12px',
-      lg:   '16px',
-      xl:   '20px',
-      '2xl':'24px',
+      sm:   '2px',
+      md:   '4px',
+      lg:   '6px',
+      xl:   '8px',
+      '2xl':'12px',
       pill: '9999px',
       full: '9999px',
     },
 
-    // Box shadows matching CSS custom props
+    // Subdued, warmer shadows
     boxShadow: {
-      xs:     '0 1px 3px rgba(0,0,0,0.06)',
-      sm:     '0 4px 14px rgba(0,0,0,0.06)',
-      md:     '0 8px 24px rgba(0,0,0,0.08)',
-      lg:     '0 16px 40px rgba(0,0,0,0.10)',
-      accent: '0 8px 20px rgba(0,113,227,0.22)',
-      danger: '0 8px 20px rgba(255,59,48,0.22)',
+      xs:         '0 1px 2px rgba(20,20,20,0.04)',
+      sm:         '0 2px 4px rgba(20,20,20,0.06)',
+      md:         '0 4px 8px rgba(20,20,20,0.06)',
+      lg:         '0 8px 16px rgba(20,20,20,0.08)',
+      accent:     '0 4px 14px rgba(29,95,94,0.15)',
+      'accent-b': '0 4px 14px rgba(193,120,65,0.15)',
     },
 
     // Transition timing
@@ -104,65 +106,66 @@ export default defineConfig({
       slow: '300ms',
     },
 
-    // Font family — system stack first so SF Pro is used on Apple devices
+    // Typography
     fontFamily: {
-      sans:    ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Text', 'Segoe UI', 'Inter', 'system-ui', 'sans-serif'],
-      display: ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Display', 'Segoe UI', 'Inter', 'system-ui', 'sans-serif'],
+      sans:    ['Manrope', 'Inter', 'system-ui', 'sans-serif'],
+      display: ['Manrope', 'Inter', 'system-ui', 'sans-serif'],
+      mono:    ['JetBrains Mono', 'Menlo', 'monospace'],
     },
   },
 
-  // ── Shortcuts — component-level aliases for multi-utility patterns ──────────
+  // ── Shortcuts — data-UI focused component aliases ──────────────────────────
   shortcuts: {
-    // Layout helpers
+    // Layout
     'flex-center':  'flex items-center justify-center',
     'flex-between': 'flex items-center justify-between',
     'flex-start':   'flex items-center justify-start',
 
-    // Apple-style shadows
-    'soft-shadow':  'shadow-[0_4px_14px_rgba(0,0,0,0.06)]',
-    'med-shadow':   'shadow-[0_8px_24px_rgba(0,0,0,0.08)]',
-    'lift-shadow':  'shadow-[0_16px_40px_rgba(0,0,0,0.10)]',
+    // Navigation
+    'nav-item':        'flex items-center gap-3 px-3 py-2 rounded-md text-text-tertiary hover:bg-surface-soft hover:text-text-primary dark:text-[#8F8C81] dark:hover:bg-[#252525] dark:hover:text-[#F5F3EE] transition-all duration-fast font-medium cursor-pointer select-none',
+    'nav-item-active': 'flex items-center gap-3 px-3 py-2 rounded-md bg-accent-soft text-accent dark:bg-[#2A9D8F]/20 dark:text-[#2A9D8F] transition-all duration-fast font-medium cursor-pointer select-none',
 
-    // Sidebar navigation items
-    'nav-item':        'flex items-center gap-3 px-4 py-3 rounded-xl text-[#86868b] hover:bg-[#f5f5f7] hover:text-[#1d1d1f] dark:text-[#aeaeb2] dark:hover:bg-[#2c2c2e] dark:hover:text-[#f5f5f7] transition-all duration-300 font-medium cursor-pointer select-none',
-    'nav-item-active': 'flex items-center gap-3 px-4 py-3 rounded-xl bg-[#0071e3]/10 text-[#0071e3] dark:bg-[#2997ff]/15 dark:text-[#2997ff] transition-all duration-300 font-medium cursor-pointer select-none',
+    // Surfaces
+    'page-card':  'bg-surface dark:bg-[#1E1E1E] border border-border dark:border-[#2A2A2A] rounded-lg shadow-sm min-h-full w-full flex flex-col overflow-hidden',
+    'page-header':'px-8 pt-7 pb-5 border-b border-border dark:border-[#2A2A2A]',
+    'card-data':  'bg-surface dark:bg-[#1E1E1E] border border-border dark:border-[#2A2A2A] rounded-lg shadow-xs p-4 flex flex-col',
 
-    // Page card wrapper (the white rounded card that fills each page)
-    'page-card': 'bg-white dark:bg-[#1c1c1e] rounded-2xl soft-shadow min-h-full w-full flex flex-col overflow-hidden',
+    // Buttons
+    'btn-primary':   'inline-flex items-center justify-center gap-1.5 rounded-md bg-accent-b text-white font-semibold text-sm px-4 py-2 transition-all hover:bg-accent-b-hover hover:-translate-y-px hover:shadow-accent-b active:translate-y-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none',
+    'btn-secondary': 'inline-flex items-center justify-center gap-1.5 rounded-md bg-surface dark:bg-[#1E1E1E] border border-border-strong dark:border-[#2A2A2A] text-text-primary dark:text-[#F5F3EE] font-semibold text-sm px-4 py-2 transition-all hover:bg-surface-soft dark:hover:bg-[#252525] active:bg-border disabled:opacity-40 disabled:cursor-not-allowed',
+    'btn-ghost':     'inline-flex items-center justify-center gap-1.5 rounded-md text-accent font-semibold text-sm px-3 py-2 transition-all hover:bg-accent-soft active:opacity-70',
+    'btn-danger':    'inline-flex items-center justify-center gap-1.5 rounded-md bg-danger text-white font-semibold text-sm px-4 py-2 transition-all hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed',
 
-    // Page header block inside a page-card
-    'page-header': 'px-8 pt-7 pb-5 border-b border-gray-100 dark:border-[#3a3a3c]',
+    // Form Inputs
+    'input-data': 'w-full bg-surface dark:bg-[#1E1E1E] border border-border-strong dark:border-[#2A2A2A] rounded-md px-3 py-2 text-sm text-text-primary dark:text-[#F5F3EE] placeholder-text-disabled focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all',
 
-    // Apple-style pill button — primary blue
-    'btn-apple': 'inline-flex items-center justify-center gap-1.5 rounded-full bg-[#0071e3] text-white font-semibold text-sm px-5 py-2.5 transition-all hover:bg-[#0077ed] hover:-translate-y-px hover:shadow-[0_8px_20px_rgba(0,113,227,0.22)] active:bg-[#006ecd] active:translate-y-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none',
+    // Badges
+    'badge-teal':    'inline-flex items-center gap-1.5 bg-accent-soft border border-accent/20 rounded-sm px-2.5 py-1 text-xs font-bold text-accent',
+    'badge-orange':  'inline-flex items-center gap-1.5 bg-accent-b-soft border border-accent-b/20 rounded-sm px-2.5 py-1 text-xs font-bold text-accent-b',
+    'badge-neutral': 'inline-flex items-center gap-1.5 bg-border/40 border border-border-strong rounded-sm px-2.5 py-1 text-xs font-bold text-text-tertiary',
+    'badge-success': 'inline-flex items-center gap-1.5 bg-success/10 border border-success/20 rounded-sm px-2.5 py-1 text-xs font-bold text-success',
+    'badge-danger':  'inline-flex items-center gap-1.5 bg-danger/10 border border-danger/20 rounded-sm px-2.5 py-1 text-xs font-bold text-danger',
 
-    // Dark pill button (used on Add New Work upload button)
-    'btn-apple-dark': 'inline-flex items-center justify-center gap-1.5 rounded-full bg-[#1d1d1f] text-white font-semibold text-sm px-5 py-2.5 transition-all hover:bg-[#2d2d2f] hover:-translate-y-px hover:shadow-[0_8px_20px_rgba(0,0,0,0.25)] active:bg-[#1d1d1f] active:translate-y-0 disabled:opacity-40 disabled:cursor-not-allowed',
+    // Data-specific utilities
+    'section-label': 'text-[10px] font-bold text-text-tertiary uppercase tracking-widest',
+    'kpi-value':     'text-2xl font-bold text-text-primary tracking-tight font-mono tabular-nums',
+    'tnum':          'tabular-nums',
+    'loa-tag':       'text-[11px] font-semibold text-accent bg-accent-soft px-2 py-0.5 rounded-sm whitespace-nowrap',
+    'glass-surface': 'bg-surface/80 dark:bg-[#1E1E1E]/80 backdrop-blur-xl border border-border dark:border-[#2A2A2A]',
 
-    // Ghost pill button — blue text, no border
-    'btn-apple-ghost': 'inline-flex items-center justify-center gap-1.5 rounded-full text-[#0071e3] font-semibold text-sm px-4 py-2 transition-all hover:bg-[#0071e3]/10 active:opacity-70',
-
-    // Apple-style search / input wrap
-    'input-apple': 'flex items-center bg-gray-50 dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c] rounded-2xl px-5 py-3 focus-within:ring-2 focus-within:ring-[#0071e3]/20 focus-within:border-[#0071e3] focus-within:bg-white dark:focus-within:bg-[#1c1c1e] transition-all',
-
-    // Card (white surface, soft shadow, rounded-2xl)
-    'card-apple':          'bg-white dark:bg-[#1c1c1e] rounded-2xl soft-shadow border border-gray-100 dark:border-[#3a3a3c] overflow-hidden',
-    'card-apple-hover':    'bg-white dark:bg-[#1c1c1e] rounded-2xl soft-shadow border border-gray-100 dark:border-[#3a3a3c] overflow-hidden transition-all hover:-translate-y-1 hover:med-shadow cursor-pointer',
-
-    // Stat / pill badge
-    'badge-blue':   'flex items-center gap-2 bg-blue-50 dark:bg-[#2997ff]/15 border border-blue-100 dark:border-[#2997ff]/25 rounded-xl px-4 py-2 text-xs font-semibold text-blue-700 dark:text-[#2997ff]',
-    'badge-green':  'flex items-center gap-2 bg-green-50 dark:bg-[#34c759]/15 border border-green-100 dark:border-[#34c759]/25 rounded-xl px-4 py-2 text-xs font-semibold text-green-700 dark:text-[#34c759]',
-    'badge-orange': 'flex items-center gap-2 bg-orange-50 dark:bg-[#ff9500]/15 border border-orange-100 dark:border-[#ff9500]/25 rounded-xl px-4 py-2 text-xs font-semibold text-orange-700 dark:text-[#ff9500]',
-    'badge-gray':   'flex items-center gap-2 bg-gray-50 dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c] rounded-xl px-4 py-2 text-xs font-semibold text-gray-600 dark:text-[#aeaeb2]',
-
-    // Glass surface (frosted, for modals / overlays)
-    'glass-surface': 'bg-white/80 dark:bg-[#1c1c1e]/80 backdrop-blur-xl border border-white/60 dark:border-white/10',
-
-    // Section label (tiny uppercase, Apple style)
-    'section-label': 'text-[10px] font-bold text-gray-400 uppercase tracking-widest',
-
-    // LOA number pill tag
-    'loa-tag': 'text-[11px] font-semibold text-[#0071e3] bg-[#0071e3]/10 px-2 py-0.5 rounded-full whitespace-nowrap',
+    // Legacy Apple shortcuts — aliases so existing templates keep working
+    'btn-apple':       'btn-primary',
+    'btn-apple-dark':  'btn-secondary',
+    'btn-apple-ghost': 'btn-ghost',
+    'input-apple':     'input-data',
+    'card-apple':      'card-data',
+    'card-apple-hover':'card-data transition-all hover:-translate-y-0.5 cursor-pointer',
+    'soft-shadow':     'shadow-sm',
+    'med-shadow':      'shadow-md',
+    'lift-shadow':     'shadow-lg',
+    'badge-blue':      'badge-teal',
+    'badge-green':     'badge-success',
+    'badge-gray':      'badge-neutral',
   },
 
   // Safelist utility classes that are generated dynamically and might be purged
@@ -173,6 +176,8 @@ export default defineConfig({
     'animate-spin',
     // Dark mode class on <html>
     'dark',
+    // Dark button background (used in dynamic :class bindings — must be safelisted)
+    'bg-dark-active',
     // Carbon icons used dynamically (e.g. :class="item.icon" in Sidebar)
     'i-carbon-dashboard',
     'i-carbon-catalog',

@@ -12,9 +12,29 @@ from .serializers import MBRecordSerializer
 from .parsers import parse_rm_pdf
 
 
-def _check_not_observer(user):
-    if user.is_authenticated and hasattr(user, 'profile') and user.profile.role == 'observer':
-        raise PermissionDenied("Observers are not authorized to make changes.")
+def _is_admin(user):
+    if not user.is_authenticated:
+        return False
+    if user.is_staff:
+        return True
+    profile = getattr(user, 'profile', None)
+    return profile is not None and profile.role == 'admin'
+
+
+def _check_work_access(user, work):
+    """Consignee can only access works mapped to their HRMS ID."""
+    if not user.is_authenticated:
+        raise PermissionDenied("Authentication required.")
+    if _is_admin(user):
+        return
+    if work.hrms_id != user.username:
+        raise PermissionDenied("You are not the consignee for this work.")
+
+
+def _block_admin_write(user):
+    """Admins can view MB details but cannot create, edit, or delete them."""
+    if _is_admin(user):
+        raise PermissionDenied("Admins can view MB details but cannot create, edit, or delete them.")
 
 
 class WorkSearchView(APIView):
@@ -23,6 +43,8 @@ class WorkSearchView(APIView):
     def get(self, request):
         q = request.query_params.get('q', '').strip()
         qs = Work.objects.all()
+        if not _is_admin(request.user):
+            qs = qs.filter(hrms_id=request.user.username)
         if q:
             qs = qs.filter(
                 Q(loa_number__icontains=q) |
@@ -48,6 +70,12 @@ class WorkItemSearchView(APIView):
     """GET /api/mb-details/works/<work_id>/items/?schedule=A|B|&q=cable"""
 
     def get(self, request, work_id):
+        try:
+            work = Work.objects.get(pk=work_id)
+        except Work.DoesNotExist:
+            return Response({'error': 'Work not found.'}, status=status.HTTP_404_NOT_FOUND)
+        _check_work_access(request.user, work)
+
         schedule = (request.query_params.get('schedule') or '').strip().upper()
         q        = (request.query_params.get('q') or '').strip()
 
@@ -85,9 +113,10 @@ class ItemPriorInfoView(APIView):
 
     def get(self, request, work_item_id):
         try:
-            wi = WorkItem.objects.get(pk=work_item_id)
+            wi = WorkItem.objects.select_related('work').get(pk=work_item_id)
         except WorkItem.DoesNotExist:
             return Response({'error': 'Item not found.'}, status=status.HTTP_404_NOT_FOUND)
+        _check_work_access(request.user, wi.work)
 
         prior_pct = MBItem.objects.filter(work_item=wi).aggregate(m=Max('current_percentage'))['m'] or 0
         billed_qty_total = MBItem.objects.filter(work_item=wi).aggregate(t=Sum('quantity'))['t'] or 0
@@ -113,6 +142,8 @@ class MBRecordListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         qs = MBRecord.objects.select_related('work', 'created_by').prefetch_related('items__work_item')
+        if not _is_admin(self.request.user):
+            qs = qs.filter(work__hrms_id=self.request.user.username)
         work_id = self.request.query_params.get('work_id')
         if work_id:
             qs = qs.filter(work_id=work_id)
@@ -120,7 +151,7 @@ class MBRecordListCreateView(generics.ListCreateAPIView):
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
-        _check_not_observer(request.user)
+        _block_admin_write(request.user)
 
         work_id   = request.data.get('work')
         mb_number = request.data.get('mb_number')
@@ -139,6 +170,8 @@ class MBRecordListCreateView(generics.ListCreateAPIView):
             work = Work.objects.get(pk=work_id)
         except Work.DoesNotExist:
             return Response({'error': 'Work not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        _check_work_access(request.user, work)
 
         if MBRecord.objects.filter(work=work, mb_number=mb_number).exists():
             return Response({'error': f'MB number "{mb_number}" already exists for this work.'},
@@ -197,13 +230,17 @@ class MBRecordDetailView(generics.RetrieveDestroyAPIView):
     serializer_class = MBRecordSerializer
 
     def perform_destroy(self, instance):
-        _check_not_observer(self.request.user)
+        _block_admin_write(self.request.user)
+        if instance.created_by_id != self.request.user.id:
+            raise PermissionDenied("Only the consignee who created this MB record can delete it.")
         instance.delete()
 
     @transaction.atomic
     def patch(self, request, *args, **kwargs):
-        _check_not_observer(request.user)
+        _block_admin_write(request.user)
         record = self.get_object()
+        if record.created_by_id != request.user.id:
+            raise PermissionDenied("Only the consignee who created this MB record can edit it.")
 
         mb_number        = str(request.data.get('mb_number', record.mb_number) or '').strip()
         measurement_date = request.data.get('measurement_date', record.measurement_date) or None
@@ -314,7 +351,7 @@ class PDFImportView(APIView):
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request):
-        _check_not_observer(request.user)
+        _block_admin_write(request.user)
 
         file_obj = request.FILES.get('file')
         work_id  = request.data.get('work_id')
@@ -328,6 +365,8 @@ class PDFImportView(APIView):
             work = Work.objects.get(pk=work_id)
         except Work.DoesNotExist:
             return Response({'error': 'Work not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        _check_work_access(request.user, work)
 
         try:
             parsed = parse_rm_pdf(file_obj)

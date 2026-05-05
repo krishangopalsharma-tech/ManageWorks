@@ -2,6 +2,8 @@
 import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
 
+const getCsrfToken = () => { const m = document.cookie.match(/csrftoken=([^;]+)/); return m ? m[1] : '' }
+
 const fmtDate = (val) => {
   if (!val) return '—'
   return String(val).split(' ')[0].split('T')[0]
@@ -44,13 +46,12 @@ const selectedWork = ref(null)
 const isLoading    = ref(true)
 const currentUser  = ref(null)
 
-const isObserver = computed(() => currentUser.value?.role === 'observer')
-const isAdmin    = computed(() => currentUser.value?.role === 'admin' || currentUser.value?.is_staff)
+const isAdmin       = computed(() => currentUser.value?.role === 'admin' || currentUser.value?.is_staff)
+const isConsignee   = computed(() => currentUser.value?.role === 'consignee')
+const canModifyWork = computed(() => isAdmin.value || isConsignee.value)
 
 const canEditEntry = (entry) => {
   if (!currentUser.value) return false
-  if (isObserver.value) return false
-  if (isAdmin.value) return true
   return entry.submitted_by_user?.id === currentUser.value.id
 }
 
@@ -544,7 +545,7 @@ const saveWork = async () => {
 const deleteWork = async () => {
   isDeletingWork.value = true
   try {
-    await axios.delete(`/api/update-work/works/${editingWork.value.id}/`)
+    await axios.delete(`/api/update-work/works/${editingWork.value.id}/`, { headers: { 'X-CSRFToken': getCsrfToken() } })
     allWorks.value = allWorks.value.filter(w => w.id !== editingWork.value.id)
     closeEditWork()
   } catch (e) {
@@ -606,12 +607,12 @@ const deleteWork = async () => {
                 <td class="px-4 py-4 text-xs font-medium text-gray-600 whitespace-nowrap">{{ fmtDate(work.date_of_completion) }}</td>
                 <td class="px-4 py-4 text-right">
                   <div class="flex items-center justify-end gap-2">
-                    <button @click="openEditWork(work)"
+                    <button v-if="canModifyWork" @click="openEditWork(work)"
                       class="px-3.5 py-2 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-semibold transition-all flex items-center gap-1.5">
                       <div class="i-carbon-edit text-xs"></div> Edit
                     </button>
                     <button @click="selectWork(work)"
-                      class="px-3.5 py-2 rounded-full bg-dark-active text-white text-xs font-semibold shadow shadow-black/20 hover:shadow-md hover:-translate-y-0.5 transition-all flex items-center gap-1">
+                      class="px-3.5 py-2 rounded-full bg-[#1d1d1f] text-white text-xs font-semibold shadow shadow-black/20 hover:shadow-md hover:-translate-y-0.5 transition-all flex items-center gap-1">
                       Submit Entries <div class="i-carbon-chevron-right text-xs"></div>
                     </button>
                   </div>
@@ -667,7 +668,7 @@ const deleteWork = async () => {
             </div>
             <!-- Filter + Batch Upload -->
             <div class="flex-shrink-0 flex items-center gap-2">
-              <button v-if="!isObserver" @click="openBatchModal"
+              <button @click="openBatchModal"
                 class="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#0071e3]/10 hover:bg-[#0071e3]/20 text-[#0071e3] text-xs font-semibold transition-all">
                 <div class="i-carbon-document-pdf text-sm"></div>
                 Upload PDF Receipts
@@ -834,26 +835,28 @@ const deleteWork = async () => {
 
           <div class="px-7 pb-6 pt-3 flex items-center justify-between gap-3 border-t border-gray-100">
             <div>
-              <button v-if="!showDeleteConfirm" @click="showDeleteConfirm = true"
-                class="px-4 py-2 rounded-full border border-[#ff3b30]/30 text-[#ff3b30] text-xs font-semibold hover:bg-[#ff3b30]/8 transition-all flex items-center gap-1.5">
-                <div class="i-carbon-trash-can text-xs"></div> Delete Work
-              </button>
-              <div v-else class="flex items-center gap-2">
-                <span class="text-xs font-semibold text-[#ff3b30]">Delete this work?</span>
-                <button @click="deleteWork" :disabled="isDeletingWork"
-                  class="px-4 py-2 rounded-full bg-[#ff3b30] text-white text-xs font-semibold shadow shadow-[#ff3b30]/30 hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 flex items-center gap-1">
-                  <div v-if="isDeletingWork" class="i-carbon-circle-dash animate-spin"></div>
-                  <span v-else>Yes, Delete</span>
+              <template v-if="canModifyWork">
+                <button v-if="!showDeleteConfirm" @click="showDeleteConfirm = true"
+                  class="px-4 py-2 rounded-full border border-[#ff3b30]/30 text-[#ff3b30] text-xs font-semibold hover:bg-[#ff3b30]/8 transition-all flex items-center gap-1.5">
+                  <div class="i-carbon-trash-can text-xs"></div> Delete Work
                 </button>
-                <button @click="showDeleteConfirm = false" class="px-4 py-2 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold transition-all">Cancel</button>
-              </div>
+                <div v-else class="flex items-center gap-2">
+                  <span class="text-xs font-semibold text-[#ff3b30]">Delete this work?</span>
+                  <button @click="deleteWork" :disabled="isDeletingWork"
+                    class="px-4 py-2 rounded-full bg-[#ff3b30] text-white text-xs font-semibold shadow shadow-[#ff3b30]/30 hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 flex items-center gap-1">
+                    <div v-if="isDeletingWork" class="i-carbon-circle-dash animate-spin"></div>
+                    <span v-else>Yes, Delete</span>
+                  </button>
+                  <button @click="showDeleteConfirm = false" class="px-4 py-2 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold transition-all">Cancel</button>
+                </div>
+              </template>
             </div>
             <div class="flex items-center gap-3">
               <p v-if="workSaveStatus === 'error'" class="text-xs font-medium text-[#ff3b30]">Failed to save.</p>
               <button @click="closeEditWork" class="px-5 py-2.5 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-800 text-sm font-semibold transition-all">Cancel</button>
-              <button @click="saveWork" :disabled="isSavingWork"
+              <button v-if="canModifyWork" @click="saveWork" :disabled="isSavingWork"
                 class="px-5 py-2.5 rounded-full text-white text-sm font-semibold shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center gap-2"
-                :class="workSaveStatus === 'saved' ? 'bg-[#34c759] shadow-[#34c759]/30' : 'bg-dark-active shadow-black/20'">
+                :class="workSaveStatus === 'saved' ? 'bg-[#34c759] shadow-[#34c759]/30' : 'bg-[#1d1d1f] shadow-black/20'">
                 <div v-if="isSavingWork" class="i-carbon-circle-dash animate-spin"></div>
                 <span>{{ workSaveStatus === 'saved' ? 'Saved!' : 'Save Changes' }}</span>
               </button>
@@ -934,7 +937,7 @@ const deleteWork = async () => {
                   <div class="i-carbon-add-filled text-[#0071e3]"></div> Submit New Entry
                 </h3>
                 <!-- Fill from PDF button -->
-                <label v-if="!isObserver && entryForm.entry_type === 'supply'"
+                <label v-if="entryForm.entry_type === 'supply'"
                   class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 text-[11px] font-semibold cursor-pointer transition-all"
                   :class="{ 'opacity-60 pointer-events-none': pdfFilling }">
                   <div v-if="pdfFilling" class="i-carbon-circle-dash animate-spin text-xs"></div>
@@ -1023,10 +1026,10 @@ const deleteWork = async () => {
                 </div>
               </div>
 
-              <button @click="submitEntry" :disabled="entryForm.isSubmitting || isObserver"
+              <button @click="submitEntry" :disabled="entryForm.isSubmitting"
                 class="w-full py-3 rounded-2xl text-white text-sm font-bold shadow shadow-black/15 hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center justify-center gap-2"
                 :class="{
-                  'bg-dark-active':    !entryForm.status && entryForm.entry_type === 'supply',
+                  'bg-[#1d1d1f]':    !entryForm.status && entryForm.entry_type === 'supply',
                   'bg-[#34c759]':      (!entryForm.status && entryForm.entry_type === 'execution') || entryForm.status === 'ok',
                   'bg-[#ff3b30]':      ['error','denied','invalid','noloc','duplicate'].includes(entryForm.status),
                 }">
@@ -1311,7 +1314,7 @@ const deleteWork = async () => {
               <button @click="closeBatchModal" class="px-5 py-2.5 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-800 text-sm font-semibold transition-all">Close</button>
               <button @click="submitBatchEntries"
                 :disabled="batchSubmitting || !batchResults.some(r => r.include && r.matchedItemId && !r.done)"
-                class="px-5 py-2.5 rounded-full bg-dark-active text-white text-sm font-semibold shadow shadow-black/20 hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center gap-2">
+                class="px-5 py-2.5 rounded-full bg-[#1d1d1f] text-white text-sm font-semibold shadow shadow-black/20 hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center gap-2">
                 <div v-if="batchSubmitting" class="i-carbon-circle-dash animate-spin"></div>
                 <span>Submit Selected</span>
               </button>

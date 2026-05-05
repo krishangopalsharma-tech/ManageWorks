@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from .models import UserProfile
+from works.models import Work
 
 
 def _user_data(user):
@@ -17,7 +18,7 @@ def _user_data(user):
         'name':        user.first_name,
         'designation': profile.designation if profile else '',
         'pf_number':   profile.pf_number   if profile else '',
-        'role':        profile.role         if profile else ('admin' if user.is_staff else 'user'),
+        'role':        profile.role         if profile else ('admin' if user.is_staff else 'consignee'),
         'is_approved': profile.is_approved  if profile else user.is_staff,
     }
 
@@ -49,7 +50,7 @@ class RegisterView(APIView):
             designation = designation,
             pf_number   = pf_number,
             is_approved = False,
-            role        = 'user',
+            role        = 'consignee',
         )
         return Response({'message': 'Registration submitted. Await admin approval.'}, status=status.HTTP_201_CREATED)
 
@@ -157,7 +158,7 @@ class UpdateRoleView(APIView):
         if not _is_admin(request.user):
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
         role = request.data.get('role', '').strip()
-        if role not in ('user', 'observer', 'consignee'):
+        if role not in ('consignee', 'admin'):
             return Response({'error': 'Invalid role.'}, status=status.HTTP_400_BAD_REQUEST)
         try:
             profile = UserProfile.objects.get(user_id=user_id)
@@ -188,3 +189,62 @@ def _is_admin(user):
         return True
     profile = getattr(user, 'profile', None)
     return profile is not None and profile.role == 'admin'
+
+
+class UpdateUserView(APIView):
+    def patch(self, request, user_id):
+        if not _is_admin(request.user):
+            return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            profile = UserProfile.objects.get(user_id=user_id)
+        except UserProfile.DoesNotExist:
+            return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if 'designation' in request.data:
+            profile.designation = (request.data['designation'] or '').strip()
+        if 'role' in request.data:
+            role = (request.data['role'] or '').strip()
+            if role not in ('consignee', 'admin'):
+                return Response({'error': 'Invalid role.'}, status=status.HTTP_400_BAD_REQUEST)
+            profile.role = role
+        profile.save()
+        return Response({'message': 'Updated.'})
+
+
+class WorksListView(APIView):
+    """GET /api/auth/works/ — lightweight works list for admin assignment UI."""
+
+    def get(self, request):
+        if not _is_admin(request.user):
+            return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
+        works = Work.objects.values(
+            'id', 'loa_number', 'tender_number',
+            'contractor_name', 'consignee', 'hrms_id', 'name_of_work',
+        ).order_by('id')
+        return Response(list(works))
+
+
+class AssignWorkView(APIView):
+    """
+    POST /api/auth/assign-work/
+    body: { work_id, hrms_id }   ← hrms_id='' to unassign
+    Admin-only. Sets Work.hrms_id directly.
+    """
+
+    def post(self, request):
+        if not _is_admin(request.user):
+            return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
+        work_id = request.data.get('work_id')
+        hrms_id = (request.data.get('hrms_id') or '').strip()
+        try:
+            work = Work.objects.get(pk=work_id)
+        except Work.DoesNotExist:
+            return Response({'error': 'Work not found.'}, status=status.HTTP_404_NOT_FOUND)
+        work.hrms_id = hrms_id
+        work.save(update_fields=['hrms_id'])
+        return Response({
+            'id':               work.id,
+            'hrms_id':          work.hrms_id,
+            'loa_number':       work.loa_number,
+            'contractor_name':  work.contractor_name,
+            'consignee':        work.consignee,
+        })
