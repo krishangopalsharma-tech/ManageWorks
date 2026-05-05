@@ -529,7 +529,7 @@ const saveWork = async () => {
       ...fields,
       extensions: extensions.filter(e => (e.extension_date || '').trim()).map(e => ({ extension_date: e.extension_date.trim() })),
     }
-    await axios.patch(`/api/update-work/works/${id}/`, payload)
+    await axios.patch(`/api/update-work/works/${id}/`, payload, { headers: { 'X-CSRFToken': getCsrfToken() } })
     const idx = allWorks.value.findIndex(w => w.id === id)
     if (idx !== -1) allWorks.value[idx] = { ...allWorks.value[idx], ...fields, extensions: payload.extensions }
     if (selectedWork.value?.id === id) Object.assign(selectedWork.value, fields)

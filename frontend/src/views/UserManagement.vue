@@ -218,13 +218,13 @@ onMounted(loadData)
       <div class="flex-1 overflow-hidden flex">
 
         <!-- Left: profile + assigned works -->
-        <div class="flex-1 overflow-y-auto px-6 py-6 border-r border-gray-100 dark:border-[#3a3a3c]">
+        <div class="w-1/2 overflow-y-auto px-6 py-6 border-r border-gray-100 dark:border-[#3a3a3c]">
           <div class="max-w-xl flex flex-col gap-6">
 
             <!-- Profile card -->
             <div class="bg-white dark:bg-[#1c1c1e] rounded-2xl soft-shadow border border-gray-100 dark:border-[#3a3a3c] overflow-hidden">
               <!-- Avatar + name row -->
-              <div class="px-6 py-3 flex items-center gap-4">
+              <div class="px-6 py-2.5 flex items-center gap-4">
                 <div class="w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold shrink-0"
                   :class="detailUser.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'">
                   {{ (detailUser.name || '?')[0].toUpperCase() }}
@@ -240,24 +240,24 @@ onMounted(loadData)
 
               <!-- Info grid -->
               <div class="grid grid-cols-2 border-t border-gray-100 dark:border-[#3a3a3c]">
-                <div class="px-6 py-4 border-b border-r border-gray-100 dark:border-[#3a3a3c]">
-                  <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">HRMS ID</p>
+                <div class="px-6 py-2 border-b border-r border-gray-100 dark:border-[#3a3a3c] flex items-baseline gap-2">
+                  <p class="text-[9px] font-bold text-gray-400 uppercase tracking-widest shrink-0">HRMS ID</p>
                   <p class="text-sm font-semibold text-gray-800 dark:text-white font-mono">{{ detailUser.hrms_id }}</p>
                 </div>
-                <div class="px-6 py-4 border-b border-gray-100 dark:border-[#3a3a3c]">
-                  <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">PF No</p>
+                <div class="px-6 py-2 border-b border-gray-100 dark:border-[#3a3a3c] flex items-baseline gap-2">
+                  <p class="text-[9px] font-bold text-gray-400 uppercase tracking-widest shrink-0">PF No</p>
                   <p class="text-sm font-semibold text-gray-800 dark:text-white font-mono">{{ detailUser.pf_number }}</p>
                 </div>
-                <div class="px-6 py-4 border-r border-gray-100 dark:border-[#3a3a3c]">
-                  <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Designation</p>
+                <div class="px-6 py-2 border-r border-gray-100 dark:border-[#3a3a3c] flex items-baseline gap-2">
+                  <p class="text-[9px] font-bold text-gray-400 uppercase tracking-widest shrink-0">Designation</p>
                   <input v-if="isEditing" v-model="editDesig" type="text"
-                    class="w-full bg-gray-50 dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c] rounded-lg px-3 py-1.5 text-sm font-medium text-gray-800 dark:text-white outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 transition-all">
+                    class="w-full bg-gray-50 dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c] rounded-lg px-3 py-1 text-sm font-medium text-gray-800 dark:text-white outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 transition-all">
                   <p v-else class="text-sm font-semibold text-gray-800 dark:text-white">{{ detailUser.designation }}</p>
                 </div>
-                <div class="px-6 py-4">
-                  <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Role</p>
+                <div class="px-6 py-2 flex items-baseline gap-2">
+                  <p class="text-[9px] font-bold text-gray-400 uppercase tracking-widest shrink-0">Role</p>
                   <select v-if="isEditing" v-model="editRole"
-                    class="w-full bg-gray-50 dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c] rounded-lg px-3 py-1.5 text-sm font-semibold text-gray-800 dark:text-white outline-none focus:border-[#0071e3] transition-all cursor-pointer">
+                    class="w-full bg-gray-50 dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c] rounded-lg px-3 py-1 text-sm font-semibold text-gray-800 dark:text-white outline-none focus:border-[#0071e3] transition-all cursor-pointer">
                     <option v-for="r in ROLES" :key="r" :value="r" class="bg-white text-gray-800 capitalize">{{ r }}</option>
                   </select>
                   <p v-else class="text-sm font-semibold text-gray-800 dark:text-white capitalize">{{ detailUser.role }}</p>
@@ -304,7 +304,7 @@ onMounted(loadData)
         </div>
 
         <!-- Right: unassigned works to assign -->
-        <div class="w-[380px] flex-shrink-0 flex flex-col overflow-hidden">
+        <div class="w-1/2 flex-shrink-0 flex flex-col overflow-hidden">
           <div class="px-6 pt-6 pb-4">
             <p class="text-base font-bold text-gray-800 dark:text-white">List Of Unassigned work</p>
             <span v-if="unassignedCount > 0"

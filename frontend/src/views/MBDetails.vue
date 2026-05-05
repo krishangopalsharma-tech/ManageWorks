@@ -64,6 +64,7 @@ const unmatchedItems = ref([])
 
 // Edit modal state
 const editRecord          = ref(null)
+const editViewOnly        = ref(false)
 const editMbNumber        = ref('')
 const editMeasurementDate = ref('')
 const editNotes           = ref('')
@@ -272,6 +273,7 @@ const deleteRecord = async (id) => {
 
 // ── Edit modal ────────────────────────────────────────────────────────────
 const openEdit = (record) => {
+  editViewOnly.value        = false
   editRecord.value          = record
   editMbNumber.value        = record.mb_number
   editMeasurementDate.value = record.measurement_date || ''
@@ -289,6 +291,11 @@ const openEdit = (record) => {
     current_percentage: i.current_percentage,
   }))
   editSaveStatus.value = ''
+}
+
+const openView = (record) => {
+  openEdit(record)
+  editViewOnly.value = true
 }
 
 const closeEdit = () => {
@@ -574,7 +581,10 @@ onMounted(() => {
                             <div class="i-carbon-trash-can text-xs"></div>
                           </button>
                         </template>
-                        <span v-else class="text-[10px] text-gray-400 italic">View only</span>
+                        <button v-else @click="openView(rec)" title="View"
+                            class="flex items-center gap-1 px-2.5 py-1 rounded-full border border-gray-200 text-[10px] font-semibold text-gray-500 hover:border-[#0071e3] hover:text-[#0071e3] hover:bg-[#0071e3]/5 transition-all">
+                            <div class="i-carbon-view text-xs"></div> View
+                          </button>
                       </div>
                     </td>
                   </tr>
@@ -751,27 +761,29 @@ onMounted(() => {
         <!-- Modal header -->
         <div class="flex-shrink-0 px-6 pt-5 pb-4 border-b border-gray-100 flex items-center gap-4">
           <div class="flex-1 min-w-0 flex flex-col gap-1">
-            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Edit MB Record</p>
+            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{{ editViewOnly ? 'View MB Record' : 'Edit MB Record' }}</p>
             <div class="flex items-center gap-3 flex-wrap">
-              <input v-model="editMbNumber" type="text" placeholder="MB Number"
-                class="text-sm font-bold text-gray-900 bg-transparent outline-none border-b border-gray-200 focus:border-[#0071e3] transition-colors min-w-0 flex-1">
+              <input v-model="editMbNumber" type="text" placeholder="MB Number" :disabled="editViewOnly"
+                class="text-sm font-bold text-gray-900 bg-transparent outline-none border-b border-gray-200 focus:border-[#0071e3] transition-colors min-w-0 flex-1 disabled:cursor-default disabled:border-transparent">
               <div class="flex items-center gap-1.5 flex-shrink-0">
                 <span class="text-[10px] text-gray-400 whitespace-nowrap">Meas. Date:</span>
-                <input v-model="editMeasurementDate" type="date"
-                  class="text-xs text-gray-600 bg-transparent outline-none border-b border-gray-200 focus:border-[#0071e3] transition-colors">
+                <input v-model="editMeasurementDate" type="date" :disabled="editViewOnly"
+                  class="text-xs text-gray-600 bg-transparent outline-none border-b border-gray-200 focus:border-[#0071e3] transition-colors disabled:cursor-default disabled:border-transparent">
               </div>
-              <input v-model="editNotes" type="text" placeholder="Notes (optional)"
-                class="text-xs text-gray-500 bg-transparent outline-none border-b border-gray-200 focus:border-gray-400 transition-colors min-w-0 flex-1">
+              <input v-model="editNotes" type="text" placeholder="Notes (optional)" :disabled="editViewOnly"
+                class="text-xs text-gray-500 bg-transparent outline-none border-b border-gray-200 focus:border-gray-400 transition-colors min-w-0 flex-1 disabled:cursor-default disabled:border-transparent">
             </div>
           </div>
           <div class="flex items-center gap-2 flex-shrink-0">
-            <p v-if="editSaveStatus && editSaveStatus !== 'saved'" class="text-xs font-medium text-[#ff3b30]">{{ editSaveStatus }}</p>
-            <button @click="saveEdit" :disabled="!editCanSave || editSaving"
-              :class="editSaveStatus === 'saved' ? 'bg-[#34c759] shadow-[#34c759]/30' : 'bg-[#1d1d1f] shadow-black/20'"
-              class="px-4 py-2 rounded-full text-white text-xs font-semibold shadow hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center gap-2">
-              <div v-if="editSaving" class="i-carbon-circle-dash animate-spin"></div>
-              <span>{{ editSaveStatus === 'saved' ? 'Saved!' : 'Save Changes' }}</span>
-            </button>
+            <template v-if="!editViewOnly">
+              <p v-if="editSaveStatus && editSaveStatus !== 'saved'" class="text-xs font-medium text-[#ff3b30]">{{ editSaveStatus }}</p>
+              <button @click="saveEdit" :disabled="!editCanSave || editSaving"
+                :class="editSaveStatus === 'saved' ? 'bg-[#34c759] shadow-[#34c759]/30' : 'bg-[#1d1d1f] shadow-black/20'"
+                class="px-4 py-2 rounded-full text-white text-xs font-semibold shadow hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center gap-2">
+                <div v-if="editSaving" class="i-carbon-circle-dash animate-spin"></div>
+                <span>{{ editSaveStatus === 'saved' ? 'Saved!' : 'Save Changes' }}</span>
+              </button>
+            </template>
             <button @click="closeEdit"
               class="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-all">
               <div class="i-carbon-close text-sm"></div>
@@ -805,20 +817,20 @@ onMounted(() => {
                   <p class="text-[10px] text-gray-400 mt-0.5">{{ row.qty_default }} {{ row.unit }} · Rate: {{ fmtAmt(row.rate) }}</p>
                 </td>
                 <td class="px-4 py-2.5 text-right">
-                  <input v-model="row.quantity" type="number" min="0" step="0.01"
-                    class="w-20 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-xs font-semibold text-gray-800 outline-none focus:border-[#0071e3] focus:bg-white text-right">
+                  <input v-model="row.quantity" type="number" min="0" step="0.01" :disabled="editViewOnly"
+                    class="w-20 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-xs font-semibold text-gray-800 outline-none focus:border-[#0071e3] focus:bg-white text-right disabled:opacity-70 disabled:cursor-default">
                 </td>
                 <td class="px-4 py-2.5 text-right">
                   <div class="relative inline-flex items-center">
-                    <input v-model="row.prior_percentage" type="number" min="0" max="100" step="0.01"
-                      class="w-16 bg-gray-50 border border-gray-200 rounded-lg pr-4 pl-2 py-1 text-xs font-semibold text-gray-800 outline-none focus:border-[#0071e3] focus:bg-white text-right">
+                    <input v-model="row.prior_percentage" type="number" min="0" max="100" step="0.01" :disabled="editViewOnly"
+                      class="w-16 bg-gray-50 border border-gray-200 rounded-lg pr-4 pl-2 py-1 text-xs font-semibold text-gray-800 outline-none focus:border-[#0071e3] focus:bg-white text-right disabled:opacity-70 disabled:cursor-default">
                     <span class="absolute right-1.5 text-[9px] font-bold text-gray-400">%</span>
                   </div>
                 </td>
                 <td class="px-4 py-2.5 text-right">
                   <div class="relative inline-flex items-center">
-                    <input v-model="row.current_percentage" type="number" min="0" max="100" step="0.01"
-                      class="w-16 border rounded-lg pr-4 pl-2 py-1 text-xs font-semibold text-gray-800 outline-none focus:bg-white text-right"
+                    <input v-model="row.current_percentage" type="number" min="0" max="100" step="0.01" :disabled="editViewOnly"
+                      class="w-16 border rounded-lg pr-4 pl-2 py-1 text-xs font-semibold text-gray-800 outline-none focus:bg-white text-right disabled:opacity-70 disabled:cursor-default"
                       :class="editRowIsValid(row) ? 'bg-gray-50 border-gray-200 focus:border-[#0071e3]' : 'bg-red-50 border-[#ff3b30]/40 focus:border-[#ff3b30]'">
                     <span class="absolute right-1.5 text-[9px] font-bold text-gray-400">%</span>
                   </div>
