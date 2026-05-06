@@ -323,7 +323,7 @@ const generateItemPDF = async () => {
       <!-- Filters -->
       <div class="flex gap-3">
         <!-- Item search -->
-        <div class="flex-1 flex items-center bg-gray-50 border border-gray-200 rounded-2xl px-5 py-3 focus-within:ring-2 focus-within:ring-[#0071e3]/20 focus-within:border-[#0071e3] focus-within:bg-white transition-all">
+        <div class="flex-1 flex items-center bg-gray-50 border border-gray-200 rounded-2xl px-5 py-3 focus-within:ring-2 focus-within:ring-[#1D5F5E]/20 focus-within:border-[#1D5F5E] focus-within:bg-white transition-all">
           <div v-if="isSearching" class="i-carbon-circle-dash animate-spin text-gray-400 text-base mr-3 flex-shrink-0"></div>
           <div v-else class="i-carbon-search text-gray-400 text-base mr-3 flex-shrink-0"></div>
           <input v-model="itemSearch" type="text"
@@ -337,7 +337,7 @@ const generateItemPDF = async () => {
         <!-- Work multi-select dropdown -->
         <div class="relative w-72 flex-shrink-0" ref="dropdownRef">
           <button @click.stop="dropdownOpen = !dropdownOpen"
-            class="w-full flex items-center justify-between bg-gray-50 border border-gray-200 rounded-2xl px-5 py-3 text-sm font-medium text-gray-700 hover:border-[#0071e3] hover:bg-white transition-all">
+            class="w-full flex items-center justify-between bg-gray-50 border border-gray-200 rounded-2xl px-5 py-3 text-sm font-medium text-gray-700 hover:border-[#1D5F5E] hover:bg-white transition-all">
             <div class="flex items-center gap-2 min-w-0">
               <div class="i-carbon-filter text-gray-400 text-base flex-shrink-0"></div>
               <span class="truncate">{{ isLoadingWorks ? 'Loading...' : dropdownLabel }}</span>
@@ -355,7 +355,7 @@ const generateItemPDF = async () => {
               </div>
             </div>
             <div class="px-4 py-2 border-b border-gray-100 flex gap-3">
-              <button @click="selectedIds = allWorks.map(w => w.id)" class="text-xs font-semibold text-[#0071e3] hover:underline">Select All</button>
+              <button @click="selectedIds = allWorks.map(w => w.id)" class="text-xs font-semibold text-[#1D5F5E] hover:underline">Select All</button>
               <span class="text-gray-200">·</span>
               <button @click="selectedIds = []" class="text-xs font-semibold text-gray-400 hover:text-gray-600 hover:underline">Clear All</button>
             </div>
@@ -364,7 +364,7 @@ const generateItemPDF = async () => {
               <label v-for="work in filteredWorksDropdown" :key="work.id"
                 class="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors border-b border-gray-50 last:border-0">
                 <input type="checkbox" :checked="selectedIds.includes(work.id)" @change="toggleWork(work.id)"
-                  class="mt-0.5 accent-[#0071e3] flex-shrink-0" @click.stop>
+                  class="mt-0.5 accent-[#1D5F5E] flex-shrink-0" @click.stop>
                 <div class="min-w-0">
                   <p class="text-xs font-semibold text-gray-800 truncate">{{ work.loa_number || '—' }}</p>
                   <p class="text-[11px] text-gray-400 truncate">{{ work.contractor_name || '—' }}</p>
@@ -377,16 +377,16 @@ const generateItemPDF = async () => {
 
       <!-- Progress stats pills + Export -->
       <div v-if="searchResults.length > 0" class="mt-4 flex flex-wrap items-center gap-3">
-        <div class="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-xl px-4 py-2">
-          <div class="w-2 h-2 rounded-full bg-[#0071e3]"></div>
-          <span class="text-xs font-semibold text-blue-700">
+        <div class="flex items-center gap-2 bg-accent-soft border border-accent/20 rounded-xl px-4 py-2">
+          <div class="w-2 h-2 rounded-full bg-accent"></div>
+          <span class="text-xs font-semibold text-accent">
             Supply (Sch A): {{ stats.supplyPct }}%
             <span class="font-normal opacity-70">({{ stats.supplyCount }} items)</span>
           </span>
         </div>
-        <div class="flex items-center gap-2 bg-green-50 border border-green-100 rounded-xl px-4 py-2">
-          <div class="w-2 h-2 rounded-full bg-[#34c759]"></div>
-          <span class="text-xs font-semibold text-green-700">
+        <div class="flex items-center gap-2 bg-accent-b-soft border border-accent-b/20 rounded-xl px-4 py-2">
+          <div class="w-2 h-2 rounded-full bg-accent-b"></div>
+          <span class="text-xs font-semibold text-accent-b">
             Execution (Sch B): {{ stats.execPct }}%
             <span class="font-normal opacity-70">({{ stats.execCount }} items)</span>
           </span>
@@ -440,13 +440,13 @@ const generateItemPDF = async () => {
           <tr v-for="item in sortedResults" :key="item.id"
             class="border-b border-gray-100 hover:bg-gray-50/60 transition-colors">
             <td class="px-4 py-3">
-              <span class="text-[11px] font-semibold text-[#0071e3] bg-[#0071e3]/10 px-2 py-0.5 rounded-full whitespace-nowrap">
+              <span class="text-[11px] font-semibold text-accent bg-accent-soft px-2 py-0.5 rounded-full whitespace-nowrap">
                 {{ item.loa_number || '—' }}
               </span>
             </td>
             <td class="px-4 py-3 text-center">
               <span class="rounded-md px-2 py-1 text-[10px] font-bold"
-                :class="isSchB(item) ? 'bg-green-50 text-green-700' : 'bg-blue-50 text-blue-600'">
+                :class="isSchB(item) ? 'bg-accent-b-soft text-accent-b' : 'bg-accent-soft text-accent'">
                 {{ item.schedule }}
               </span>
             </td>
@@ -469,7 +469,7 @@ const generateItemPDF = async () => {
               <div class="flex items-center gap-2">
                 <div class="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                   <div class="h-full rounded-full transition-all duration-500"
-                    :class="progressPct(item) > 100 ? 'bg-orange-400' : (isSchB(item) ? 'bg-[#34c759]' : 'bg-[#0071e3]')"
+                    :class="progressPct(item) > 100 ? 'bg-orange-400' : (isSchB(item) ? 'bg-accent-b' : 'bg-accent')"
                     :style="{ width: Math.min(progressPct(item), 100) + '%' }">
                   </div>
                 </div>
@@ -482,7 +482,7 @@ const generateItemPDF = async () => {
             <td class="px-4 py-3 text-center cursor-help"
               @mouseenter="showTooltip(item, $event)" @mousemove="moveTooltip($event)" @mouseleave="hideTooltip">
               <span class="text-[11px] font-bold"
-                :class="(item.entries||[]).length > 0 ? 'text-[#0071e3]' : 'text-gray-300'">
+                :class="(item.entries||[]).length > 0 ? 'text-accent' : 'text-gray-300'">
                 {{ (item.entries || []).length }}
               </span>
             </td>
@@ -519,11 +519,11 @@ const generateItemPDF = async () => {
             <div class="px-4 py-3 border-b border-gray-100 bg-gray-50/80">
               <div class="flex items-center gap-2 mb-1">
                 <span class="rounded-md px-2 py-0.5 text-[10px] font-bold"
-                  :class="isSchB(hoveredItem) ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'">
+                  :class="isSchB(hoveredItem) ? 'bg-accent-b-soft text-accent-b' : 'bg-accent-soft text-accent'">
                   {{ hoveredItem.schedule }}
                 </span>
                 <span class="text-[10px] font-semibold text-gray-400">S.No {{ hoveredItem.serial_number }}</span>
-                <span class="ml-auto text-[10px] font-semibold text-[#0071e3] bg-[#0071e3]/10 px-2 py-0.5 rounded-full">
+                <span class="ml-auto text-[10px] font-semibold text-accent bg-accent-soft px-2 py-0.5 rounded-full">
                   {{ hoveredItem.loa_number }}
                 </span>
               </div>
@@ -531,12 +531,12 @@ const generateItemPDF = async () => {
               <!-- Sch-B: show supply + execution totals -->
               <div v-if="isSchB(hoveredItem)" class="mt-2 flex gap-3">
                 <span class="text-[10px] text-gray-500">
-                  Supplied: <strong class="text-blue-600">{{ hoveredItem.supplied_quantity || 0 }}</strong>
+                  Supplied: <strong class="text-accent">{{ hoveredItem.supplied_quantity || 0 }}</strong>
                   <span class="text-gray-400"> {{ hoveredItem.unit }}</span>
                 </span>
                 <span class="text-gray-200">·</span>
                 <span class="text-[10px] text-gray-500">
-                  Executed: <strong class="text-[#34c759]">{{ hoveredItem.executed_quantity || 0 }}</strong>
+                  Executed: <strong class="text-accent-b">{{ hoveredItem.executed_quantity || 0 }}</strong>
                   <span class="text-gray-400"> {{ hoveredItem.unit }}</span>
                 </span>
               </div>
@@ -556,11 +556,11 @@ const generateItemPDF = async () => {
                   <div class="flex items-center gap-2 min-w-0">
                     <!-- Index bubble + type badge -->
                     <span class="flex-shrink-0 w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center"
-                      :class="entry.entry_type === 'supply' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-700'">
+                      :class="entry.entry_type === 'supply' ? 'bg-accent-soft text-accent' : 'bg-accent-b-soft text-accent-b'">
                       {{ (hoveredItem.entries || []).length - idx }}
                     </span>
                     <span class="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide"
-                      :class="entry.entry_type === 'supply' ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-700'">
+                      :class="entry.entry_type === 'supply' ? 'bg-accent-soft text-accent' : 'bg-accent-b-soft text-accent-b'">
                       {{ entry.entry_type === 'supply' ? 'Supply' : 'Exec' }}
                     </span>
                     <span class="text-xs font-bold text-gray-800">
@@ -591,8 +591,8 @@ const generateItemPDF = async () => {
                   </template>
                   <!-- Execution fields -->
                   <template v-else>
-                    <span v-if="entry.location" class="flex items-center gap-1 text-[10px] text-green-600 font-medium truncate">
-                      <div class="i-carbon-location text-green-400" style="font-size:10px;"></div>
+                    <span v-if="entry.location" class="flex items-center gap-1 text-[10px] text-accent-b font-medium truncate">
+                      <div class="i-carbon-location text-accent-b/60" style="font-size:10px;"></div>
                       {{ entry.location }}
                     </span>
                     <span v-if="entry.remarks" class="flex items-center gap-1 text-[10px] text-gray-500 font-medium line-clamp-1">
@@ -611,13 +611,13 @@ const generateItemPDF = async () => {
                 {{ (hoveredItem.entries || []).length }} entr{{ (hoveredItem.entries || []).length === 1 ? 'y' : 'ies' }}
               </span>
               <div class="flex items-center gap-3">
-                <span class="text-[10px] font-bold text-blue-600">
+                <span class="text-[10px] font-bold text-accent">
                   {{ hoveredItem.supplied_quantity || 0 }}
                   <span class="text-gray-400 font-normal">{{ hoveredItem.unit }} sup</span>
                 </span>
                 <template v-if="isSchB(hoveredItem)">
                   <span class="text-gray-200">·</span>
-                  <span class="text-[10px] font-bold text-[#34c759]">
+                  <span class="text-[10px] font-bold text-accent-b">
                     {{ hoveredItem.executed_quantity || 0 }}
                     <span class="text-gray-400 font-normal">{{ hoveredItem.unit }} exe</span>
                   </span>

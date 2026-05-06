@@ -270,8 +270,7 @@ const chartInstances = {}
 
 const TEAL  = '#1D5F5E'
 const AMBER = '#C17841'
-const BLUE  = '#0071e3'
-const PALETTE = [TEAL, AMBER, BLUE, '#8b5cf6', '#10b981', '#f59e0b', '#6366f1', '#ec4899', '#14b8a6', '#f97316']
+const PALETTE = [TEAL, AMBER, '#8b5cf6', '#10b981', '#f59e0b', '#6366f1', '#ec4899', '#14b8a6', '#f97316']
 
 const initOneChart = (id, option) => {
   const el = document.getElementById(id)
@@ -793,7 +792,7 @@ const generateWorkPDF = async () => {
       <div class="flex-shrink-0 px-8 pt-7 pb-5 border-b border-gray-100">
         <h1 class="text-2xl font-bold text-gray-900 tracking-tight mb-1">Work Details</h1>
         <p class="text-gray-400 text-sm font-medium mb-5">Browse all works and inspect item-level lot entry history.</p>
-        <div class="flex items-center bg-gray-50 border border-gray-200 rounded-2xl px-5 py-3 focus-within:ring-2 focus-within:ring-[#0071e3]/20 focus-within:border-[#0071e3] focus-within:bg-white transition-all">
+        <div class="flex items-center bg-gray-50 border border-gray-200 rounded-2xl px-5 py-3 focus-within:ring-2 focus-within:ring-[#1D5F5E]/20 focus-within:border-[#1D5F5E] focus-within:bg-white transition-all">
           <div class="i-carbon-search text-gray-400 text-base mr-3 flex-shrink-0"></div>
           <input v-model="searchQuery" type="text"
             placeholder="Search by LOA, Contractor, Tender, Consignee..."
@@ -805,7 +804,7 @@ const generateWorkPDF = async () => {
       </div>
 
       <div v-if="isLoading" class="flex-1 flex items-center justify-center py-24">
-        <div class="i-carbon-circle-dash animate-spin text-3xl text-[#0071e3]"></div>
+        <div class="i-carbon-circle-dash animate-spin text-3xl text-[#1D5F5E]"></div>
       </div>
 
       <div v-else-if="filteredWorks.length === 0" class="flex-1 flex flex-col items-center justify-center py-24 text-center">
@@ -833,7 +832,7 @@ const generateWorkPDF = async () => {
               <tr v-for="work in filteredWorks" :key="work.id" class="hover:bg-gray-50/70 transition-colors">
                 <td class="px-6 py-4">
                   <p class="text-sm font-semibold text-gray-900">{{ work.contractor_name || '—' }}</p>
-                  <span class="mt-1 inline-block text-[11px] font-semibold text-[#0071e3] bg-[#0071e3]/10 px-2 py-0.5 rounded-full">
+                  <span class="mt-1 inline-block text-[11px] font-semibold text-accent bg-accent-soft px-2 py-0.5 rounded-full">
                     {{ work.loa_number || '—' }}
                   </span>
                 </td>
@@ -848,7 +847,7 @@ const generateWorkPDF = async () => {
                 </td>
                 <td class="px-4 py-4 text-right">
                   <button @click="selectWork(work)"
-                    class="px-3.5 py-2 rounded-full bg-[#1d1d1f] text-white text-xs font-semibold shadow shadow-black/20 hover:shadow-md hover:-translate-y-0.5 transition-all flex items-center gap-1 ml-auto">
+                    class="px-3.5 py-2 rounded-xl bg-[#1D5F5E] text-white text-xs font-semibold hover:bg-[#174E4D] transition-colors flex items-center gap-1 ml-auto">
                     View Details <div class="i-carbon-chevron-right text-xs"></div>
                   </button>
                 </td>
@@ -897,17 +896,17 @@ const generateWorkPDF = async () => {
           <div class="flex gap-1.5">
             <button @click="activeTab = 'analytics'"
               :class="activeTab === 'analytics'
-                ? 'bg-[#1d1d1f] text-white shadow shadow-black/15'
+                ? 'bg-[#1D5F5E] text-white'
                 : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'"
-              class="px-4 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-1.5">
+              class="px-4 py-1.5 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5">
               <div class="i-carbon-analytics text-[11px]"></div>
               Analytics
             </button>
             <button @click="activeTab = 'items'"
               :class="activeTab === 'items'
-                ? 'bg-[#1d1d1f] text-white shadow shadow-black/15'
+                ? 'bg-[#1D5F5E] text-white'
                 : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'"
-              class="px-4 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-1.5">
+              class="px-4 py-1.5 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5">
               <div class="i-carbon-list-boxes text-[11px]"></div>
               Item Tracking
             </button>
@@ -915,7 +914,7 @@ const generateWorkPDF = async () => {
 
           <!-- Export PDF -->
           <button @click="generateWorkPDF" :disabled="isGeneratingPDF"
-            class="flex items-center gap-1.5 px-4 py-1.5 rounded-full border border-gray-300 text-xs font-semibold text-gray-600 hover:bg-gray-100 hover:border-gray-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0">
+            class="flex items-center gap-1.5 px-4 py-1.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0">
             <div :class="isGeneratingPDF ? 'i-carbon-circle-dash animate-spin' : 'i-carbon-document-pdf'" class="text-[11px]"></div>
             {{ isGeneratingPDF ? 'Generating…' : 'Export PDF' }}
           </button>
@@ -956,9 +955,9 @@ const generateWorkPDF = async () => {
               <div class="text-[10px] text-gray-400 mt-0.5">{{ analytics?.schBCount }} items</div>
             </div>
             <div class="bg-gray-50 border border-gray-200 rounded-xl p-3 relative overflow-hidden">
-              <div class="absolute top-0 left-0 right-0 h-0.5 bg-[#0071e3]"></div>
+              <div class="absolute top-0 left-0 right-0 h-0.5 bg-accent"></div>
               <div class="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-0.5 mb-1.5">Lot Entries</div>
-              <div class="text-base font-extrabold text-[#0071e3] leading-tight">{{ analytics?.totalEntries }}</div>
+              <div class="text-base font-extrabold text-accent leading-tight">{{ analytics?.totalEntries }}</div>
               <div class="text-[10px] text-gray-400 mt-0.5">submissions</div>
             </div>
           </div>
@@ -1077,7 +1076,7 @@ const generateWorkPDF = async () => {
 
           <!-- Filter bar -->
           <div class="flex-shrink-0 px-6 py-3 border-b border-gray-100 flex items-center gap-3">
-            <div class="flex items-center bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 flex-1 max-w-xs focus-within:ring-2 focus-within:ring-[#0071e3]/20 focus-within:border-[#0071e3] transition-all">
+            <div class="flex items-center bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 flex-1 max-w-xs focus-within:ring-2 focus-within:ring-[#1D5F5E]/20 focus-within:border-[#1D5F5E] transition-all">
               <div class="i-carbon-filter text-gray-400 mr-2 text-sm"></div>
               <input v-model="itemFilter" type="text" placeholder="Filter items..."
                 class="bg-transparent outline-none w-full text-xs text-gray-700 placeholder-gray-400 font-medium">
@@ -1120,8 +1119,8 @@ const generateWorkPDF = async () => {
                 <template v-for="item in sortedItems" :key="item.id">
                   <!-- Main item row -->
                   <tr
-                    class="border-b border-gray-100 hover:bg-blue-50/30 transition-colors cursor-pointer"
-                    :class="expandedId === item.id ? 'bg-blue-50/30' : ''"
+                    class="border-b border-gray-100 hover:bg-accent-soft/40 transition-colors cursor-pointer"
+                    :class="expandedId === item.id ? 'bg-accent-soft/40' : ''"
                     @click="toggleExpand(item.id)"
                   >
                     <td class="px-4 py-3 text-center">
@@ -1150,7 +1149,7 @@ const generateWorkPDF = async () => {
                       <div class="flex items-center gap-2">
                         <div class="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                           <div class="h-full rounded-full transition-all duration-500"
-                            :class="progressPct(item) > 100 ? 'bg-orange-400' : progressPct(item) >= 99 ? 'bg-[#1D5F5E]' : 'bg-[#0071e3]'"
+                            :class="progressPct(item) > 100 ? 'bg-orange-400' : 'bg-[#1D5F5E]'"
                             :style="{ width: Math.min(progressPct(item), 100) + '%' }">
                           </div>
                         </div>
@@ -1163,7 +1162,7 @@ const generateWorkPDF = async () => {
                     <td class="px-4 py-3 text-center">
                       <div class="flex items-center justify-center gap-1">
                         <span class="text-[11px] font-bold"
-                          :class="(item.entries||[]).length > 0 ? 'text-[#0071e3]' : 'text-gray-300'">
+                          :class="(item.entries||[]).length > 0 ? 'text-[#1D5F5E]' : 'text-gray-300'">
                           {{ (item.entries || []).length }}
                         </span>
                         <div :class="expandedId === item.id ? 'i-carbon-chevron-up text-gray-500' : 'i-carbon-chevron-down text-gray-300'" class="text-xs"></div>
@@ -1182,42 +1181,6 @@ const generateWorkPDF = async () => {
                       </div>
 
                       <div v-else class="space-y-3">
-
-                        <!-- Progress tracking visual -->
-                        <div class="bg-white rounded-xl border border-gray-200 p-4">
-                          <h4 class="text-xs font-bold text-gray-600 uppercase tracking-wide mb-3 flex items-center gap-2">
-                            <div class="i-carbon-chart-line text-gray-400"></div>
-                            Item Level Tracking
-                          </h4>
-                          <!-- Cumulative qty bar steps -->
-                          <div class="flex items-end gap-1.5 h-16 mb-2">
-                            <template v-for="(entry, idx) in item.entries" :key="entry.id">
-                              <div class="flex flex-col items-center gap-0.5 flex-1 min-w-0">
-                                <span class="text-[8px] text-gray-400 truncate max-w-full">{{ entry.quantity }}</span>
-                                <div class="w-full rounded-t transition-all"
-                                  :style="{
-                                    height: Math.max(8, Math.round((entry.quantity / (item.qty || 1)) * 48)) + 'px',
-                                    background: entry.entry_type === 'execution' ? '#C17841' : '#1D5F5E',
-                                    opacity: 0.6 + (idx / (item.entries.length || 1)) * 0.4,
-                                  }">
-                                </div>
-                              </div>
-                            </template>
-                          </div>
-                          <!-- Cumulative progress bar -->
-                          <div class="relative h-2 bg-gray-100 rounded-full overflow-hidden">
-                            <div class="h-full rounded-full transition-all duration-700"
-                              :class="progressPct(item) >= 100 ? 'bg-[#1D5F5E]' : 'bg-[#0071e3]'"
-                              :style="{ width: Math.min(progressPct(item), 100) + '%' }">
-                            </div>
-                          </div>
-                          <div class="flex justify-between text-[10px] text-gray-400 mt-1">
-                            <span>0 {{ item.unit }}</span>
-                            <span class="font-semibold" :class="progressPct(item) >= 99 ? 'text-[#1D5F5E]' : 'text-[#0071e3]'">
-                              {{ progressPct(item) }}% of {{ item.qty }} {{ item.unit }}
-                            </span>
-                          </div>
-                        </div>
 
                         <!-- Lot history table -->
                         <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">

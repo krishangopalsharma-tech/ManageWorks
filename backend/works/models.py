@@ -34,6 +34,7 @@ class WorkItem(models.Model):
     work = models.ForeignKey(Work, on_delete=models.CASCADE, related_name='items')
     schedule = models.CharField(max_length=255, null=True, blank=True)
     serial_number = models.CharField(max_length=255, null=True, blank=True)
+    category = models.CharField(max_length=100, null=True, blank=True)
     item_desc = models.TextField(null=True, blank=True)
     qty = models.FloatField(null=True, blank=True)
     unit = models.CharField(max_length=255, null=True, blank=True)

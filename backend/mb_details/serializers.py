@@ -14,7 +14,7 @@ class MBItemSerializer(serializers.ModelSerializer):
     class Meta:
         model  = MBItem
         fields = ['id', 'work_item',
-                  'quantity', 'prior_percentage', 'current_percentage', 'amount',
+                  'quantity', 'current_percentage', 'amount',
                   'work_item_desc', 'work_item_sno', 'work_item_sch',
                   'work_item_qty', 'work_item_unit', 'work_item_rate', 'work_item_total']
         read_only_fields = ['amount']

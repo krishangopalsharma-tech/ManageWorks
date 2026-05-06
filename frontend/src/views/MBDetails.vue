@@ -46,7 +46,7 @@ const mbNumberDisplay = computed(() => {
 
 // Items imported from PDF
 // shape: { key, work_item, serial_number, item_desc, schedule, qty_default, unit, rate,
-//          quantity, prior_percentage, current_percentage, selected, not_received_warning }
+//          quantity, current_percentage, selected, not_received_warning }
 const pickedItems = ref([])
 const bulkPct     = ref('')
 
@@ -134,7 +134,6 @@ const importPdf = async (file) => {
           unit:                 r.unit,
           rate:                 r.unit_rate_below || 0,
           quantity:             r.quantity || 0,
-          prior_percentage:     r.suggested_prior || 0,
           current_percentage:   r.current_percentage || 0,
           selected:             false,
           not_received_warning: r.not_received_warning || false,
@@ -168,8 +167,7 @@ const rowAmount = (row) => {
   const qty  = parseFloat(row.quantity)           || 0
   const rate = parseFloat(row.rate)               || 0
   const cur  = parseFloat(row.current_percentage) || 0
-  const pri  = parseFloat(row.prior_percentage)   || 0
-  return Math.round(qty * rate * (cur - pri) / 100 * 100) / 100
+  return Math.round(qty * rate * cur / 100 * 100) / 100
 }
 
 const mbTotalAmount = computed(() =>
@@ -179,8 +177,7 @@ const mbTotalAmount = computed(() =>
 const rowIsValid = (r) => {
   const qty = parseFloat(r.quantity)           || 0
   const cur = parseFloat(r.current_percentage) || 0
-  const pri = parseFloat(r.prior_percentage)   || 0
-  return qty > 0 && cur > pri && cur <= 100 && pri >= 0
+  return qty > 0 && cur > 0 && cur <= 100
 }
 
 const canSave     = computed(() => pickedItems.value.length > 0 && pickedItems.value.every(rowIsValid))
@@ -213,7 +210,6 @@ const saveMB = async () => {
       items:     pickedItems.value.map(r => ({
         work_item:          r.work_item,
         quantity:           parseFloat(r.quantity),
-        prior_percentage:   parseFloat(r.prior_percentage) || 0,
         current_percentage: parseFloat(r.current_percentage),
       })),
     })
@@ -287,7 +283,6 @@ const openEdit = (record) => {
     rate:               i.work_item_rate || 0,
     qty_default:        i.work_item_qty,
     quantity:           i.quantity,
-    prior_percentage:   i.prior_percentage,
     current_percentage: i.current_percentage,
   }))
   editSaveStatus.value = ''
@@ -307,15 +302,13 @@ const editRowAmount = (row) => {
   const qty  = parseFloat(row.quantity)           || 0
   const rate = parseFloat(row.rate)               || 0
   const cur  = parseFloat(row.current_percentage) || 0
-  const pri  = parseFloat(row.prior_percentage)   || 0
-  return Math.round(qty * rate * (cur - pri) / 100 * 100) / 100
+  return Math.round(qty * rate * cur / 100 * 100) / 100
 }
 
 const editRowIsValid = (r) => {
   const qty = parseFloat(r.quantity)           || 0
   const cur = parseFloat(r.current_percentage) || 0
-  const pri = parseFloat(r.prior_percentage)   || 0
-  return qty > 0 && cur > pri && cur <= 100 && pri >= 0
+  return qty > 0 && cur > 0 && cur <= 100
 }
 
 const editTotal     = computed(() => editItems.value.reduce((s, r) => s + editRowAmount(r), 0))
@@ -365,7 +358,6 @@ const saveEdit = async () => {
       items:     editItems.value.map(r => ({
         work_item:          r.work_item,
         quantity:           parseFloat(r.quantity),
-        prior_percentage:   parseFloat(r.prior_percentage) || 0,
         current_percentage: parseFloat(r.current_percentage),
       })),
     })
@@ -400,7 +392,7 @@ onMounted(() => {
         <div v-for="(label, i) in ['Select Work', 'Upload PDF', 'Review & Save']" :key="i"
           class="flex items-center gap-1.5">
           <div :class="step > i+1 ? 'bg-[#34c759] text-white'
-                       : step === i+1 ? 'bg-[#0071e3] text-white shadow shadow-[#0071e3]/30'
+                       : step === i+1 ? 'bg-[#1D5F5E] text-white shadow shadow-[#1D5F5E]/30'
                        : 'bg-gray-100 text-gray-400'"
             class="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold transition-all flex-shrink-0">
             <span v-if="step > i+1" class="i-carbon-checkmark text-xs"></span>
@@ -417,14 +409,14 @@ onMounted(() => {
           <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Billed</span>
           <span class="text-xs font-bold text-gray-800">{{ fmtAmt(summary.mb_total) }}</span>
         </div>
-        <div class="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-lg px-3 py-1.5">
-          <span class="text-[10px] font-bold text-blue-600 uppercase tracking-widest">Fin. Progress</span>
-          <span class="text-xs font-bold text-blue-700">{{ summary.financial_progress }}%</span>
+        <div class="flex items-center gap-2 bg-accent-soft border border-accent/20 rounded-lg px-3 py-1.5">
+          <span class="text-[10px] font-bold text-accent uppercase tracking-widest">Fin. Progress</span>
+          <span class="text-xs font-bold text-accent">{{ summary.financial_progress }}%</span>
         </div>
       </div>
 
       <button v-if="step > 1" @click="resetFlow"
-        class="text-xs font-semibold text-gray-500 hover:text-gray-800 px-3 py-1.5 rounded-full bg-gray-100 hover:bg-gray-200 transition-all flex-shrink-0">
+        class="text-xs font-semibold text-gray-600 px-3 py-1.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 transition-colors flex-shrink-0">
         Reset
       </button>
     </div>
@@ -434,7 +426,7 @@ onMounted(() => {
 
       <!-- ─ Step 1: Select Work ─ -->
       <div v-if="step === 1">
-        <div class="flex items-center bg-gray-50 border border-gray-200 rounded-2xl px-5 py-3 focus-within:ring-2 focus-within:ring-[#0071e3]/20 focus-within:border-[#0071e3] focus-within:bg-white transition-all">
+        <div class="flex items-center bg-gray-50 border border-gray-200 rounded-2xl px-5 py-3 focus-within:ring-2 focus-within:ring-[#1D5F5E]/20 focus-within:border-[#1D5F5E] focus-within:bg-white transition-all">
           <div class="i-carbon-search text-gray-400 text-base mr-3"></div>
           <input v-model="workQuery" type="text"
             placeholder="Search by LOA, Contractor, Tender, Consignee..."
@@ -453,22 +445,22 @@ onMounted(() => {
             <div v-for="w in workResults" :key="w.id">
               <!-- Work card -->
               <button @click="pickWork(w)"
-                class="w-full text-left bg-white border border-gray-200 hover:border-[#0071e3] hover:bg-[#0071e3]/5 px-4 py-3 transition-all group rounded-xl">
+                class="w-full text-left bg-white border border-gray-200 hover:border-[#1D5F5E] hover:bg-[#1D5F5E]/5 px-4 py-3 transition-all group rounded-xl">
                 <div class="flex items-center justify-between gap-3">
                   <div class="min-w-0">
                     <p class="text-sm font-semibold text-gray-900 truncate">{{ w.contractor_name || '—' }}</p>
                     <div class="flex items-center gap-3 flex-wrap mt-1">
-                      <span class="text-[11px] font-semibold text-[#0071e3] bg-[#0071e3]/10 px-2 py-0.5 rounded-full">{{ w.loa_number || '—' }}</span>
+                      <span class="text-[11px] font-semibold text-[#1D5F5E] bg-[#1D5F5E]/10 px-2 py-0.5 rounded-full">{{ w.loa_number || '—' }}</span>
                       <span class="text-[11px] text-gray-500">Tender: <span class="font-semibold text-gray-700">{{ w.tender_number || '—' }}</span></span>
                       <span class="text-[11px] text-gray-500">Consignee: <span class="font-semibold text-gray-700">{{ w.consignee || '—' }}</span></span>
                     </div>
                   </div>
                   <div class="flex items-center gap-2 flex-shrink-0">
                     <span v-if="workRecords(w.id).length > 0"
-                      class="text-[10px] font-bold text-[#0071e3] bg-[#0071e3]/10 px-2 py-0.5 rounded-full">
+                      class="text-[10px] font-bold text-[#1D5F5E] bg-[#1D5F5E]/10 px-2 py-0.5 rounded-full">
                       {{ workRecords(w.id).length }} MB{{ workRecords(w.id).length > 1 ? 's' : '' }}
                     </span>
-                    <div class="i-carbon-add-alt text-gray-300 group-hover:text-[#0071e3] transition-colors"></div>
+                    <div class="i-carbon-add-alt text-gray-300 group-hover:text-[#1D5F5E] transition-colors"></div>
                   </div>
                 </div>
               </button>
@@ -485,7 +477,7 @@ onMounted(() => {
           </button>
           <div class="min-w-0">
             <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Selected Work</p>
-            <p class="text-sm font-bold text-gray-900">{{ selectedWork?.contractor_name }} · <span class="text-[#0071e3]">{{ selectedWork?.loa_number }}</span></p>
+            <p class="text-sm font-bold text-gray-900">{{ selectedWork?.contractor_name }} · <span class="text-[#1D5F5E]">{{ selectedWork?.loa_number }}</span></p>
             <p v-if="selectedWork?.name_of_work" class="text-xs text-gray-500 mt-0.5 leading-snug max-w-2xl">{{ selectedWork.name_of_work }}</p>
           </div>
         </div>
@@ -495,17 +487,17 @@ onMounted(() => {
 
           <div class="border border-gray-200 rounded-xl overflow-hidden">
             <!-- Upload card — consignee only -->
-            <div v-if="!isAdmin" class="bg-gray-50 border-b border-dashed border-gray-300 hover:border-[#0071e3] px-4 py-3 flex items-center gap-3 transition-colors cursor-pointer"
+            <div v-if="!isAdmin" class="bg-gray-50 border-b border-dashed border-gray-300 hover:border-[#1D5F5E] px-4 py-3 flex items-center gap-3 transition-colors cursor-pointer"
               :class="selectedWork && workRecords(selectedWork.id).length > 0 ? 'border-b' : 'border-b-0'"
               @click="triggerPdfPicker">
-              <div v-if="isImporting" class="i-carbon-circle-dash animate-spin text-[#0071e3] text-xl flex-shrink-0"></div>
+              <div v-if="isImporting" class="i-carbon-circle-dash animate-spin text-[#1D5F5E] text-xl flex-shrink-0"></div>
               <div v-else class="i-carbon-document-pdf text-gray-300 text-2xl flex-shrink-0"></div>
               <div class="flex-1 min-w-0">
                 <p class="text-xs font-bold text-gray-700">{{ isImporting ? 'Parsing PDF…' : 'Upload Record Measurement PDF' }}</p>
                 <p class="text-[10px] text-gray-400">Click to choose · PDF auto-fills MB number, items, quantities, and payment %</p>
               </div>
               <button :disabled="isImporting"
-                class="px-3 py-1.5 rounded-full bg-[#0071e3] text-white text-[11px] font-semibold shadow shadow-[#0071e3]/30 hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0 flex-shrink-0"
+                class="px-3 py-1.5 rounded-xl bg-[#1D5F5E] text-white text-[11px] font-semibold hover:bg-[#174E4D] transition-colors disabled:opacity-50 flex-shrink-0"
                 @click.stop="triggerPdfPicker">
                 Choose PDF
               </button>
@@ -520,7 +512,7 @@ onMounted(() => {
                       <button @click="toggleSort('mb_number')"
                         class="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-widest hover:text-gray-700 transition-colors">
                         MB No
-                        <span :class="sortBy === 'mb_number' ? 'text-[#0071e3]' : 'text-gray-300'">
+                        <span :class="sortBy === 'mb_number' ? 'text-[#1D5F5E]' : 'text-gray-300'">
                           {{ sortBy === 'mb_number' ? (sortDir === 'asc' ? '↑' : '↓') : '↕' }}
                         </span>
                       </button>
@@ -529,7 +521,7 @@ onMounted(() => {
                       <button @click="toggleSort('items')"
                         class="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-widest hover:text-gray-700 transition-colors">
                         Items
-                        <span :class="sortBy === 'items' ? 'text-[#0071e3]' : 'text-gray-300'">
+                        <span :class="sortBy === 'items' ? 'text-[#1D5F5E]' : 'text-gray-300'">
                           {{ sortBy === 'items' ? (sortDir === 'asc' ? '↑' : '↓') : '↕' }}
                         </span>
                       </button>
@@ -538,7 +530,7 @@ onMounted(() => {
                       <button @click="toggleSort('total_amount')"
                         class="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-widest hover:text-gray-700 transition-colors ml-auto">
                         Amount
-                        <span :class="sortBy === 'total_amount' ? 'text-[#0071e3]' : 'text-gray-300'">
+                        <span :class="sortBy === 'total_amount' ? 'text-[#1D5F5E]' : 'text-gray-300'">
                           {{ sortBy === 'total_amount' ? (sortDir === 'asc' ? '↑' : '↓') : '↕' }}
                         </span>
                       </button>
@@ -547,7 +539,7 @@ onMounted(() => {
                       <button @click="toggleSort('created_at')"
                         class="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-widest hover:text-gray-700 transition-colors ml-auto">
                         Date
-                        <span :class="sortBy === 'created_at' ? 'text-[#0071e3]' : 'text-gray-300'">
+                        <span :class="sortBy === 'created_at' ? 'text-[#1D5F5E]' : 'text-gray-300'">
                           {{ sortBy === 'created_at' ? (sortDir === 'asc' ? '↑' : '↓') : '↕' }}
                         </span>
                       </button>
@@ -573,7 +565,7 @@ onMounted(() => {
                       <div class="flex items-center justify-end gap-1.5">
                         <template v-if="!isAdmin">
                           <button @click="openEdit(rec)" title="Edit"
-                            class="w-7 h-7 rounded-full bg-gray-100 hover:bg-[#0071e3]/10 hover:text-[#0071e3] text-gray-500 flex items-center justify-center transition-all">
+                            class="w-7 h-7 rounded-full bg-gray-100 hover:bg-[#1D5F5E]/10 hover:text-[#1D5F5E] text-gray-500 flex items-center justify-center transition-all">
                             <div class="i-carbon-edit text-xs"></div>
                           </button>
                           <button @click="deleteRecord(rec.id)" title="Delete"
@@ -582,7 +574,7 @@ onMounted(() => {
                           </button>
                         </template>
                         <button v-else @click="openView(rec)" title="View"
-                            class="flex items-center gap-1 px-2.5 py-1 rounded-full border border-gray-200 text-[10px] font-semibold text-gray-500 hover:border-[#0071e3] hover:text-[#0071e3] hover:bg-[#0071e3]/5 transition-all">
+                            class="flex items-center gap-1 px-2.5 py-1 rounded-xl border border-gray-200 text-[10px] font-semibold text-gray-500 hover:border-[#1D5F5E] hover:text-[#1D5F5E] hover:bg-[#1D5F5E]/5 transition-all">
                             <div class="i-carbon-view text-xs"></div> View
                           </button>
                       </div>
@@ -614,12 +606,12 @@ onMounted(() => {
           <!-- Editable MB number / notes inline -->
           <div class="flex-1 min-w-0 flex flex-col gap-0.5">
             <input v-model="mbNumber" type="text" placeholder="MB Number / Reference"
-              class="text-sm font-bold text-gray-900 bg-transparent outline-none border-b border-transparent focus:border-[#0071e3] w-full truncate transition-colors"
+              class="text-sm font-bold text-gray-900 bg-transparent outline-none border-b border-transparent focus:border-[#1D5F5E] w-full truncate transition-colors"
               :title="mbNumber">
             <div class="flex items-center gap-2">
               <span class="text-[10px] text-gray-400 whitespace-nowrap">Date of Measurement:</span>
               <input v-model="measurementDate" type="date"
-                class="text-xs text-gray-600 bg-transparent outline-none border-b border-transparent focus:border-[#0071e3] transition-colors">
+                class="text-xs text-gray-600 bg-transparent outline-none border-b border-transparent focus:border-[#1D5F5E] transition-colors">
             </div>
             <input v-model="notes" type="text" placeholder="Notes (optional)"
               class="text-xs text-gray-400 bg-transparent outline-none border-b border-transparent focus:border-gray-300 w-full transition-colors">
@@ -628,8 +620,8 @@ onMounted(() => {
           <div v-if="!isAdmin" class="flex items-center gap-2 flex-shrink-0">
             <p v-if="saveStatus && saveStatus !== 'saved'" class="text-xs font-medium text-[#ff3b30]">{{ saveStatus }}</p>
             <button @click="saveMB" :disabled="!canSave || isSaving"
-              :class="saveStatus === 'saved' ? 'bg-[#34c759] shadow-[#34c759]/30' : 'bg-[#1d1d1f] shadow-black/20'"
-              class="px-5 py-2.5 rounded-full text-white text-sm font-semibold shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center gap-2">
+              :class="saveStatus === 'saved' ? 'bg-[#5E8858]' : 'bg-[#1D5F5E] hover:bg-[#174E4D]'"
+              class="px-5 py-2.5 rounded-xl text-white text-sm font-semibold transition-colors disabled:opacity-50 flex items-center gap-2">
               <div v-if="isSaving" class="i-carbon-circle-dash animate-spin"></div>
               <span>{{ saveStatus === 'saved' ? 'Saved!' : 'Save MB Record' }}</span>
             </button>
@@ -660,9 +652,9 @@ onMounted(() => {
           <button @click="selectAll"  class="text-[10px] font-semibold text-gray-600 hover:text-gray-900 px-2">All</button>
           <button @click="selectNone" class="text-[10px] font-semibold text-gray-600 hover:text-gray-900 px-2">None</button>
           <input v-model="bulkPct" type="number" min="0.01" max="100" step="0.01" placeholder="80"
-            class="w-16 bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold text-gray-800 outline-none focus:border-[#0071e3] text-right">
+            class="w-16 bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold text-gray-800 outline-none focus:border-[#1D5F5E] text-right">
           <button @click="applyBulkPct" :disabled="!bulkPct || selectedCount === 0"
-            class="px-3 py-1 rounded-lg bg-[#0071e3] text-white text-[11px] font-bold hover:bg-[#0055b3] transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+            class="px-3 py-1 rounded-lg bg-[#1D5F5E] text-white text-[11px] font-bold hover:bg-[#174E4D] transition-all disabled:opacity-40 disabled:cursor-not-allowed">
             Apply
           </button>
         </div>
@@ -674,14 +666,13 @@ onMounted(() => {
               <tr>
                 <th class="px-3 py-3 text-center w-8">
                   <input type="checkbox" @change="e => e.target.checked ? selectAll() : selectNone()"
-                    class="w-3.5 h-3.5 rounded border-gray-300 text-[#0071e3]">
+                    class="w-3.5 h-3.5 rounded border-gray-300 text-[#1D5F5E]">
                 </th>
                 <th class="px-3 py-3 text-left w-12">Sch</th>
                 <th class="px-3 py-3 text-left w-16">S.No</th>
                 <th class="px-3 py-3 text-left">Description</th>
                 <th class="px-3 py-3 text-right w-24">Qty</th>
-                <th class="px-3 py-3 text-right w-20">Prior %</th>
-                <th class="px-3 py-3 text-right w-20">Curr %</th>
+                <th class="px-3 py-3 text-right w-20">Payment %</th>
                 <th class="px-3 py-3 text-right w-28">Released</th>
               </tr>
             </thead>
@@ -691,10 +682,10 @@ onMounted(() => {
                 class="transition-colors">
                 <td class="px-3 py-2.5 text-center">
                   <input v-model="row.selected" type="checkbox"
-                    class="w-3.5 h-3.5 rounded border-gray-300 text-[#0071e3] focus:ring-[#0071e3]/30">
+                    class="w-3.5 h-3.5 rounded border-gray-300 text-[#1D5F5E] focus:ring-[#1D5F5E]/30">
                 </td>
                 <td class="px-3 py-2.5">
-                  <span :class="String(row.schedule||'').toUpperCase().startsWith('A') ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-700'"
+                  <span :class="String(row.schedule||'').toUpperCase().startsWith('A') ? 'bg-accent-soft text-accent' : 'bg-accent-b-soft text-accent-b'"
                     class="text-[10px] font-bold px-1.5 py-0.5 rounded">{{ row.schedule }}</span>
                 </td>
                 <td class="px-3 py-2.5 font-semibold text-gray-500">{{ row.serial_number }}</td>
@@ -708,31 +699,24 @@ onMounted(() => {
                 </td>
                 <td class="px-3 py-2.5 text-right">
                   <input v-model="row.quantity" type="number" min="0" step="0.01"
-                    class="w-20 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-xs font-semibold text-gray-800 outline-none focus:border-[#0071e3] focus:bg-white text-right">
-                </td>
-                <td class="px-3 py-2.5 text-right">
-                  <div class="relative inline-flex items-center">
-                    <input v-model="row.prior_percentage" type="number" min="0" max="100" step="0.01"
-                      class="w-16 bg-gray-50 border border-gray-200 rounded-lg pr-4 pl-2 py-1 text-xs font-semibold text-gray-800 outline-none focus:border-[#0071e3] focus:bg-white text-right">
-                    <span class="absolute right-1.5 text-[9px] font-bold text-gray-400">%</span>
-                  </div>
+                    class="w-20 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-xs font-semibold text-gray-800 outline-none focus:border-[#1D5F5E] focus:bg-white text-right">
                 </td>
                 <td class="px-3 py-2.5 text-right">
                   <div class="relative inline-flex items-center">
                     <input v-model="row.current_percentage" type="number" min="0" max="100" step="0.01"
                       class="w-16 border rounded-lg pr-4 pl-2 py-1 text-xs font-semibold text-gray-800 outline-none focus:bg-white text-right"
-                      :class="rowIsValid(row) ? 'bg-gray-50 border-gray-200 focus:border-[#0071e3]' : 'bg-red-50 border-[#ff3b30]/40 focus:border-[#ff3b30]'">
+                      :class="rowIsValid(row) ? 'bg-gray-50 border-gray-200 focus:border-[#1D5F5E]' : 'bg-red-50 border-[#ff3b30]/40 focus:border-[#ff3b30]'">
                     <span class="absolute right-1.5 text-[9px] font-bold text-gray-400">%</span>
                   </div>
                 </td>
-                <td class="px-3 py-2.5 text-right font-bold text-[#0071e3]">{{ fmtAmt(rowAmount(row)) }}</td>
+                <td class="px-3 py-2.5 text-right font-bold text-[#1D5F5E]">{{ fmtAmt(rowAmount(row)) }}</td>
               </tr>
             </tbody>
             <tfoot class="bg-gray-50 border-t border-gray-200">
               <tr>
-                <td colspan="7" class="px-3 py-3 text-right">
+                <td colspan="6" class="px-3 py-3 text-right">
                   <span v-if="invalidCount > 0" class="text-[11px] font-semibold text-[#ff3b30]">
-                    {{ invalidCount }} row(s) need fixing (current % must exceed prior %)
+                    {{ invalidCount }} row(s) need fixing (qty and payment % required)
                   </span>
                   <span v-else class="text-[11px] font-semibold text-[#34c759]">All rows valid</span>
                   <span class="mx-4 text-gray-300">|</span>
@@ -764,11 +748,11 @@ onMounted(() => {
             <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{{ editViewOnly ? 'View MB Record' : 'Edit MB Record' }}</p>
             <div class="flex items-center gap-3 flex-wrap">
               <input v-model="editMbNumber" type="text" placeholder="MB Number" :disabled="editViewOnly"
-                class="text-sm font-bold text-gray-900 bg-transparent outline-none border-b border-gray-200 focus:border-[#0071e3] transition-colors min-w-0 flex-1 disabled:cursor-default disabled:border-transparent">
+                class="text-sm font-bold text-gray-900 bg-transparent outline-none border-b border-gray-200 focus:border-[#1D5F5E] transition-colors min-w-0 flex-1 disabled:cursor-default disabled:border-transparent">
               <div class="flex items-center gap-1.5 flex-shrink-0">
                 <span class="text-[10px] text-gray-400 whitespace-nowrap">Meas. Date:</span>
                 <input v-model="editMeasurementDate" type="date" :disabled="editViewOnly"
-                  class="text-xs text-gray-600 bg-transparent outline-none border-b border-gray-200 focus:border-[#0071e3] transition-colors disabled:cursor-default disabled:border-transparent">
+                  class="text-xs text-gray-600 bg-transparent outline-none border-b border-gray-200 focus:border-[#1D5F5E] transition-colors disabled:cursor-default disabled:border-transparent">
               </div>
               <input v-model="editNotes" type="text" placeholder="Notes (optional)" :disabled="editViewOnly"
                 class="text-xs text-gray-500 bg-transparent outline-none border-b border-gray-200 focus:border-gray-400 transition-colors min-w-0 flex-1 disabled:cursor-default disabled:border-transparent">
@@ -778,8 +762,8 @@ onMounted(() => {
             <template v-if="!editViewOnly">
               <p v-if="editSaveStatus && editSaveStatus !== 'saved'" class="text-xs font-medium text-[#ff3b30]">{{ editSaveStatus }}</p>
               <button @click="saveEdit" :disabled="!editCanSave || editSaving"
-                :class="editSaveStatus === 'saved' ? 'bg-[#34c759] shadow-[#34c759]/30' : 'bg-[#1d1d1f] shadow-black/20'"
-                class="px-4 py-2 rounded-full text-white text-xs font-semibold shadow hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center gap-2">
+                :class="editSaveStatus === 'saved' ? 'bg-[#5E8858]' : 'bg-[#1D5F5E] hover:bg-[#174E4D]'"
+                class="px-4 py-2 rounded-xl text-white text-xs font-semibold transition-colors disabled:opacity-50 flex items-center gap-2">
                 <div v-if="editSaving" class="i-carbon-circle-dash animate-spin"></div>
                 <span>{{ editSaveStatus === 'saved' ? 'Saved!' : 'Save Changes' }}</span>
               </button>
@@ -800,15 +784,14 @@ onMounted(() => {
                 <th class="px-4 py-3 text-left w-14">S.No</th>
                 <th class="px-4 py-3 text-left">Description</th>
                 <th class="px-4 py-3 text-right w-24">Qty</th>
-                <th class="px-4 py-3 text-right w-20">Prior %</th>
-                <th class="px-4 py-3 text-right w-20">Curr %</th>
+                <th class="px-4 py-3 text-right w-20">Payment %</th>
                 <th class="px-4 py-3 text-right w-28">Released</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
               <tr v-for="(row, idx) in editItems" :key="idx" class="hover:bg-gray-50/40 transition-colors">
                 <td class="px-4 py-2.5">
-                  <span :class="String(row.schedule||'').toUpperCase().startsWith('A') ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-700'"
+                  <span :class="String(row.schedule||'').toUpperCase().startsWith('A') ? 'bg-accent-soft text-accent' : 'bg-accent-b-soft text-accent-b'"
                     class="text-[10px] font-bold px-1.5 py-0.5 rounded">{{ row.schedule }}</span>
                 </td>
                 <td class="px-4 py-2.5 font-semibold text-gray-500">{{ row.serial_number }}</td>
@@ -818,29 +801,22 @@ onMounted(() => {
                 </td>
                 <td class="px-4 py-2.5 text-right">
                   <input v-model="row.quantity" type="number" min="0" step="0.01" :disabled="editViewOnly"
-                    class="w-20 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-xs font-semibold text-gray-800 outline-none focus:border-[#0071e3] focus:bg-white text-right disabled:opacity-70 disabled:cursor-default">
-                </td>
-                <td class="px-4 py-2.5 text-right">
-                  <div class="relative inline-flex items-center">
-                    <input v-model="row.prior_percentage" type="number" min="0" max="100" step="0.01" :disabled="editViewOnly"
-                      class="w-16 bg-gray-50 border border-gray-200 rounded-lg pr-4 pl-2 py-1 text-xs font-semibold text-gray-800 outline-none focus:border-[#0071e3] focus:bg-white text-right disabled:opacity-70 disabled:cursor-default">
-                    <span class="absolute right-1.5 text-[9px] font-bold text-gray-400">%</span>
-                  </div>
+                    class="w-20 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-xs font-semibold text-gray-800 outline-none focus:border-[#1D5F5E] focus:bg-white text-right disabled:opacity-70 disabled:cursor-default">
                 </td>
                 <td class="px-4 py-2.5 text-right">
                   <div class="relative inline-flex items-center">
                     <input v-model="row.current_percentage" type="number" min="0" max="100" step="0.01" :disabled="editViewOnly"
                       class="w-16 border rounded-lg pr-4 pl-2 py-1 text-xs font-semibold text-gray-800 outline-none focus:bg-white text-right disabled:opacity-70 disabled:cursor-default"
-                      :class="editRowIsValid(row) ? 'bg-gray-50 border-gray-200 focus:border-[#0071e3]' : 'bg-red-50 border-[#ff3b30]/40 focus:border-[#ff3b30]'">
+                      :class="editRowIsValid(row) ? 'bg-gray-50 border-gray-200 focus:border-[#1D5F5E]' : 'bg-red-50 border-[#ff3b30]/40 focus:border-[#ff3b30]'">
                     <span class="absolute right-1.5 text-[9px] font-bold text-gray-400">%</span>
                   </div>
                 </td>
-                <td class="px-4 py-2.5 text-right font-bold text-[#0071e3]">{{ fmtAmt(editRowAmount(row)) }}</td>
+                <td class="px-4 py-2.5 text-right font-bold text-[#1D5F5E]">{{ fmtAmt(editRowAmount(row)) }}</td>
               </tr>
             </tbody>
             <tfoot class="bg-gray-50 border-t border-gray-200 sticky bottom-0">
               <tr>
-                <td colspan="6" class="px-4 py-3 text-right">
+                <td colspan="5" class="px-4 py-3 text-right">
                   <span v-if="editInvalid > 0" class="text-[11px] font-semibold text-[#ff3b30]">
                     {{ editInvalid }} row(s) need fixing
                   </span>

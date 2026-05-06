@@ -564,7 +564,7 @@ const deleteWork = async () => {
       <div class="flex-shrink-0 px-8 pt-7 pb-5 border-b border-gray-100">
         <h1 class="text-2xl font-bold text-gray-900 tracking-tight mb-1">Update Work Database</h1>
         <p class="text-gray-400 text-sm font-medium mb-5">Search, then open a work to submit lot entries against its items.</p>
-        <div class="flex items-center bg-gray-50 border border-gray-200 rounded-2xl px-5 py-3 focus-within:ring-2 focus-within:ring-[#0071e3]/20 focus-within:border-[#0071e3] focus-within:bg-white transition-all">
+        <div class="flex items-center bg-gray-50 border border-gray-200 rounded-2xl px-5 py-3 focus-within:ring-2 focus-within:ring-[#1D5F5E]/20 focus-within:border-[#1D5F5E] focus-within:bg-white transition-all">
           <div class="i-carbon-search text-gray-400 text-base mr-3 flex-shrink-0"></div>
           <input v-model="searchQuery" type="text"
             placeholder="Search by LOA, Contractor, Tender, Consignee..."
@@ -576,7 +576,7 @@ const deleteWork = async () => {
       </div>
 
       <div v-if="isLoading" class="flex-1 flex items-center justify-center py-24">
-        <div class="i-carbon-circle-dash animate-spin text-3xl text-[#0071e3]"></div>
+        <div class="i-carbon-circle-dash animate-spin text-3xl text-[#1D5F5E]"></div>
       </div>
 
       <div v-else-if="filteredWorks.length === 0" class="flex-1 flex flex-col items-center justify-center py-24 text-center">
@@ -600,7 +600,7 @@ const deleteWork = async () => {
               <tr v-for="work in filteredWorks" :key="work.id" class="hover:bg-gray-50/70 transition-colors">
                 <td class="px-6 py-4">
                   <p class="text-sm font-semibold text-gray-900">{{ work.contractor_name || '—' }}</p>
-                  <span class="mt-1 inline-block text-[11px] font-semibold text-[#0071e3] bg-[#0071e3]/10 px-2 py-0.5 rounded-full">{{ work.loa_number || '—' }}</span>
+                  <span class="mt-1 inline-block text-[11px] font-semibold text-[#1D5F5E] bg-[#1D5F5E]/10 px-2 py-0.5 rounded-full">{{ work.loa_number || '—' }}</span>
                 </td>
                 <td class="px-4 py-4 text-xs font-medium text-gray-600 max-w-[200px]"><p class="truncate">{{ work.tender_number || '—' }}</p></td>
                 <td class="px-4 py-4 text-xs font-medium text-gray-600">{{ work.consignee || '—' }}</td>
@@ -608,11 +608,11 @@ const deleteWork = async () => {
                 <td class="px-4 py-4 text-right">
                   <div class="flex items-center justify-end gap-2">
                     <button v-if="canModifyWork" @click="openEditWork(work)"
-                      class="px-3.5 py-2 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-semibold transition-all flex items-center gap-1.5">
+                      class="px-3.5 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-semibold transition-colors flex items-center gap-1.5">
                       <div class="i-carbon-edit text-xs"></div> Edit
                     </button>
                     <button @click="selectWork(work)"
-                      class="px-3.5 py-2 rounded-full bg-[#1d1d1f] text-white text-xs font-semibold shadow shadow-black/20 hover:shadow-md hover:-translate-y-0.5 transition-all flex items-center gap-1">
+                      class="px-3.5 py-2 rounded-xl bg-[#1D5F5E] text-white text-xs font-semibold hover:bg-[#174E4D] transition-colors flex items-center gap-1">
                       Submit Entries <div class="i-carbon-chevron-right text-xs"></div>
                     </button>
                   </div>
@@ -669,11 +669,11 @@ const deleteWork = async () => {
             <!-- Filter + Batch Upload -->
             <div class="flex-shrink-0 flex items-center gap-2">
               <button @click="openBatchModal"
-                class="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#0071e3]/10 hover:bg-[#0071e3]/20 text-[#0071e3] text-xs font-semibold transition-all">
+                class="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#1D5F5E]/10 hover:bg-[#1D5F5E]/20 text-[#1D5F5E] text-xs font-semibold transition-all">
                 <div class="i-carbon-document-pdf text-sm"></div>
                 Upload PDF Receipts
               </button>
-              <div class="flex items-center bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 w-48 focus-within:ring-2 focus-within:ring-[#0071e3]/20 focus-within:border-[#0071e3] transition-all">
+              <div class="flex items-center bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 w-48 focus-within:ring-2 focus-within:ring-[#1D5F5E]/20 focus-within:border-[#1D5F5E] transition-all">
                 <div class="i-carbon-filter text-gray-400 mr-2 text-sm"></div>
                 <input v-model="itemFilter" type="text" placeholder="Filter items..."
                   class="bg-transparent outline-none w-full text-xs text-gray-700 placeholder-gray-400 font-medium">
@@ -708,7 +708,7 @@ const deleteWork = async () => {
               <tr v-for="item in sortedItems" :key="item.id" class="border-b border-gray-100 hover:bg-gray-50/60 transition-colors">
                 <td class="px-4 py-3.5 text-center">
                   <span class="rounded-md px-2 py-1 text-[10px] font-bold"
-                    :class="String(item.schedule||'').toUpperCase().startsWith('A') ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-700'">
+                    :class="String(item.schedule||'').toUpperCase().startsWith('A') ? 'bg-accent-soft text-accent' : 'bg-accent-b-soft text-accent-b'">
                     {{ item.schedule }}
                   </span>
                 </td>
@@ -730,7 +730,7 @@ const deleteWork = async () => {
                   <div class="flex items-center gap-2">
                     <div class="flex-1 h-1.5 rounded-full overflow-hidden bg-gray-100">
                       <div class="h-full rounded-full transition-all duration-500"
-                        :class="progressPct(item) > 100 ? 'bg-orange-400' : (String(item.schedule||'').toUpperCase().startsWith('B') ? 'bg-[#34c759]' : 'bg-[#0071e3]')"
+                        :class="progressPct(item) > 100 ? 'bg-orange-400' : (String(item.schedule||'').toUpperCase().startsWith('B') ? 'bg-accent-b' : 'bg-accent')"
                         :style="{ width: Math.min(progressPct(item), 100) + '%' }"></div>
                     </div>
                     <span class="text-[10px] font-bold w-8 text-right"
@@ -741,7 +741,7 @@ const deleteWork = async () => {
                 </td>
                 <td class="px-4 py-3.5 text-center">
                   <button @click="openLotPopup(item)"
-                    class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-[#0071e3]/10 hover:bg-[#0071e3]/20 text-[#0071e3] text-[11px] font-semibold transition-all">
+                    class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#1D5F5E]/10 hover:bg-[#1D5F5E]/20 text-[#1D5F5E] text-[11px] font-semibold transition-all">
                     <div class="i-carbon-add text-xs"></div> Add
                   </button>
                 </td>
@@ -769,41 +769,41 @@ const deleteWork = async () => {
             <div class="grid grid-cols-2 gap-3">
               <div class="flex flex-col gap-1">
                 <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">LOA Number</label>
-                <input v-model="editingWork.loa_number" type="text" class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
+                <input v-model="editingWork.loa_number" type="text" class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#1D5F5E] focus:ring-2 focus:ring-[#1D5F5E]/10 focus:bg-white transition-all">
               </div>
               <div class="flex flex-col gap-1">
                 <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Tender Number</label>
-                <input v-model="editingWork.tender_number" type="text" class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
+                <input v-model="editingWork.tender_number" type="text" class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#1D5F5E] focus:ring-2 focus:ring-[#1D5F5E]/10 focus:bg-white transition-all">
               </div>
               <div class="flex flex-col gap-1">
                 <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Date</label>
-                <input v-model="editingWork.date" type="text" class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
+                <input v-model="editingWork.date" type="text" class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#1D5F5E] focus:ring-2 focus:ring-[#1D5F5E]/10 focus:bg-white transition-all">
               </div>
               <div class="flex flex-col gap-1">
                 <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Contract Agreement</label>
-                <input v-model="editingWork.contract_agreement" type="text" class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
+                <input v-model="editingWork.contract_agreement" type="text" class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#1D5F5E] focus:ring-2 focus:ring-[#1D5F5E]/10 focus:bg-white transition-all">
               </div>
             </div>
             <div class="flex flex-col gap-1">
               <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Name of Work</label>
-              <textarea v-model="editingWork.name_of_work" rows="2" class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all resize-none"></textarea>
+              <textarea v-model="editingWork.name_of_work" rows="2" class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#1D5F5E] focus:ring-2 focus:ring-[#1D5F5E]/10 focus:bg-white transition-all resize-none"></textarea>
             </div>
             <div class="flex flex-col gap-1">
               <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Contractor Name</label>
-              <input v-model="editingWork.contractor_name" type="text" class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
+              <input v-model="editingWork.contractor_name" type="text" class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#1D5F5E] focus:ring-2 focus:ring-[#1D5F5E]/10 focus:bg-white transition-all">
             </div>
             <div class="flex flex-col gap-1">
               <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Contractor Address</label>
-              <textarea v-model="editingWork.contractor_address" rows="2" class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all resize-none"></textarea>
+              <textarea v-model="editingWork.contractor_address" rows="2" class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#1D5F5E] focus:ring-2 focus:ring-[#1D5F5E]/10 focus:bg-white transition-all resize-none"></textarea>
             </div>
             <div class="grid grid-cols-2 gap-3">
               <div class="flex flex-col gap-1">
                 <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Date of Completion</label>
-                <input v-model="editingWork.date_of_completion" type="text" class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
+                <input v-model="editingWork.date_of_completion" type="text" class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#1D5F5E] focus:ring-2 focus:ring-[#1D5F5E]/10 focus:bg-white transition-all">
               </div>
               <div class="flex flex-col gap-1">
                 <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Consignee</label>
-                <input v-model="editingWork.consignee" type="text" class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
+                <input v-model="editingWork.consignee" type="text" class="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 outline-none focus:border-[#1D5F5E] focus:ring-2 focus:ring-[#1D5F5E]/10 focus:bg-white transition-all">
               </div>
             </div>
 
@@ -814,7 +814,7 @@ const deleteWork = async () => {
                   <span class="text-xs font-bold text-gray-600 uppercase tracking-wide">Extension Dates</span>
                 </div>
                 <button @click="addExtension"
-                  class="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white border border-gray-200 hover:border-[#0071e3] hover:text-[#0071e3] text-gray-500 text-[11px] font-semibold transition-all shadow-sm">
+                  class="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white border border-gray-200 hover:border-[#1D5F5E] hover:text-[#1D5F5E] text-gray-500 text-[11px] font-semibold transition-all shadow-sm">
                   <div class="i-carbon-add text-xs"></div> Add
                 </button>
               </div>
@@ -823,7 +823,7 @@ const deleteWork = async () => {
                 <div v-for="(ext, idx) in editingWork.extensions" :key="idx" class="flex items-center gap-2">
                   <span class="text-[11px] font-bold text-gray-500 w-16 flex-shrink-0">{{ romanOrdinal(idx + 1) }} Ext.</span>
                   <input v-model="ext.extension_date" type="text" placeholder="e.g. 2027-09-04"
-                    class="flex-1 bg-white border border-gray-200 rounded-xl px-3.5 py-2 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 transition-all">
+                    class="flex-1 bg-white border border-gray-200 rounded-xl px-3.5 py-2 text-sm font-medium text-gray-800 outline-none focus:border-[#1D5F5E] focus:ring-2 focus:ring-[#1D5F5E]/10 transition-all">
                   <button @click="removeExtension(idx)"
                     class="flex-shrink-0 w-7 h-7 rounded-full bg-white border border-gray-200 hover:border-[#ff3b30]/50 hover:text-[#ff3b30] text-gray-400 flex items-center justify-center transition-all">
                     <div class="i-carbon-close text-xs"></div>
@@ -837,26 +837,26 @@ const deleteWork = async () => {
             <div>
               <template v-if="canModifyWork">
                 <button v-if="!showDeleteConfirm" @click="showDeleteConfirm = true"
-                  class="px-4 py-2 rounded-full border border-[#ff3b30]/30 text-[#ff3b30] text-xs font-semibold hover:bg-[#ff3b30]/8 transition-all flex items-center gap-1.5">
+                  class="px-4 py-2 rounded-xl bg-red-50 text-red-600 border border-red-200 text-xs font-semibold hover:bg-red-100 transition-colors flex items-center gap-1.5">
                   <div class="i-carbon-trash-can text-xs"></div> Delete Work
                 </button>
                 <div v-else class="flex items-center gap-2">
-                  <span class="text-xs font-semibold text-[#ff3b30]">Delete this work?</span>
+                  <span class="text-xs font-semibold text-red-600">Delete this work?</span>
                   <button @click="deleteWork" :disabled="isDeletingWork"
-                    class="px-4 py-2 rounded-full bg-[#ff3b30] text-white text-xs font-semibold shadow shadow-[#ff3b30]/30 hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 flex items-center gap-1">
+                    class="px-4 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-colors disabled:opacity-50 flex items-center gap-1">
                     <div v-if="isDeletingWork" class="i-carbon-circle-dash animate-spin"></div>
                     <span v-else>Yes, Delete</span>
                   </button>
-                  <button @click="showDeleteConfirm = false" class="px-4 py-2 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold transition-all">Cancel</button>
+                  <button @click="showDeleteConfirm = false" class="px-4 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-semibold transition-colors">Cancel</button>
                 </div>
               </template>
             </div>
             <div class="flex items-center gap-3">
               <p v-if="workSaveStatus === 'error'" class="text-xs font-medium text-[#ff3b30]">Failed to save.</p>
-              <button @click="closeEditWork" class="px-5 py-2.5 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-800 text-sm font-semibold transition-all">Cancel</button>
+              <button @click="closeEditWork" class="px-5 py-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-sm font-semibold transition-colors">Cancel</button>
               <button v-if="canModifyWork" @click="saveWork" :disabled="isSavingWork"
-                class="px-5 py-2.5 rounded-full text-white text-sm font-semibold shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center gap-2"
-                :class="workSaveStatus === 'saved' ? 'bg-[#34c759] shadow-[#34c759]/30' : 'bg-[#1d1d1f] shadow-black/20'">
+                class="px-5 py-2.5 rounded-xl text-white text-sm font-semibold transition-colors disabled:opacity-50 flex items-center gap-2"
+                :class="workSaveStatus === 'saved' ? 'bg-[#5E8858]' : 'bg-[#1D5F5E] hover:bg-[#174E4D]'">
                 <div v-if="isSavingWork" class="i-carbon-circle-dash animate-spin"></div>
                 <span>{{ workSaveStatus === 'saved' ? 'Saved!' : 'Save Changes' }}</span>
               </button>
@@ -879,7 +879,7 @@ const deleteWork = async () => {
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2 mb-1.5">
                   <span class="text-[10px] font-bold px-2 py-1 rounded-md"
-                    :class="popupIsSchA ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-700'">
+                    :class="popupIsSchA ? 'bg-accent-soft text-accent' : 'bg-accent-b-soft text-accent-b'">
                     {{ lotPopupItem.schedule }}
                   </span>
                   <span class="text-[10px] font-semibold text-gray-400">S.No {{ lotPopupItem.serial_number }}</span>
@@ -896,13 +896,13 @@ const deleteWork = async () => {
                   <div class="w-px h-8 bg-gray-100"></div>
                   <div class="flex flex-col">
                     <span class="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Supplied</span>
-                    <span class="text-sm font-bold text-[#0071e3]">{{ lotPopupItem.supplied_quantity || 0 }} <span class="text-xs font-normal text-gray-400">{{ lotPopupItem.unit }}</span></span>
+                    <span class="text-sm font-bold text-accent">{{ lotPopupItem.supplied_quantity || 0 }} <span class="text-xs font-normal text-gray-400">{{ lotPopupItem.unit }}</span></span>
                   </div>
                   <template v-if="!popupIsSchA">
                     <div class="w-px h-8 bg-gray-100"></div>
                     <div class="flex flex-col">
                       <span class="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Executed</span>
-                      <span class="text-sm font-bold text-[#34c759]">{{ lotPopupItem.executed_quantity || 0 }} <span class="text-xs font-normal text-gray-400">{{ lotPopupItem.unit }}</span></span>
+                      <span class="text-sm font-bold text-accent-b">{{ lotPopupItem.executed_quantity || 0 }} <span class="text-xs font-normal text-gray-400">{{ lotPopupItem.unit }}</span></span>
                     </div>
                   </template>
                   <div class="w-px h-8 bg-gray-100"></div>
@@ -911,7 +911,7 @@ const deleteWork = async () => {
                     <div class="flex items-center gap-2">
                       <div class="flex-1 h-2 rounded-full overflow-hidden bg-gray-100">
                         <div class="h-full rounded-full transition-all duration-500"
-                          :class="progressPct(lotPopupItem) > 100 ? 'bg-orange-400' : (popupIsSchA ? 'bg-[#0071e3]' : 'bg-[#34c759]')"
+                          :class="progressPct(lotPopupItem) > 100 ? 'bg-orange-400' : (popupIsSchA ? 'bg-accent' : 'bg-accent-b')"
                           :style="{ width: Math.min(progressPct(lotPopupItem), 100) + '%' }"></div>
                       </div>
                       <span class="text-xs font-bold w-10 text-right" :class="progressPct(lotPopupItem) > 100 ? 'text-orange-500' : 'text-gray-600'">
@@ -934,7 +934,7 @@ const deleteWork = async () => {
             <div>
               <div class="flex items-center justify-between mb-4">
                 <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
-                  <div class="i-carbon-add-filled text-[#0071e3]"></div> Submit New Entry
+                  <div class="i-carbon-add-filled text-[#1D5F5E]"></div> Submit New Entry
                 </h3>
                 <!-- Fill from PDF button -->
                 <label v-if="entryForm.entry_type === 'supply'"
@@ -958,7 +958,7 @@ const deleteWork = async () => {
               <!-- Entry type selector (Schedule B only) -->
               <div v-if="!popupIsSchA" class="flex gap-1 p-1 bg-gray-100 rounded-xl mb-4">
                 <button @click="entryForm.entry_type = 'supply'"
-                  :class="entryForm.entry_type === 'supply' ? 'bg-white text-[#0071e3] shadow-sm' : 'text-gray-500 hover:text-gray-700'"
+                  :class="entryForm.entry_type === 'supply' ? 'bg-white text-[#1D5F5E] shadow-sm' : 'text-gray-500 hover:text-gray-700'"
                   class="flex-1 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5">
                   <div class="i-carbon-package text-xs"></div> Supply Entry
                 </button>
@@ -976,12 +976,12 @@ const deleteWork = async () => {
                   <div class="flex flex-col gap-1.5">
                     <label class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Receive Note No. (DMTR)</label>
                     <input v-model="entryForm.receive_note_no" type="text" placeholder="56091-26-00049"
-                      class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
+                      class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none focus:border-[#1D5F5E] focus:ring-2 focus:ring-[#1D5F5E]/10 focus:bg-white transition-all">
                   </div>
                   <div class="flex flex-col gap-1.5">
                     <label class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Date of Receipt <span class="text-red-400">*</span></label>
                     <input v-model="entryForm.date_of_receipt" type="date"
-                      class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
+                      class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none focus:border-[#1D5F5E] focus:ring-2 focus:ring-[#1D5F5E]/10 focus:bg-white transition-all">
                   </div>
                 </div>
                 <!-- Row 2: Quantity + Challan -->
@@ -989,19 +989,19 @@ const deleteWork = async () => {
                   <div class="flex flex-col gap-1.5">
                     <label class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Quantity <span class="text-red-400">*</span></label>
                     <input v-model="entryForm.quantity" type="number" step="0.01" min="0.01" placeholder="e.g. 20"
-                      class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-semibold text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
+                      class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-semibold text-gray-800 outline-none focus:border-[#1D5F5E] focus:ring-2 focus:ring-[#1D5F5E]/10 focus:bg-white transition-all">
                   </div>
                   <div class="flex flex-col gap-1.5">
                     <label class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Challan No. &amp; Date</label>
                     <input v-model="entryForm.challan_no" type="text" placeholder="MEEPL/26-27/... dt.20-04-2026"
-                      class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
+                      class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none focus:border-[#1D5F5E] focus:ring-2 focus:ring-[#1D5F5E]/10 focus:bg-white transition-all">
                   </div>
                 </div>
                 <!-- Row 3: UDM -->
                 <div class="flex flex-col gap-1.5">
                   <label class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">UDM Entry</label>
                   <input v-model="entryForm.udm_entry" type="text" placeholder="UDM register entry…"
-                    class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 focus:bg-white transition-all">
+                    class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none focus:border-[#1D5F5E] focus:ring-2 focus:ring-[#1D5F5E]/10 focus:bg-white transition-all">
                 </div>
               </div>
 
@@ -1029,9 +1029,10 @@ const deleteWork = async () => {
               <button @click="submitEntry" :disabled="entryForm.isSubmitting"
                 class="w-full py-3 rounded-2xl text-white text-sm font-bold shadow shadow-black/15 hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center justify-center gap-2"
                 :class="{
-                  'bg-[#1d1d1f]':    !entryForm.status && entryForm.entry_type === 'supply',
-                  'bg-[#34c759]':      (!entryForm.status && entryForm.entry_type === 'execution') || entryForm.status === 'ok',
-                  'bg-[#ff3b30]':      ['error','denied','invalid','noloc','duplicate'].includes(entryForm.status),
+                  'bg-[#1D5F5E] hover:bg-[#174E4D]': !entryForm.status && entryForm.entry_type === 'supply',
+                  'bg-[#C17841] hover:bg-[#A9653A]':  !entryForm.status && entryForm.entry_type === 'execution',
+                  'bg-[#5E8858]': entryForm.status === 'ok',
+                  'bg-red-500':   ['error','denied','invalid','noloc','duplicate'].includes(entryForm.status),
                 }">
                 <div v-if="entryForm.isSubmitting" class="i-carbon-circle-dash animate-spin"></div>
                 <span v-else-if="entryForm.status === 'ok'">Entry Submitted!</span>
@@ -1077,49 +1078,49 @@ const deleteWork = async () => {
                     <template v-for="(entry, idx) in lotPopupItem.entries" :key="entry.id">
 
                       <!-- Edit row -->
-                      <tr v-if="editingEntry?.id === entry.id" class="bg-blue-50/40">
+                      <tr v-if="editingEntry?.id === entry.id" class="bg-accent-soft/40">
                         <td class="px-3 py-2 text-gray-400 font-semibold">{{ idx + 1 }}</td>
                         <td class="px-3 py-2">
                           <span class="text-[10px] font-bold px-1.5 py-0.5 rounded"
-                            :class="entry.entry_type === 'supply' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'">
+                            :class="entry.entry_type === 'supply' ? 'bg-accent-soft text-accent' : 'bg-accent-b-soft text-accent-b'">
                             {{ entry.entry_type === 'supply' ? 'Sup' : 'Exe' }}
                           </span>
                         </td>
                         <td class="px-3 py-2">
                           <input v-model="editingEntry.quantity" type="number" step="0.01" min="0.01"
-                            class="w-14 bg-white border border-[#0071e3]/30 rounded-lg px-2 py-1 text-xs font-semibold text-gray-800 outline-none focus:border-[#0071e3] text-right">
+                            class="w-14 bg-white border border-accent/30 rounded-lg px-2 py-1 text-xs font-semibold text-gray-800 outline-none focus:border-accent text-right">
                         </td>
                         <!-- Supply edit fields -->
                         <template v-if="entry.entry_type === 'supply'">
                           <td class="px-3 py-2">
                             <div class="flex flex-col gap-1">
                               <input v-model="editingEntry.receive_note_no" type="text" placeholder="DMTR No."
-                                class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-700 outline-none focus:border-[#0071e3]">
+                                class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-700 outline-none focus:border-accent">
                               <input v-model="editingEntry.date_of_receipt" type="date"
-                                class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-700 outline-none focus:border-[#0071e3]">
+                                class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-700 outline-none focus:border-accent">
                             </div>
                           </td>
                           <td class="px-3 py-2">
                             <input v-model="editingEntry.challan_no" type="text"
-                              class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-700 outline-none focus:border-[#0071e3]">
+                              class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-700 outline-none focus:border-accent">
                           </td>
                         </template>
                         <!-- Execution edit fields -->
                         <template v-else>
                           <td class="px-3 py-2">
                             <input v-model="editingEntry.location" type="text"
-                              class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-700 outline-none focus:border-[#34c759]">
+                              class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-700 outline-none focus:border-accent-b">
                           </td>
                           <td class="px-3 py-2">
                             <input v-model="editingEntry.remarks" type="text"
-                              class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-700 outline-none focus:border-[#34c759]">
+                              class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-700 outline-none focus:border-accent-b">
                           </td>
                         </template>
                         <td class="px-3 py-2 text-gray-500">{{ entry.submitted_by_user?.username || '—' }}</td>
                         <td class="px-3 py-2">
                           <div class="flex items-center gap-1">
                             <button @click="saveEditEntry" :disabled="isSavingEntry"
-                              class="px-2 py-1 rounded-lg bg-[#0071e3] text-white text-[10px] font-bold hover:bg-[#0055b3] transition-all disabled:opacity-50 flex items-center gap-1">
+                              class="px-2 py-1 rounded-lg bg-accent text-white text-[10px] font-bold hover:bg-accent-hover transition-all disabled:opacity-50 flex items-center gap-1">
                               <div v-if="isSavingEntry" class="i-carbon-circle-dash animate-spin text-[10px]"></div>
                               <span v-else>Save</span>
                             </button>
@@ -1134,7 +1135,7 @@ const deleteWork = async () => {
                         <td class="px-3 py-2.5 text-gray-400 font-semibold">{{ idx + 1 }}</td>
                         <td class="px-3 py-2.5">
                           <span class="text-[10px] font-bold px-1.5 py-0.5 rounded"
-                            :class="entry.entry_type === 'supply' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'">
+                            :class="entry.entry_type === 'supply' ? 'bg-accent-soft text-accent' : 'bg-accent-b-soft text-accent-b'">
                             {{ entry.entry_type === 'supply' ? 'Sup' : 'Exe' }}
                           </span>
                         </td>
@@ -1144,7 +1145,7 @@ const deleteWork = async () => {
                         <!-- Supply: show receive note + date of receipt -->
                         <td v-if="entry.entry_type === 'supply'" class="px-3 py-2.5">
                           <p class="font-semibold text-gray-700 truncate max-w-[120px]">{{ entry.receive_note_no || '—' }}</p>
-                          <p class="text-[10px] text-[#0071e3] font-medium mt-0.5">{{ fmtDate(entry.date_of_receipt) }}</p>
+                          <p class="text-[10px] text-[#1D5F5E] font-medium mt-0.5">{{ fmtDate(entry.date_of_receipt) }}</p>
                         </td>
                         <!-- Execution: show location -->
                         <td v-else class="px-3 py-2.5 text-gray-600 font-medium max-w-[120px] truncate">
@@ -1216,8 +1217,8 @@ const deleteWork = async () => {
 
             <!-- Upload zone -->
             <label v-if="!batchParsing && batchResults.length === 0"
-              class="flex flex-col items-center justify-center border-2 border-dashed border-gray-200 hover:border-[#0071e3]/50 rounded-2xl py-12 cursor-pointer transition-all group">
-              <div class="i-carbon-document-pdf text-4xl text-gray-300 group-hover:text-[#0071e3]/60 transition-colors mb-3"></div>
+              class="flex flex-col items-center justify-center border-2 border-dashed border-gray-200 hover:border-[#1D5F5E]/50 rounded-2xl py-12 cursor-pointer transition-all group">
+              <div class="i-carbon-document-pdf text-4xl text-gray-300 group-hover:text-[#1D5F5E]/60 transition-colors mb-3"></div>
               <p class="text-sm font-semibold text-gray-500 group-hover:text-gray-700">Click to select PDF receipts</p>
               <p class="text-xs text-gray-400 mt-1">Multiple files supported</p>
               <input type="file" accept=".pdf" multiple class="hidden" @change="onBatchFilesSelected">
@@ -1225,7 +1226,7 @@ const deleteWork = async () => {
 
             <!-- Parsing loader -->
             <div v-if="batchParsing" class="flex flex-col items-center py-12 gap-3">
-              <div class="i-carbon-circle-dash animate-spin text-3xl text-[#0071e3]"></div>
+              <div class="i-carbon-circle-dash animate-spin text-3xl text-[#1D5F5E]"></div>
               <p class="text-sm font-medium text-gray-500">Parsing PDFs…</p>
             </div>
 
@@ -1253,7 +1254,7 @@ const deleteWork = async () => {
                       <p class="text-xs font-semibold text-gray-700 truncate">{{ r.filename }}</p>
                     </div>
                     <label v-if="!r.done && !r.error" class="flex items-center gap-1.5 cursor-pointer flex-shrink-0">
-                      <input type="checkbox" v-model="r.include" class="w-3.5 h-3.5 accent-[#0071e3]">
+                      <input type="checkbox" v-model="r.include" class="w-3.5 h-3.5 accent-[#1D5F5E]">
                       <span class="text-[11px] font-medium text-gray-500">Include</span>
                     </label>
                     <span v-if="r.done" class="text-[11px] font-semibold text-[#34c759]">Submitted</span>
@@ -1273,7 +1274,7 @@ const deleteWork = async () => {
                     <div class="col-span-2 flex flex-col gap-1">
                       <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Match to Item (Serial: {{ r.serial_number || '—' }})</label>
                       <select v-model="r.matchedItemId"
-                        class="bg-white border rounded-xl px-3 py-2 text-xs font-medium text-gray-700 outline-none focus:border-[#0071e3]"
+                        class="bg-white border rounded-xl px-3 py-2 text-xs font-medium text-gray-700 outline-none focus:border-[#1D5F5E]"
                         :class="r.matchedItemId ? 'border-gray-200' : 'border-amber-300'">
                         <option value="">— Select item —</option>
                         <option v-for="item in selectedWork.items" :key="item.id" :value="item.id">
@@ -1311,10 +1312,10 @@ const deleteWork = async () => {
               {{ batchResults.filter(r => r.include && r.matchedItemId && !r.done).length }} entr{{ batchResults.filter(r => r.include && r.matchedItemId && !r.done).length === 1 ? 'y' : 'ies' }} ready to submit
             </p>
             <div class="flex items-center gap-3">
-              <button @click="closeBatchModal" class="px-5 py-2.5 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-800 text-sm font-semibold transition-all">Close</button>
+              <button @click="closeBatchModal" class="px-5 py-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-sm font-semibold transition-colors">Close</button>
               <button @click="submitBatchEntries"
                 :disabled="batchSubmitting || !batchResults.some(r => r.include && r.matchedItemId && !r.done)"
-                class="px-5 py-2.5 rounded-full bg-[#1d1d1f] text-white text-sm font-semibold shadow shadow-black/20 hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center gap-2">
+                class="px-5 py-2.5 rounded-xl bg-[#1D5F5E] text-white text-sm font-semibold hover:bg-[#174E4D] transition-colors disabled:opacity-50 flex items-center gap-2">
                 <div v-if="batchSubmitting" class="i-carbon-circle-dash animate-spin"></div>
                 <span>Submit Selected</span>
               </button>

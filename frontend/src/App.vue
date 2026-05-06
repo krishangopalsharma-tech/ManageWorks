@@ -2,9 +2,6 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import Sidebar from './components/Sidebar.vue'
-import { useTheme } from './composables/useTheme'
-
-useTheme()
 
 const route = useRoute()
 const authRoutes = ['/login', '/register']

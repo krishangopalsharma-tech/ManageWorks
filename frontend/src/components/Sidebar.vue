@@ -2,13 +2,11 @@
 import { ref, watchEffect, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
-import { useTheme } from '../composables/useTheme'
 import ManageWorksIcon from './ManageWorksIcon.vue'
 
 const router = useRouter()
 const route  = useRoute()
 const { state, logout } = useAuth()
-const { isDark, toggle: toggleTheme } = useTheme()
 
 const isAdmin = computed(() => state.user?.role === 'admin' || state.user?.is_staff)
 
@@ -110,8 +108,8 @@ const visibleSubItems = (item) => {
             @click="handleSubItemClick(item, sub)"
             class="px-4 py-2.5 rounded-xl text-sm transition-all duration-300 font-medium cursor-pointer select-none"
             :class="activeSubItem === sub.name
-              ? 'bg-[#111] dark:bg-[#f5f5f7] text-white dark:text-[#1d1d1f] shadow-md'
-              : 'text-[#86868b] dark:text-[#aeaeb2] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] hover:bg-white/60 dark:hover:bg-[#2c2c2e]/60'"
+              ? 'bg-[#111] text-white shadow-md'
+              : 'text-[#86868b] hover:text-[#1d1d1f] hover:bg-white/60'"
           >
             {{ sub.name }}
           </div>
@@ -122,23 +120,7 @@ const visibleSubItems = (item) => {
 
     <!-- User Profile Area -->
     <div class="mt-auto pt-4" style="border-top: 1px solid var(--color-separator);">
-      <!-- Theme toggle -->
-      <div class="flex items-center justify-between px-2 py-1.5 mb-2">
-        <span class="text-xs font-semibold" style="color: var(--color-text-tertiary);">
-          {{ isDark ? 'Dark mode' : 'Light mode' }}
-        </span>
-        <button
-          @click="toggleTheme"
-          class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-all duration-200 cursor-pointer"
-          style="color: var(--color-text-secondary);"
-          :style="{ backgroundColor: 'var(--color-surface-secondary)' }"
-          :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
-        >
-          <div :class="isDark ? 'i-carbon-sun' : 'i-carbon-moon'" class="text-base"></div>
-        </button>
-      </div>
-
-      <div
+<div
         class="flex items-center gap-3 p-2 rounded-xl transition-all cursor-default"
         style="hover-bg: var(--color-surface-secondary);"
         :style="{ '&:hover': { backgroundColor: 'var(--color-surface-secondary)' } }"
@@ -156,7 +138,7 @@ const visibleSubItems = (item) => {
         <button
           @click="handleLogout"
           title="Sign out"
-          class="p-1.5 rounded-lg transition-colors cursor-pointer hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-500"
+          class="p-1.5 rounded-lg transition-colors cursor-pointer hover:bg-red-50 hover:text-red-500"
           style="color: var(--color-text-tertiary);"
         >
           <div class="i-carbon-logout text-lg"></div>

@@ -88,10 +88,10 @@ const submitData = async () => {
       <!-- File Upload Zone -->
       <div 
         @click="triggerFileInput"
-        class="border-2 border-dashed border-gray-300 rounded-2xl p-12 flex flex-col items-center justify-center cursor-pointer hover:bg-white hover:border-[#0071e3] transition-colors"
+        class="border-2 border-dashed border-gray-300 rounded-2xl p-12 flex flex-col items-center justify-center cursor-pointer hover:bg-white hover:border-[#1D5F5E] transition-colors"
       >
         <input type="file" ref="fileInput" class="hidden" accept=".xlsx,.xls" @change="handleFileSelect" />
-        <div class="w-16 h-16 rounded-full bg-light-bg flex-center text-[#0071e3] mb-4">
+        <div class="w-16 h-16 rounded-full bg-light-bg flex-center text-[#1D5F5E] mb-4">
           <div class="i-carbon-upload text-3xl"></div>
         </div>
         <h3 class="text-lg font-semibold text-gray-700 mb-1">
@@ -109,7 +109,7 @@ const submitData = async () => {
       <!-- Link Input -->
       <div class="w-full">
         <label class="block text-sm font-semibold text-gray-600 mb-2 pl-2">Google Sheet Link</label>
-        <div class="flex items-center bg-white border border-gray-300 rounded-xl px-5 py-4 w-full group focus-within:ring-2 focus-within:ring-[#0071e3]/20 focus-within:border-[#0071e3] transition-all">
+        <div class="flex items-center bg-white border border-gray-300 rounded-xl px-5 py-4 w-full group focus-within:ring-2 focus-within:ring-[#1D5F5E]/20 focus-within:border-[#1D5F5E] transition-all">
           <div class="i-carbon-link text-gray-400 text-xl mr-3"></div>
           <input 
             v-model="sheetLink"
@@ -125,7 +125,7 @@ const submitData = async () => {
         <button
           @click="submitData"
           :disabled="isUploading"
-          class="w-full max-w-xs px-8 py-4 rounded-full bg-[#1d1d1f] text-white shadow-lg shadow-black/20 hover:shadow-xl transition-all hover:-translate-y-0.5 font-semibold tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex-center gap-2"
+          class="w-full max-w-xs px-8 py-4 rounded-xl bg-[#1D5F5E] text-white hover:bg-[#174E4D] transition-colors font-semibold tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex-center gap-2"
         >
           <div v-if="isUploading" class="i-carbon-circle-dash animate-spin"></div>
           {{ isUploading ? (uploadPhase === 'processing' ? 'Processing...' : 'Uploading...') : 'Upload Work Data' }}
@@ -136,12 +136,12 @@ const submitData = async () => {
           <div class="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
             <!-- Determinate bar for file upload -->
             <div v-if="selectedFile && uploadPhase === 'uploading'"
-              class="h-full bg-[#0071e3] rounded-full transition-all duration-300"
+              class="h-full bg-[#1D5F5E] rounded-full transition-all duration-300"
               :style="{ width: uploadProgress + '%' }">
             </div>
             <!-- Indeterminate animated bar for sheet fetch / server processing -->
             <div v-else
-              class="h-full bg-[#0071e3] rounded-full animate-indeterminate">
+              class="h-full bg-[#1D5F5E] rounded-full animate-indeterminate">
             </div>
           </div>
           <p class="text-xs text-center text-gray-400 font-medium">

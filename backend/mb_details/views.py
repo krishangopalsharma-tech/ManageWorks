@@ -1,5 +1,5 @@
 from django.db import transaction
-from django.db.models import Sum, Max, Q
+from django.db.models import Sum, Q
 from rest_framework import status, generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -104,30 +104,6 @@ class WorkItemSearchView(APIView):
         return Response(data)
 
 
-class ItemPriorInfoView(APIView):
-    """
-    GET /api/mb-details/items/<work_item_id>/prior/
-    Returns suggested prior cumulative % (max current_percentage from prior MBs for this item)
-    and other useful defaults.
-    """
-
-    def get(self, request, work_item_id):
-        try:
-            wi = WorkItem.objects.select_related('work').get(pk=work_item_id)
-        except WorkItem.DoesNotExist:
-            return Response({'error': 'Item not found.'}, status=status.HTTP_404_NOT_FOUND)
-        _check_work_access(request.user, wi.work)
-
-        prior_pct = MBItem.objects.filter(work_item=wi).aggregate(m=Max('current_percentage'))['m'] or 0
-        billed_qty_total = MBItem.objects.filter(work_item=wi).aggregate(t=Sum('quantity'))['t'] or 0
-
-        return Response({
-            'suggested_prior_pct': prior_pct,
-            'default_quantity':    wi.qty or 0,
-            'unit_rate_below':     wi.unit_rate_below or 0,
-            'billed_qty_total':    billed_qty_total,
-        })
-
 
 class MBRecordListCreateView(generics.ListCreateAPIView):
     """
@@ -188,11 +164,10 @@ class MBRecordListCreateView(generics.ListCreateAPIView):
         )
 
         for row in items:
-            wi_id    = row.get('work_item')
+            wi_id   = row.get('work_item')
             try:
-                qty       = float(row.get('quantity') or 0)
-                prior_pct = float(row.get('prior_percentage') or 0)
-                cur_pct   = float(row.get('current_percentage') or 0)
+                qty     = float(row.get('quantity') or 0)
+                cur_pct = float(row.get('current_percentage') or 0)
             except (ValueError, TypeError):
                 record.delete()
                 return Response({'error': f'Invalid numeric values for item {wi_id}.'},
@@ -200,13 +175,9 @@ class MBRecordListCreateView(generics.ListCreateAPIView):
 
             if qty <= 0:
                 continue
-            if cur_pct <= prior_pct:
+            if cur_pct <= 0 or cur_pct > 100:
                 record.delete()
-                return Response({'error': f'current_percentage must exceed prior_percentage for item {wi_id}.'},
-                                status=status.HTTP_400_BAD_REQUEST)
-            if cur_pct > 100 or prior_pct < 0:
-                record.delete()
-                return Response({'error': f'percentages out of range for item {wi_id}.'},
+                return Response({'error': f'current_percentage must be between 0 and 100 for item {wi_id}.'},
                                 status=status.HTTP_400_BAD_REQUEST)
 
             try:
@@ -218,7 +189,7 @@ class MBRecordListCreateView(generics.ListCreateAPIView):
 
             MBItem.objects.create(
                 mb_record=record, work_item=wi,
-                quantity=qty, prior_percentage=prior_pct, current_percentage=cur_pct, amount=0,
+                quantity=qty, current_percentage=cur_pct, amount=0,
             )
 
         return Response(MBRecordSerializer(record).data, status=status.HTTP_201_CREATED)
@@ -268,22 +239,16 @@ class MBRecordDetailView(generics.RetrieveDestroyAPIView):
             for row in items_data:
                 wi_id = row.get('work_item')
                 try:
-                    qty       = float(row.get('quantity') or 0)
-                    prior_pct = float(row.get('prior_percentage') or 0)
-                    cur_pct   = float(row.get('current_percentage') or 0)
+                    qty     = float(row.get('quantity') or 0)
+                    cur_pct = float(row.get('current_percentage') or 0)
                 except (ValueError, TypeError):
                     return Response({'error': f'Invalid numeric values for item {wi_id}.'},
                                     status=status.HTTP_400_BAD_REQUEST)
 
                 if qty <= 0:
                     continue
-                if cur_pct <= prior_pct:
-                    return Response(
-                        {'error': f'current_percentage must exceed prior_percentage for item {wi_id}.'},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-                if cur_pct > 100 or prior_pct < 0:
-                    return Response({'error': f'Percentages out of range for item {wi_id}.'},
+                if cur_pct <= 0 or cur_pct > 100:
+                    return Response({'error': f'current_percentage must be between 0 and 100 for item {wi_id}.'},
                                     status=status.HTTP_400_BAD_REQUEST)
 
                 try:
@@ -294,7 +259,7 @@ class MBRecordDetailView(generics.RetrieveDestroyAPIView):
 
                 MBItem.objects.create(
                     mb_record=record, work_item=wi,
-                    quantity=qty, prior_percentage=prior_pct, current_percentage=cur_pct, amount=0,
+                    quantity=qty, current_percentage=cur_pct, amount=0,
                 )
 
         return Response(MBRecordSerializer(record).data)
@@ -402,15 +367,6 @@ class PDFImportView(APIView):
             key = (sch_letter, norm(wi.serial_number))
             index[key] = wi
 
-        prior_pct_map = {}
-        for row in (
-            MBItem.objects
-            .filter(work_item__work=work)
-            .values('work_item_id')
-            .annotate(m=Max('current_percentage'))
-        ):
-            prior_pct_map[row['work_item_id']] = row['m'] or 0
-
         prior_qty_map = {}
         for row in (
             MBItem.objects
@@ -442,12 +398,10 @@ class PDFImportView(APIView):
                 row['matched']         = False
                 row['work_item']       = None
                 row['work_item_label'] = None
-                row['suggested_prior'] = 0
                 warnings.append(
                     f'Item No. {src.get("item_no")} (Schedule {sch_letter}) not found in selected work.'
                 )
             else:
-                prior_pct = prior_pct_map.get(wi.id, 0)
                 prior_qty = prior_qty_map.get(wi.id, 0)
                 expected_total = (prior_qty or 0) + (src.get('quantity') or 0)
                 pdf_total = src.get('total_to_date') or 0
@@ -482,7 +436,6 @@ class PDFImportView(APIView):
                 row['matched']         = True
                 row['work_item']       = wi.id
                 row['work_item_label'] = f'S.No {wi.serial_number} · {(wi.item_desc or "")[:80]}'
-                row['suggested_prior'] = prior_pct
                 row['unit_rate_below'] = wi.unit_rate_below or 0
                 row['contract_qty']    = wi.qty or 0
                 row['db_prior_qty']    = prior_qty

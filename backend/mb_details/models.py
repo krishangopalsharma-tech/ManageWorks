@@ -22,28 +22,24 @@ class MBRecord(models.Model):
 
 class MBItem(models.Model):
     """
-    A single line in an MB: item + quantity + prior/current cumulative % → released amount.
+    A single line in an MB: item + quantity + current payment % → released amount.
 
-    Released amount = quantity * unit_rate_below * (current_percentage - prior_percentage) / 100
-
-    Multiple rows for the same work_item are allowed within one MB (split-qty case).
+    Released amount = quantity * unit_rate_below * current_percentage / 100
     """
     mb_record          = models.ForeignKey(MBRecord, on_delete=models.CASCADE, related_name='items')
     work_item          = models.ForeignKey(WorkItem, on_delete=models.CASCADE, related_name='mb_items')
     quantity           = models.FloatField(help_text='Qty of this item billed in this line')
-    prior_percentage   = models.FloatField(default=0, help_text='Cumulative % already paid before this MB')
-    current_percentage = models.FloatField(help_text='Cumulative % after this MB')
-    amount             = models.FloatField(default=0, help_text='Auto: qty × rate × (current - prior) / 100')
+    current_percentage = models.FloatField(help_text='Payment % for this MB')
+    amount             = models.FloatField(default=0, help_text='Auto: qty × rate × current_percentage / 100')
 
     class Meta:
         ordering = ['id']
 
     def save(self, *args, **kwargs):
         rate = self.work_item.unit_rate_below or 0
-        diff = (self.current_percentage or 0) - (self.prior_percentage or 0)
         qty  = self.quantity or 0
-        self.amount = round(qty * rate * diff / 100, 2)
+        self.amount = round(qty * rate * (self.current_percentage or 0) / 100, 2)
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"MBItem item={self.work_item_id} qty={self.quantity} {self.prior_percentage}→{self.current_percentage}%"
+        return f"MBItem item={self.work_item_id} qty={self.quantity} {self.current_percentage}%"

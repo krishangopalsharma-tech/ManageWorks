@@ -203,7 +203,7 @@ onMounted(loadData)
             Cancel
           </button>
           <button @click="saveUser" :disabled="isSaving"
-            class="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gray-800 dark:bg-[#f5f5f7] hover:bg-gray-700 dark:hover:bg-white text-white dark:text-[#1d1d1f] text-sm font-semibold transition-colors disabled:opacity-50">
+            class="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#1D5F5E] hover:bg-[#174E4D] text-white text-sm font-semibold transition-colors disabled:opacity-50">
             <div v-if="isSaving" class="i-carbon-loading animate-spin text-xs"></div>
             {{ isSaving ? 'Saving…' : 'Save' }}
           </button>
@@ -251,13 +251,13 @@ onMounted(loadData)
                 <div class="px-6 py-2 border-r border-gray-100 dark:border-[#3a3a3c] flex items-baseline gap-2">
                   <p class="text-[9px] font-bold text-gray-400 uppercase tracking-widest shrink-0">Designation</p>
                   <input v-if="isEditing" v-model="editDesig" type="text"
-                    class="w-full bg-gray-50 dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c] rounded-lg px-3 py-1 text-sm font-medium text-gray-800 dark:text-white outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/10 transition-all">
+                    class="w-full bg-gray-50 dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c] rounded-lg px-3 py-1 text-sm font-medium text-gray-800 dark:text-white outline-none focus:border-[#1D5F5E] focus:ring-2 focus:ring-[#1D5F5E]/10 transition-all">
                   <p v-else class="text-sm font-semibold text-gray-800 dark:text-white">{{ detailUser.designation }}</p>
                 </div>
                 <div class="px-6 py-2 flex items-baseline gap-2">
                   <p class="text-[9px] font-bold text-gray-400 uppercase tracking-widest shrink-0">Role</p>
                   <select v-if="isEditing" v-model="editRole"
-                    class="w-full bg-gray-50 dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c] rounded-lg px-3 py-1 text-sm font-semibold text-gray-800 dark:text-white outline-none focus:border-[#0071e3] transition-all cursor-pointer">
+                    class="w-full bg-gray-50 dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c] rounded-lg px-3 py-1 text-sm font-semibold text-gray-800 dark:text-white outline-none focus:border-[#1D5F5E] transition-all cursor-pointer">
                     <option v-for="r in ROLES" :key="r" :value="r" class="bg-white text-gray-800 capitalize">{{ r }}</option>
                   </select>
                   <p v-else class="text-sm font-semibold text-gray-800 dark:text-white capitalize">{{ detailUser.role }}</p>
@@ -284,7 +284,7 @@ onMounted(loadData)
                   class="bg-white dark:bg-[#1c1c1e] rounded-2xl soft-shadow border border-gray-100 dark:border-[#3a3a3c] px-5 py-4 flex items-start gap-4">
                   <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-2 flex-wrap mb-1.5">
-                      <span class="text-[11px] font-bold text-[#0071e3] bg-[#0071e3]/10 px-2.5 py-0.5 rounded-full">
+                      <span class="text-[11px] font-bold text-[#1D5F5E] bg-[#1D5F5E]/10 px-2.5 py-0.5 rounded-full">
                         {{ w.loa_number || '—' }}
                       </span>
                       <span v-if="w.tender_number" class="text-[11px] text-gray-500 dark:text-[#aeaeb2]">{{ w.tender_number }}</span>
@@ -316,7 +316,7 @@ onMounted(loadData)
 
           <!-- Search -->
           <div class="px-6 pb-4">
-            <div class="flex items-center bg-white dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c] rounded-xl px-4 py-2.5 focus-within:border-[#0071e3] focus-within:ring-2 focus-within:ring-[#0071e3]/10 transition-all">
+            <div class="flex items-center bg-white dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c] rounded-xl px-4 py-2.5 focus-within:border-[#1D5F5E] focus-within:ring-2 focus-within:ring-[#1D5F5E]/10 transition-all">
               <div class="i-carbon-search text-gray-400 mr-3 text-sm"></div>
               <input v-model="workSearch" type="text" placeholder="Search by LOA number, contractor, tender..."
                 class="bg-transparent outline-none flex-1 text-sm text-gray-700 dark:text-[#f5f5f7] placeholder-gray-400">
@@ -332,10 +332,10 @@ onMounted(loadData)
             <div v-else class="flex flex-col gap-2">
               <button v-for="w in addableWorks" :key="w.id"
                 @click="assignWork(w)"
-                class="w-full text-left bg-white dark:bg-[#1c1c1e] rounded-xl soft-shadow border border-gray-100 dark:border-[#3a3a3c] px-4 py-3.5 flex items-start gap-3 hover:border-[#0071e3] hover:shadow-md transition-all group">
+                class="w-full text-left bg-white dark:bg-[#1c1c1e] rounded-xl soft-shadow border border-gray-100 dark:border-[#3a3a3c] px-4 py-3.5 flex items-start gap-3 hover:border-[#1D5F5E] hover:shadow-md transition-all group">
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2 flex-wrap mb-1">
-                    <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#0071e3]/10 text-[#0071e3]">
+                    <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#1D5F5E]/10 text-[#1D5F5E]">
                       {{ w.loa_number || '—' }}
                     </span>
                     <span v-if="w.tender_number" class="text-[11px] text-gray-500 dark:text-[#aeaeb2]">{{ w.tender_number }}</span>
@@ -343,7 +343,7 @@ onMounted(loadData)
                   <p class="text-sm font-semibold text-gray-800 dark:text-white">{{ w.contractor_name || '—' }}</p>
                   <p class="text-[11px] text-red-500 font-medium mt-0.5">Unassigned</p>
                 </div>
-                <div class="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#0071e3]/10 text-[#0071e3] text-[11px] font-semibold group-hover:bg-[#0071e3] group-hover:text-white transition-all mt-0.5">
+                <div class="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#1D5F5E]/10 text-[#1D5F5E] text-[11px] font-semibold group-hover:bg-[#1D5F5E] group-hover:text-white transition-all mt-0.5">
                   <div class="i-carbon-add text-xs"></div> Assign
                 </div>
               </button>

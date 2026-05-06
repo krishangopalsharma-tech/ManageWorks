@@ -60,7 +60,7 @@ const mkDoughnut = (val, color) => ({
   }],
 })
 
-const supplyData  = computed(() => mkDoughnut(stats.value?.supply     || 0, '#0071e3'))
+const supplyData  = computed(() => mkDoughnut(stats.value?.supply     || 0, '#1D5F5E'))
 const execData    = computed(() => mkDoughnut(stats.value?.execution  || 0, '#34c759'))
 const overallData = computed(() => mkDoughnut(stats.value?.overall    || 0, '#5856d6'))
 const finData     = computed(() => mkDoughnut(stats.value?.financial  || 0, '#ff9500'))
@@ -73,7 +73,7 @@ const barData = computed(() => ({
       label: 'Supply',
       data:  trendData.value.map(d => d.supply ?? 0),
       backgroundColor: 'rgba(0, 113, 227, 0.85)',
-      hoverBackgroundColor: '#0071e3',
+      hoverBackgroundColor: '#1D5F5E',
       borderRadius: 6,
       borderSkipped: false,
       maxBarThickness: 32,
@@ -190,7 +190,7 @@ onMounted(() => { fetchStats(); fetchTrend() })
 
       <!-- Loading -->
       <div v-if="isLoading" class="flex-1 flex items-center justify-center">
-        <div class="i-carbon-circle-dash animate-spin text-4xl text-[#0071e3]"></div>
+        <div class="i-carbon-circle-dash animate-spin text-4xl text-[#1D5F5E]"></div>
       </div>
 
       <div v-else class="flex-1 min-h-0 flex flex-col p-6 gap-5 overflow-hidden">
@@ -204,7 +204,7 @@ onMounted(() => { fetchStats(); fetchTrend() })
               <span class="absolute text-base font-extrabold text-gray-800 z-10 pointer-events-none">{{ stats?.supply || 0 }}%</span>
               <Doughnut :data="supplyData" :options="doughnutOptions" />
             </div>
-            <div class="mt-2 w-2 h-2 rounded-full bg-[#0071e3]"></div>
+            <div class="mt-2 w-2 h-2 rounded-full bg-[#1D5F5E]"></div>
           </div>
 
           <div class="flex flex-col items-center bg-white border border-gray-100 rounded-2xl py-4 px-3 soft-shadow">
@@ -245,14 +245,14 @@ onMounted(() => { fetchStats(); fetchTrend() })
               <p class="text-sm font-bold text-gray-800 tracking-tight">Submission Activity</p>
               <p class="text-[11px] text-gray-400 font-medium mt-0.5">% of total work completed per period</p>
             </div>
-            <div class="flex items-center gap-1 bg-gray-100 rounded-full p-1">
+            <div class="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
               <button
                 v-for="p in periods" :key="p.value"
                 @click="activePeriod = p.value"
                 :class="activePeriod === p.value
-                  ? 'bg-white text-[#0071e3] shadow-sm'
+                  ? 'bg-white text-[#1D5F5E] shadow-sm'
                   : 'text-gray-500 hover:text-gray-700'"
-                class="px-3 py-1 rounded-full text-xs font-semibold transition-all">
+                class="px-3 py-1 rounded-md text-xs font-semibold transition-all">
                 {{ p.label }}
               </button>
             </div>
@@ -261,7 +261,7 @@ onMounted(() => { fetchStats(); fetchTrend() })
           <!-- Chart area -->
           <div class="flex-1 min-h-0 px-5 py-4 relative">
             <div v-if="isTrendLoading" class="absolute inset-0 flex items-center justify-center">
-              <div class="i-carbon-circle-dash animate-spin text-2xl text-[#0071e3]"></div>
+              <div class="i-carbon-circle-dash animate-spin text-2xl text-[#1D5F5E]"></div>
             </div>
             <div v-else-if="trendData.length === 0" class="h-full flex flex-col items-center justify-center gap-2">
               <div class="i-carbon-chart-bar text-4xl text-gray-200"></div>
@@ -289,7 +289,7 @@ onMounted(() => { fetchStats(); fetchTrend() })
             v-model="searchQuery"
             type="text"
             placeholder="Search works..."
-            class="w-full pl-8 pr-3 py-2 text-xs rounded-lg border border-gray-200 bg-white focus:outline-none focus:border-[#0071e3] transition-colors placeholder-gray-400"
+            class="w-full pl-8 pr-3 py-2 text-xs rounded-lg border border-gray-200 bg-white focus:outline-none focus:border-[#1D5F5E] transition-colors placeholder-gray-400"
           />
         </div>
       </div>
@@ -301,16 +301,16 @@ onMounted(() => { fetchStats(); fetchTrend() })
           @click="selectAll"
           class="px-4 py-3 rounded-xl cursor-pointer border transition-all flex-shrink-0 flex items-center gap-3"
           :class="isAllSelected
-            ? 'bg-[#0071e3]/10 border-[#0071e3] text-[#0071e3]'
+            ? 'bg-[#1D5F5E]/10 border-[#1D5F5E] text-[#1D5F5E]'
             : 'bg-[#f5f5f7] border-transparent text-gray-600 hover:border-gray-300'">
           <div
             class="w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition-all"
-            :class="isAllSelected ? 'bg-[#0071e3] border-[#0071e3]' : 'border-gray-300 bg-white'">
+            :class="isAllSelected ? 'bg-[#1D5F5E] border-[#1D5F5E]' : 'border-gray-300 bg-white'">
             <div v-if="isAllSelected" class="i-carbon-checkmark text-white text-[10px]"></div>
           </div>
           <div>
             <div class="font-bold text-sm tracking-wide">Total Aggregation</div>
-            <div class="text-xs mt-0.5" :class="isAllSelected ? 'text-[#0071e3]/80' : 'text-gray-400'">
+            <div class="text-xs mt-0.5" :class="isAllSelected ? 'text-[#1D5F5E]/80' : 'text-gray-400'">
               All works combined
             </div>
           </div>
@@ -325,13 +325,13 @@ onMounted(() => { fetchStats(); fetchTrend() })
             @click="toggleLoa(loa.id)"
             class="relative px-4 py-3 rounded-xl cursor-pointer border transition-all text-sm leading-snug flex-shrink-0 flex items-start gap-3"
             :class="selectedLoas.includes(loa.id)
-              ? 'bg-[#0071e3]/10 border-[#0071e3] text-[#0071e3]'
-              : 'bg-white border-gray-200 hover:border-[#0071e3]/40 text-gray-700'">
+              ? 'bg-[#1D5F5E]/10 border-[#1D5F5E] text-[#1D5F5E]'
+              : 'bg-white border-gray-200 hover:border-[#1D5F5E]/40 text-gray-700'">
 
             <!-- Checkbox -->
             <div
               class="w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center mt-0.5 transition-all"
-              :class="selectedLoas.includes(loa.id) ? 'bg-[#0071e3] border-[#0071e3]' : 'border-gray-300 bg-white'">
+              :class="selectedLoas.includes(loa.id) ? 'bg-[#1D5F5E] border-[#1D5F5E]' : 'border-gray-300 bg-white'">
               <div v-if="selectedLoas.includes(loa.id)" class="i-carbon-checkmark text-white text-[10px]"></div>
             </div>
 
@@ -342,7 +342,7 @@ onMounted(() => { fetchStats(); fetchTrend() })
             <div class="flex gap-1 items-center flex-shrink-0 mt-0.5">
               <div
                 v-if="loa.supply_update"
-                class="w-2 h-2 rounded-full bg-[#0071e3]"
+                class="w-2 h-2 rounded-full bg-[#1D5F5E]"
                 title="Recent supply update">
               </div>
               <div
@@ -365,7 +365,7 @@ onMounted(() => { fetchStats(); fetchTrend() })
         </div>
 
         <!-- Multi-select summary -->
-        <div v-if="selectedLoas.length > 0" class="flex-shrink-0 px-3 py-2 bg-[#0071e3]/5 rounded-lg border border-[#0071e3]/20 text-xs text-[#0071e3] font-medium">
+        <div v-if="selectedLoas.length > 0" class="flex-shrink-0 px-3 py-2 bg-[#1D5F5E]/5 rounded-lg border border-[#1D5F5E]/20 text-xs text-[#1D5F5E] font-medium">
           {{ selectedLoas.length }} work{{ selectedLoas.length > 1 ? 's' : '' }} selected — showing combined view
         </div>
 
