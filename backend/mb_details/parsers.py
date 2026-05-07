@@ -159,7 +159,7 @@ _QTY_ROW_RE = re.compile(
     r'\s+' + _LBH_PATTERN +
     r'\s+[\d.]+'
     r'\s+([\d.]+)'
-    r'\s+=\s+([\d.]+)',
+    r'\s*=\s*([\d.]+)',
     re.IGNORECASE,
 )
 
@@ -204,16 +204,26 @@ def _parse_item_block(block_text, schedule):
 
     item['description'] = _split_description(block_text)
 
+    # Unit: from qty row regex if it matches, else bare unit token scan
     qm = _QTY_ROW_RE.search(block_text)
     if qm:
-        item['unit']     = _normalize_unit(qm.group(1))
+        item['unit'] = _normalize_unit(qm.group(1))
+    else:
+        um = re.search(_UNIT_TOKEN, block_text, re.IGNORECASE)
+        item['unit'] = _normalize_unit(um.group(0)) if um else ''
+
+    # Quantity: "Total X" line is the authoritative per-record total and handles
+    # multi-line cells where the numeric columns land on a different text line
+    # than the unit/LBH — fall back to the parsed measurement row only if absent.
+    tm = _TOTAL_RE.search(block_text)
+    if tm:
+        item['quantity'] = float(tm.group(1))
+    elif qm:
         item['quantity'] = float(qm.group(2))
     else:
-        item['unit']     = ''
         item['quantity'] = 0.0
 
-    tm = _TOTAL_RE.search(block_text)
-    item['total_to_date'] = float(tm.group(1)) if tm else item.get('quantity', 0.0)
+    item['total_to_date'] = item['quantity']
 
     pm = _PAY_RE.search(block_text)
     item['current_percentage'] = float(pm.group(1)) if pm else 0.0

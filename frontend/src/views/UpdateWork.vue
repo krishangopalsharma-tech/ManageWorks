@@ -585,47 +585,43 @@ const deleteWork = async () => {
       </div>
 
       <template v-else>
-        <div class="flex-1 overflow-auto">
-          <table class="w-full text-left border-collapse">
-            <thead class="sticky top-0 z-10">
-              <tr class="bg-gray-50 text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100">
-                <th class="px-6 py-3">Contractor / LOA</th>
-                <th class="px-4 py-3">Tender Number</th>
-                <th class="px-4 py-3">Consignee</th>
-                <th class="px-4 py-3">Completion</th>
-                <th class="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100">
-              <tr v-for="work in filteredWorks" :key="work.id" class="hover:bg-gray-50/70 transition-colors">
-                <td class="px-6 py-4">
-                  <p class="text-sm font-semibold text-gray-900">{{ work.contractor_name || '—' }}</p>
-                  <span class="mt-1 inline-block text-[11px] font-semibold text-[#1D5F5E] bg-[#1D5F5E]/10 px-2 py-0.5 rounded-full">{{ work.loa_number || '—' }}</span>
-                </td>
-                <td class="px-4 py-4 text-xs font-medium text-gray-600 max-w-[200px]"><p class="truncate">{{ work.tender_number || '—' }}</p></td>
-                <td class="px-4 py-4 text-xs font-medium text-gray-600">{{ work.consignee || '—' }}</td>
-                <td class="px-4 py-4 text-xs font-medium text-gray-600 whitespace-nowrap">{{ fmtDate(work.date_of_completion) }}</td>
-                <td class="px-4 py-4 text-right">
-                  <div class="flex items-center justify-end gap-2">
-                    <button v-if="canModifyWork" @click="openEditWork(work)"
-                      class="px-3.5 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-semibold transition-colors flex items-center gap-1.5">
-                      <div class="i-carbon-edit text-xs"></div> Edit
-                    </button>
-                    <button @click="selectWork(work)"
-                      class="px-3.5 py-2 rounded-xl bg-[#1D5F5E] text-white text-xs font-semibold hover:bg-[#174E4D] transition-colors flex items-center gap-1">
-                      Submit Entries <div class="i-carbon-chevron-right text-xs"></div>
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="px-6 py-3 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
-          <p class="text-[11px] text-gray-400 font-medium">
+        <div class="flex-1 overflow-auto px-8 py-5">
+          <p class="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4">
             {{ filteredWorks.length }} {{ filteredWorks.length === 1 ? 'work' : 'works' }}
             <template v-if="searchQuery"> matching "{{ searchQuery }}"</template>
           </p>
+          <div class="grid grid-cols-1 gap-3">
+            <div v-for="work in filteredWorks" :key="work.id"
+              class="bg-white border border-gray-200 hover:border-[#1D5F5E] hover:bg-[#1D5F5E]/5 px-5 py-4 rounded-xl transition-all group cursor-pointer"
+              @click="selectWork(work)">
+              <div class="flex items-center justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm font-semibold text-gray-900 truncate">{{ work.contractor_name || '—' }}</p>
+                  <div class="flex items-center gap-3 flex-wrap mt-1">
+                    <span class="text-[11px] font-semibold text-[#1D5F5E] bg-[#1D5F5E]/10 px-2 py-0.5 rounded-full">{{ work.loa_number || '—' }}</span>
+                    <span class="text-[11px] text-gray-500">Tender: <span class="font-semibold text-gray-700">{{ work.tender_number || '—' }}</span></span>
+                    <span class="text-[11px] text-gray-500">Consignee: <span class="font-semibold text-gray-700">{{ work.consignee || '—' }}</span></span>
+                    <span class="text-[11px] text-gray-500">Completion: <span class="font-semibold text-gray-700">{{ fmtDate(work.date_of_completion) }}</span></span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3 flex-shrink-0">
+                  <div class="text-right">
+                    <p class="text-sm font-bold text-gray-800">{{ work.items.length }}</p>
+                    <p class="text-[10px] text-gray-400">items</p>
+                  </div>
+                  <div class="text-right">
+                    <p class="text-sm font-bold text-gray-800">{{ work.items.reduce((s, i) => s + (i.entries || []).length, 0) }}</p>
+                    <p class="text-[10px] text-gray-400">entries</p>
+                  </div>
+                  <button v-if="canModifyWork" @click.stop="openEditWork(work)"
+                    class="px-3.5 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-semibold transition-colors flex items-center gap-1.5">
+                    <div class="i-carbon-edit text-xs"></div> Edit
+                  </button>
+                  <div class="i-carbon-chevron-right text-gray-300 group-hover:text-[#1D5F5E] transition-colors text-lg"></div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </template>
     </template>

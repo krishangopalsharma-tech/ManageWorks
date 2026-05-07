@@ -403,12 +403,14 @@ class PDFImportView(APIView):
                 )
             else:
                 prior_qty = prior_qty_map.get(wi.id, 0)
-                expected_total = (prior_qty or 0) + (src.get('quantity') or 0)
+                qty = src.get('quantity') or 0
                 pdf_total = src.get('total_to_date') or 0
-                if pdf_total and abs(pdf_total - expected_total) > 0.001:
+                # "Total" in the MB PDF is the per-record total, not cumulative.
+                # Warn only if the Total line disagrees with the parsed measurement row.
+                if pdf_total and qty and abs(pdf_total - qty) > 0.001:
                     warnings.append(
-                        f'Item No. {src.get("item_no")}: PDF Total ({pdf_total}) does not match '
-                        f'DB prior qty ({prior_qty}) + this MB qty ({src.get("quantity")}) = {expected_total}.'
+                        f'Item No. {src.get("item_no")}: parsed Total ({pdf_total}) does not match '
+                        f'measurement row qty ({qty}). Check PDF or re-upload.'
                     )
 
                 # Check received status before payment
