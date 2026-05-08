@@ -10,6 +10,14 @@ const fmtAmt = (val) => {
   if (!val && val !== 0) return '—'
   return '₹' + Number(val).toLocaleString('en-IN', { maximumFractionDigits: 2 })
 }
+const fmtDate = (val) => {
+  if (!val) return '—'
+  const s = String(val).split('T')[0].split(' ')[0]
+  if (/^\d{2}[\/\-]\d{2}[\/\-]\d{4}$/.test(s)) return s.replace(/-/g, '/')
+  const m = s.match(/^(\d{4})[\/\-](\d{2})[\/\-](\d{2})$/)
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`
+  return s
+}
 const fmtDateTime = (val) => {
   if (!val) return '—'
   const d = new Date(val)
@@ -557,9 +565,7 @@ onMounted(() => {
                     </td>
                     <td class="px-4 py-2.5 text-right font-bold text-gray-900">{{ fmtAmt(rec.total_amount) }}</td>
                     <td class="px-4 py-2.5 text-right text-[10px] text-gray-400 hidden sm:table-cell">
-                      {{ rec.measurement_date
-                          ? new Date(rec.measurement_date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-                          : fmtDateTime(rec.created_at) }}
+                      {{ rec.measurement_date ? fmtDate(rec.measurement_date) : fmtDateTime(rec.created_at) }}
                     </td>
                     <td class="px-4 py-2.5 text-right">
                       <div class="flex items-center justify-end gap-1.5">

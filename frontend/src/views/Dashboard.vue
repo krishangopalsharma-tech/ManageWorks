@@ -319,35 +319,35 @@ onMounted(() => { fetchStats(); fetchTrend() })
         <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex-shrink-0">Specific Active LOAs</p>
 
         <!-- LOA list -->
-        <div class="grid grid-cols-1 gap-2 overflow-y-auto flex-1 pr-1" style="scrollbar-width: thin;">
+        <div class="flex flex-col gap-2 overflow-y-auto flex-1 pr-1" style="scrollbar-width: thin;">
           <div
             v-for="loa in filteredLoas" :key="loa.id"
             @click="toggleLoa(loa.id)"
-            class="relative px-3 py-2 rounded-lg cursor-pointer border transition-all flex-shrink-0"
+            class="relative px-4 py-3 rounded-xl cursor-pointer border transition-all flex-shrink-0"
             :class="selectedLoas.includes(loa.id)
               ? 'bg-[#1D5F5E]/5 border-[#1D5F5E]'
               : 'bg-white border-gray-200 hover:border-[#1D5F5E] hover:bg-[#1D5F5E]/5'">
             <div class="flex items-center justify-between gap-2">
               <div class="min-w-0 flex-1">
-                <p class="text-xs font-semibold truncate"
+                <p class="text-sm font-semibold truncate"
                   :class="selectedLoas.includes(loa.id) ? 'text-[#1D5F5E]' : 'text-gray-900'">
                   {{ loa.label.split(' | ')[2] || loa.label }}
                 </p>
                 <div class="flex items-center gap-2 flex-wrap mt-0.5">
-                  <span class="text-[10px] font-semibold text-[#1D5F5E] bg-[#1D5F5E]/10 px-1.5 py-px rounded-full">
+                  <span class="text-xs font-semibold text-[#1D5F5E] bg-[#1D5F5E]/10 px-1.5 py-0.5 rounded-full">
                     {{ loa.label.split(' | ')[1] || '—' }}
                   </span>
-                  <span class="text-[10px] text-gray-400">Tender: <span class="font-semibold text-gray-600">{{ loa.label.split(' | ')[0] || '—' }}</span></span>
+                  <span class="text-xs text-gray-400">Tender: <span class="font-semibold text-gray-600">{{ loa.label.split(' | ')[0] || '—' }}</span></span>
                 </div>
               </div>
               <div class="flex items-center gap-1.5 flex-shrink-0">
-                <div class="flex gap-0.5 items-center">
-                  <div v-if="loa.supply_update" class="w-1.5 h-1.5 rounded-full bg-[#1D5F5E]" title="Recent supply update"></div>
-                  <div v-if="loa.execution_update" class="w-1.5 h-1.5 rounded-full bg-[#34c759]" title="Recent execution update"></div>
+                <div class="flex gap-1 items-center">
+                  <div v-if="loa.supply_update" class="w-2 h-2 rounded-full bg-[#1D5F5E]" title="Recent supply update"></div>
+                  <div v-if="loa.execution_update" class="w-2 h-2 rounded-full bg-[#34c759]" title="Recent execution update"></div>
                 </div>
-                <div class="w-3.5 h-3.5 rounded border-2 flex-shrink-0 flex items-center justify-center transition-all"
+                <div class="w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition-all"
                   :class="selectedLoas.includes(loa.id) ? 'bg-[#1D5F5E] border-[#1D5F5E]' : 'border-gray-300 bg-white'">
-                  <div v-if="selectedLoas.includes(loa.id)" class="i-carbon-checkmark text-white text-[9px]"></div>
+                  <div v-if="selectedLoas.includes(loa.id)" class="i-carbon-checkmark text-white text-[10px]"></div>
                 </div>
               </div>
             </div>

@@ -22,6 +22,14 @@ const moveTooltip = (e) => { tooltipPos.value = { x: e.clientX, y: e.clientY } }
 const hideTooltip = () => { hideTimer = setTimeout(() => { hoveredItem.value = null }, 120) }
 const keepTooltip = () => { clearTimeout(hideTimer) }
 
+const fmtDate = (val) => {
+  if (!val) return '—'
+  const s = String(val).split('T')[0].split(' ')[0]
+  if (/^\d{2}[\/\-]\d{2}[\/\-]\d{4}$/.test(s)) return s.replace(/-/g, '/')
+  const m = s.match(/^(\d{4})[\/\-](\d{2})[\/\-](\d{2})$/)
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`
+  return s
+}
 const fmtDateTime = (val) => {
   if (!val) return '—'
   const d = new Date(val)
@@ -264,8 +272,14 @@ const generateItemPDF = async () => {
             `${e.quantity} ${item.unit}`,
             [e.receive_note_no, e.challan_no].filter(Boolean).join(' / ') || '—',
             e.udm_entry || '—',
-            e.submitted_by_user?.username || '—',
-            e.date_of_receipt ? String(e.date_of_receipt).substring(0, 10) : fmtDateTime(e.submitted_at),
+            (() => {
+              const u = e.submitted_by_user
+              if (!u) return '—'
+              const name = u.full_name || u.username
+              const desig = u.designation
+              return desig ? `${name}\n(${desig})` : name
+            })(),
+            e.date_of_receipt ? fmtDate(e.date_of_receipt) : fmtDateTime(e.submitted_at),
           ]),
           headStyles: { fillColor: [241, 245, 249], textColor: C_GRAY, fontSize: 7, fontStyle: 'bold' },
           bodyStyles: { fontSize: 7 },
@@ -576,7 +590,8 @@ const generateItemPDF = async () => {
                   <!-- Submitted by -->
                   <span class="flex items-center gap-1 text-[10px] text-gray-500 font-medium">
                     <div class="i-carbon-user text-gray-400" style="font-size:10px;"></div>
-                    {{ entry.submitted_by_user?.username || '—' }}
+                    {{ entry.submitted_by_user?.full_name || entry.submitted_by_user?.username || '—' }}
+                    <span v-if="entry.submitted_by_user?.designation" class="text-gray-400"> · {{ entry.submitted_by_user.designation }}</span>
                   </span>
                   <!-- Supply fields -->
                   <template v-if="entry.entry_type === 'supply'">

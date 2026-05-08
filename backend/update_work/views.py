@@ -10,9 +10,29 @@ from works.serializers import WorkItemEntrySerializer, WorkEditSerializer
 from .pdf_parser import parse_receipt_pdf
 
 
+def _pad_loa(raw):
+    """Normalise LOA to 14 digits — mirrors excel_parser logic."""
+    s = str(raw or '').strip()
+    if not s:
+        return s
+    if '.' in s:
+        try:
+            s = str(int(float(s)))
+        except (ValueError, TypeError):
+            pass
+    if s.isdigit() and len(s) < 14:
+        s = s.zfill(14)
+    return s
+
+
 def _check_authenticated(user):
     if not user.is_authenticated:
         raise PermissionDenied("Authentication required.")
+
+
+def _is_work_consignee(user, work):
+    """True when the logged-in user is the primary consignee assigned to this work."""
+    return bool(work.hrms_id) and work.hrms_id == user.username
 
 
 def _check_can_modify_work(user):
@@ -97,7 +117,7 @@ class WorkItemEntryView(APIView):
         _check_authenticated(request.user)
 
         try:
-            work_item = WorkItem.objects.get(pk=item_id)
+            work_item = WorkItem.objects.select_related('work').get(pk=item_id)
         except WorkItem.DoesNotExist:
             return Response({'error': 'Item not found.'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -114,6 +134,36 @@ class WorkItemEntryView(APIView):
         entry_type = request.data.get('entry_type', 'supply')
         if entry_type not in ('supply', 'execution'):
             entry_type = 'supply'
+
+        # ── Category-based access control ──────────────────────────────────────
+        work = work_item.work
+        category = (work_item.category or '').strip()
+        user_is_primary_consignee = _is_work_consignee(request.user, work)
+
+        if category == 'supply':
+            if entry_type == 'execution':
+                return Response(
+                    {'error': 'Supply items do not have execution entries.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not user_is_primary_consignee:
+                return Response(
+                    {'error': 'Only the assigned consignee for this work can submit supply entries.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+        elif category == 'supply_installation':
+            if entry_type == 'supply' and not user_is_primary_consignee:
+                return Response(
+                    {'error': 'Only the assigned consignee for this work can submit the supply portion of Supply & Installation items.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+        elif category == 'execution':
+            if entry_type == 'supply':
+                return Response(
+                    {'error': 'Execution items do not have supply entries.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        # ── End category check ─────────────────────────────────────────────────
 
         receive_note_no = (request.data.get('receive_note_no') or '').strip()
         if entry_type == 'supply' and receive_note_no:
@@ -167,12 +217,21 @@ class WorkItemEntryUpdateView(APIView):
         _check_authenticated(request.user)
 
         try:
-            entry = WorkItemEntry.objects.select_related('work_item').get(pk=entry_id)
+            entry = WorkItemEntry.objects.select_related('work_item__work').get(pk=entry_id)
         except WorkItemEntry.DoesNotExist:
             return Response({'error': 'Entry not found.'}, status=status.HTTP_404_NOT_FOUND)
 
         if entry.submitted_by_id != request.user.id:
             raise PermissionDenied("Only the consignee who submitted this entry can edit it.")
+
+        # Supply entries also require the user to still be the primary consignee of the work.
+        # If the work was reassigned, the previous consignee loses edit access to supply entries.
+        if entry.entry_type == 'supply' and not _is_admin(request.user):
+            work = entry.work_item.work
+            if not _is_work_consignee(request.user, work):
+                raise PermissionDenied(
+                    "This work has been reassigned. You no longer have permission to edit supply entries."
+                )
 
         if 'quantity' in request.data:
             try:
@@ -237,8 +296,8 @@ class ParsePDFsView(APIView):
 
             if work and not parsed.get('error'):
                 mismatch = []
-                pdf_loa = (parsed.get('loa_number') or '').strip().lower()
-                work_loa = (work.loa_number or '').strip().lower()
+                pdf_loa = _pad_loa(parsed.get('loa_number') or '').lower()
+                work_loa = _pad_loa(work.loa_number or '').lower()
                 if pdf_loa and work_loa and pdf_loa != work_loa:
                     mismatch.append(
                         f'LOA No. mismatch: PDF has "{parsed["loa_number"]}" '

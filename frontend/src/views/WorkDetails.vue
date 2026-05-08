@@ -6,7 +6,13 @@ import * as echarts from 'echarts'
 // ── Formatters ────────────────────────────────────────────────────────────
 const fmtDate = (val) => {
   if (!val) return '—'
-  return String(val).split(' ')[0].split('T')[0]
+  const s = String(val).split('T')[0].split(' ')[0]
+  // Already DD/MM/YYYY or DD-MM-YYYY
+  if (/^\d{2}[\/\-]\d{2}[\/\-]\d{4}$/.test(s)) return s.replace(/-/g, '/')
+  // YYYY-MM-DD → DD/MM/YYYY
+  const m = s.match(/^(\d{4})[\/\-](\d{2})[\/\-](\d{2})$/)
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`
+  return s
 }
 const fmtDateTime = (val) => {
   if (!val) return '—'
@@ -19,6 +25,14 @@ const fmtCr = (n) => {
   if (n >= 100000)   return `₹${(n / 100000).toFixed(2)} L`
   if (n >= 1000)     return `₹${(n / 1000).toFixed(1)} K`
   return `₹${Math.round(n)}`
+}
+
+const fmtCrPdf = (n) => {
+  if (!n && n !== 0) return '—'
+  if (n >= 10000000) return `Rs.${(n / 10000000).toFixed(2)} Cr`
+  if (n >= 100000)   return `Rs.${(n / 100000).toFixed(2)} L`
+  if (n >= 1000)     return `Rs.${(n / 1000).toFixed(1)} K`
+  return `Rs.${Math.round(n)}`
 }
 
 // ── State ─────────────────────────────────────────────────────────────────
@@ -123,6 +137,7 @@ const analytics = computed(() => {
   const brandMap   = {}
   const unitMap    = {}
   const challanMap = {}
+  const mbByMonth  = {}
 
   for (const item of items) {
     const sch      = String(item.schedule || '').toUpperCase().trim()
@@ -157,7 +172,8 @@ const analytics = computed(() => {
     unitMap[unit] = (unitMap[unit] || 0) + contract
 
     for (const e of (item.entries || [])) {
-      const dateStr = e.date_of_receipt
+      if (e.entry_type === 'execution') continue
+      const dateStr = e.date_of_receipt || (e.submitted_at ? String(e.submitted_at).substring(0, 10) : null)
       if (dateStr) {
         const month = String(dateStr).substring(0, 7)
         challanMap[month] = (challanMap[month] || 0) + 1
@@ -165,12 +181,11 @@ const analytics = computed(() => {
     }
   }
 
-  // MB billing velocity from uploaded MB records
-  const mbByMonth = {}
+  // MB Billing Velocity — only from uploaded MB records
   for (const mb of (selectedWork.value.mb_billing || [])) {
     if (!mb.date) continue
     const month = mb.date.substring(0, 7)
-    mbByMonth[month] = (mbByMonth[month] || 0) + mb.amount
+    mbByMonth[month] = (mbByMonth[month] || 0) + (mb.amount || 0)
   }
 
   const top10 = [...items]
@@ -298,6 +313,7 @@ const L = n => parseFloat((n / 100000).toFixed(2))
 const initCharts = async () => {
   if (!analytics.value || activeTab.value !== 'analytics') return
   await nextTick()
+  await new Promise(r => requestAnimationFrame(r))
   const a = analytics.value
 
   // 1. Twin donut gauges
@@ -431,60 +447,33 @@ const initCharts = async () => {
     })
   }
 
-  // 7. Challan cadence
-  if (a.challanMonths.length > 0) {
-    initOneChart('chart-challan', {
-      tooltip: { trigger: 'axis', formatter: params => `${params[0].name}: ${params[0].value} entries` },
-      grid: { top: 12, bottom: 52, left: 36, right: 8 },
-      xAxis: {
-        type: 'category', data: a.challanMonths,
-        axisLabel: { fontSize: 9, rotate: a.challanMonths.length > 6 ? 45 : 0 },
-      },
-      yAxis: { type: 'value', name: 'Entries', nameTextStyle: { fontSize: 9 }, axisLabel: { fontSize: 9 }, minInterval: 1, splitLine: { lineStyle: { type: 'dashed', color: '#f3f4f6' } } },
-      series: [{
-        type: 'bar', barMaxWidth: 36,
-        itemStyle: { color: BLUE, borderRadius: [3, 3, 0, 0] },
-        data: a.challanCounts,
-        label: { show: true, position: 'top', fontSize: 10, color: '#374151' },
-      }],
-    })
-  }
+  // 7. Challan cadence — always render; show "No data" title when empty
+  initOneChart('chart-challan', {
+    title: a.challanMonths.length === 0 ? { text: 'No receipt entries recorded yet', left: 'center', top: 'middle', textStyle: { color: '#9ca3af', fontSize: 12, fontWeight: 'normal' } } : undefined,
+    tooltip: { trigger: 'axis', formatter: params => `${params[0].name}: ${params[0].value} entries` },
+    grid: { top: 12, bottom: 52, left: 36, right: 8 },
+    xAxis: { type: 'category', data: a.challanMonths, axisLabel: { fontSize: 9, rotate: a.challanMonths.length > 6 ? 45 : 0 } },
+    yAxis: { type: 'value', name: 'Entries', nameTextStyle: { fontSize: 9 }, axisLabel: { fontSize: 9 }, minInterval: 1, splitLine: { lineStyle: { type: 'dashed', color: '#f3f4f6' } } },
+    series: [{ type: 'bar', barMaxWidth: 36, itemStyle: { color: TEAL, borderRadius: [3, 3, 0, 0] }, data: a.challanCounts, label: { show: true, position: 'top', fontSize: 10, color: '#374151' } }],
+  })
+  chartInstances['chart-challan']?.resize()
 
-  // 8. MB Billing velocity — cumulative earned line
-  if (a.earnedMonths.length > 0) {
-    initOneChart('chart-earned', {
-      tooltip: {
-        trigger: 'axis',
-        formatter: params => `${params[0].name}<br/>Cumulative: ₹${params[0].value} L`,
-      },
-      grid: { top: 12, bottom: 52, left: 52, right: 8 },
-      xAxis: {
-        type: 'category', data: a.earnedMonths,
-        axisLabel: { fontSize: 9, rotate: a.earnedMonths.length > 6 ? 45 : 0 },
-      },
-      yAxis: {
-        type: 'value',
-        axisLabel: { formatter: v => `₹${v}L`, fontSize: 9 },
-        splitLine: { lineStyle: { type: 'dashed', color: '#f3f4f6' } },
-      },
-      series: [{
-        type: 'line', smooth: true, symbol: 'circle', symbolSize: 6,
-        itemStyle: { color: TEAL },
-        lineStyle: { width: 2 },
-        areaStyle: {
-          color: {
-            type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [
-              { offset: 0, color: 'rgba(29,95,94,0.25)' },
-              { offset: 1, color: 'rgba(29,95,94,0)' },
-            ],
-          },
-        },
-        data: a.cumulativeEarned,
-        label: { show: a.earnedMonths.length <= 8, position: 'top', fontSize: 9, formatter: p => `₹${p.value}L` },
-      }],
-    })
-  }
+  // 8. MB Billing velocity — always render; show "No data" title when empty
+  initOneChart('chart-earned', {
+    title: a.earnedMonths.length === 0 ? { text: 'No supply entries with dates recorded yet', left: 'center', top: 'middle', textStyle: { color: '#9ca3af', fontSize: 12, fontWeight: 'normal' } } : undefined,
+    tooltip: { trigger: 'axis', formatter: params => `${params[0].name}<br/>Cumulative: ₹${params[0].value} L` },
+    grid: { top: 12, bottom: 52, left: 52, right: 8 },
+    xAxis: { type: 'category', data: a.earnedMonths, axisLabel: { fontSize: 9, rotate: a.earnedMonths.length > 6 ? 45 : 0 } },
+    yAxis: { type: 'value', axisLabel: { formatter: v => `₹${v}L`, fontSize: 9 }, splitLine: { lineStyle: { type: 'dashed', color: '#f3f4f6' } } },
+    series: [{
+      type: 'line', smooth: true, symbol: 'circle', symbolSize: 6,
+      itemStyle: { color: TEAL }, lineStyle: { width: 2 },
+      areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(29,95,94,0.25)' }, { offset: 1, color: 'rgba(29,95,94,0)' }] } },
+      data: a.cumulativeEarned,
+      label: { show: a.earnedMonths.length <= 8 && a.earnedMonths.length > 0, position: 'top', fontSize: 9, formatter: p => `₹${p.value}L` },
+    }],
+  })
+  chartInstances['chart-earned']?.resize()
 }
 
 watch([activeTab, selectedWork], () => {
@@ -511,6 +500,9 @@ const generateWorkPDF = async () => {
     const { default: autoTable } = await import('jspdf-autotable')
 
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+
+    const pdfFont = 'helvetica'
+    doc.setFont(pdfFont)
     const pw = doc.internal.pageSize.getWidth()   // 297
     const ph = doc.internal.pageSize.getHeight()  // 210
     const mg = 12
@@ -528,11 +520,11 @@ const generateWorkPDF = async () => {
       doc.setFillColor(...C_TEAL)
       doc.rect(0, 0, pw, 12, 'F')
       doc.setTextColor(255, 255, 255)
-      doc.setFont('helvetica', 'bold')
+      doc.setFont(pdfFont, 'bold')
       doc.setFontSize(8.5)
       doc.text(`${label} — ${w.contractor_name || ''} · ${w.loa_number || ''}`, mg, 8)
       doc.setFontSize(7)
-      doc.setFont('helvetica', 'normal')
+      doc.setFont(pdfFont, 'normal')
       doc.text(new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }), pw - mg, 8, { align: 'right' })
     }
 
@@ -542,7 +534,7 @@ const generateWorkPDF = async () => {
     // Work name
     let y = 17
     if (w.name_of_work) {
-      doc.setFont('helvetica', 'italic')
+      doc.setFont(pdfFont, 'normal')
       doc.setFontSize(9)
       doc.setTextColor(50, 50, 50)
       const lines = doc.splitTextToSize(w.name_of_work, cw)
@@ -554,33 +546,36 @@ const generateWorkPDF = async () => {
     const metaFields = [
       ['Consignee', w.consignee || '—'],
       ['HRMS ID', w.hrms_id || '—'],
-      ['Completion', w.date_of_completion ? String(w.date_of_completion).substring(0, 10) : '—'],
+      ['Completion', fmtDate(w.date_of_completion)],
       ['Agreement', w.contract_agreement || '—'],
       ['Tender', w.tender_number || '—'],
     ]
     const metaColW = cw / metaFields.length
     metaFields.forEach(([lbl, val], i) => {
       const x = mg + i * metaColW
-      doc.setFont('helvetica', 'bold')
+      doc.setFont(pdfFont, 'bold')
       doc.setFontSize(7)
       doc.setTextColor(...C_GRAY)
       doc.text(lbl.toUpperCase(), x, y)
-      doc.setFont('helvetica', 'normal')
+      doc.setFont(pdfFont, 'normal')
       doc.setFontSize(8.5)
       doc.setTextColor(30, 30, 30)
       doc.text(String(val).substring(0, 26), x, y + 5)
     })
     y += 13
 
+    const tblFont = { font: pdfFont }
+
     // KPI table
     autoTable(doc, {
       startY: y,
       margin: { left: mg, right: mg },
+      styles: tblFont,
       head: [['Contract Value', 'Earned', 'Pending', 'Supply (Sch A)', 'Execution (Sch B)', 'Lot Entries']],
       body: [[
-        fmtCr(a.contractTotal),
-        fmtCr(a.earnedTotal),
-        fmtCr(a.pendingTotal),
+        fmtCrPdf(a.contractTotal),
+        fmtCrPdf(a.earnedTotal),
+        fmtCrPdf(a.pendingTotal),
         `${a.schAPct.toFixed(1)}%  (${a.schACount} items)`,
         `${a.schBPct.toFixed(1)}%  (${a.schBCount} items)`,
         String(a.totalEntries),
@@ -599,7 +594,7 @@ const generateWorkPDF = async () => {
     y = doc.lastAutoTable.finalY + 8
 
     // Insights
-    doc.setFont('helvetica', 'bold')
+    doc.setFont(pdfFont, 'bold')
     doc.setFontSize(8)
     doc.setTextColor(...C_TEAL)
     doc.text('AUTO-GENERATED INSIGHTS', mg, y)
@@ -608,7 +603,7 @@ const generateWorkPDF = async () => {
     for (const ins of a.insights) {
       const icon = ins.type === 'warn' ? '⚠  ' : ins.type === 'good' ? '✓  ' : '→  '
       const color = ins.type === 'warn' ? [180, 70, 10] : ins.type === 'good' ? [22, 130, 60] : C_TEAL
-      doc.setFont('helvetica', 'normal')
+      doc.setFont(pdfFont, 'normal')
       doc.setFontSize(8)
       doc.setTextColor(...color)
       const lines = doc.splitTextToSize(icon + ins.text, cw - 4)
@@ -633,7 +628,13 @@ const generateWorkPDF = async () => {
       const inst = chartInstances[id]
       if (!inst) return null
       try {
-        return { title, img: inst.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#ffffff' }) }
+        const pxW = inst.getWidth()
+        const pxH = inst.getHeight()
+        return {
+          title,
+          img: inst.getDataURL({ type: 'jpeg', pixelRatio: 1.5, backgroundColor: '#ffffff' }),
+          ratio: pxH / pxW,
+        }
       } catch { return null }
     }).filter(Boolean)
 
@@ -641,23 +642,31 @@ const generateWorkPDF = async () => {
       doc.addPage()
       addPageHeader('Analytics Charts')
 
-      const chartH = 82    // mm per chart row
       const chartW = (cw - 6) / 2
       let cy = 16
       let col = 0
+      let leftH = 0
 
-      for (const { title, img } of chartImgs) {
+      for (const { title, img, ratio } of chartImgs) {
+        const imgH = chartW * ratio
+        const rowH = imgH + 8  // 6 title + 2 gap
         const cx = mg + col * (chartW + 6)
-        doc.setFont('helvetica', 'bold')
+
+        if (col === 0) {
+          // Check page break before starting a new row
+          if (cy + rowH > ph - 8) { doc.addPage(); addPageHeader('Analytics Charts'); cy = 16 }
+          leftH = rowH
+        }
+
+        doc.setFont(pdfFont, 'bold')
         doc.setFontSize(7)
         doc.setTextColor(60, 60, 60)
         doc.text(title, cx, cy + 4)
-        doc.addImage(img, 'PNG', cx, cy + 6, chartW, chartH - 8)
+        doc.addImage(img, 'JPEG', cx, cy + 6, chartW, imgH)
 
         if (col === 1) {
           col = 0
-          cy += chartH + 4
-          if (cy + chartH > ph - 8) { doc.addPage(); addPageHeader('Analytics Charts'); cy = 16 }
+          cy += Math.max(leftH, rowH) + 4
         } else {
           col++
         }
@@ -678,6 +687,7 @@ const generateWorkPDF = async () => {
     autoTable(doc, {
       startY: 16,
       margin: { left: mg, right: mg },
+      styles: tblFont,
       head: [['Sch', 'S.No', 'Item Description', 'Required', 'Supplied / Exec', 'Progress', 'Contract Value', 'Earned']],
       body: progressItems.map(item => {
         const sch = String(item.schedule || '').toUpperCase().trim()
@@ -694,8 +704,8 @@ const generateWorkPDF = async () => {
           `${item.qty} ${item.unit}`,
           `${done} ${item.unit}`,
           `${pct.toFixed(0)}%`,
-          fmtCr(contract),
-          fmtCr(earned),
+          fmtCrPdf(contract),
+          fmtCrPdf(earned),
         ]
       }),
       headStyles: { fillColor: C_TEAL, textColor: [255, 255, 255], fontSize: 7.5, fontStyle: 'bold' },
@@ -730,6 +740,7 @@ const generateWorkPDF = async () => {
       autoTable(doc, {
         startY: doc.lastAutoTable.finalY + 2,
         margin: { left: mg + 3, right: mg },
+        styles: tblFont,
         head: [
           [{ content: `${item.schedule} · S.No ${item.serial_number}  —  ${(item.item_desc || '').substring(0, 70)}`, colSpan: 7, styles: { fillColor: [235, 245, 244], textColor: C_TEAL, fontStyle: 'bold', fontSize: 7 } }],
           ['#', 'Type', 'Qty', 'Receive Note / Challan', 'UDM Entry', 'Submitted By', 'Date'],
@@ -740,8 +751,14 @@ const generateWorkPDF = async () => {
           `${e.quantity} ${item.unit}`,
           [e.receive_note_no, e.challan_no].filter(Boolean).join(' / ') || '—',
           e.udm_entry || '—',
-          e.submitted_by_user?.username || '—',
-          e.date_of_receipt ? String(e.date_of_receipt).substring(0, 10) : fmtDateTime(e.submitted_at),
+          (() => {
+            const u = e.submitted_by_user
+            if (!u) return '—'
+            const name = u.full_name || u.username
+            const desig = u.designation
+            return desig ? `${name}\n(${desig})` : name
+          })(),
+          e.date_of_receipt ? fmtDate(e.date_of_receipt) : fmtDateTime(e.submitted_at),
         ]),
         headStyles: { fillColor: [241, 245, 249], textColor: [75, 85, 99], fontSize: 7, fontStyle: 'bold' },
         bodyStyles: { fontSize: 7 },
@@ -769,7 +786,7 @@ const generateWorkPDF = async () => {
     const totalPages = doc.getNumberOfPages()
     for (let i = 1; i <= totalPages; i++) {
       doc.setPage(i)
-      doc.setFont('helvetica', 'normal')
+      doc.setFont(pdfFont, 'normal')
       doc.setFontSize(7)
       doc.setTextColor(...C_GRAY)
       doc.text(`Page ${i} of ${totalPages}`, pw - mg, ph - 4, { align: 'right' })
@@ -1019,9 +1036,7 @@ const generateWorkPDF = async () => {
                 <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Entries per Month</span>
               </div>
               <p class="text-[11px] text-gray-400 mb-2">Supply receipt tempo over time.</p>
-              <div id="chart-challan" style="height:230px">
-                <div v-if="!analytics?.challanMonths?.length" class="flex items-center justify-center h-full text-gray-300 text-xs italic">No receipt dates recorded yet</div>
-              </div>
+              <div id="chart-challan" style="height:230px"></div>
             </div>
           </div>
 
@@ -1031,9 +1046,8 @@ const generateWorkPDF = async () => {
               <h3 class="text-sm font-bold text-gray-900">MB Billing Velocity</h3>
               <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Cumulative Earned ₹ L by Receipt Month</span>
             </div>
-            <p class="text-[11px] text-gray-400 mb-2">Cumulative contract value earned as materials arrive on receipt dates.</p>
+            <p class="text-[11px] text-gray-400 mb-2">Cumulative contract value earned as supply receipts arrive over time.</p>
             <div id="chart-earned" style="height:220px">
-              <div v-if="!analytics?.earnedMonths?.length" class="flex items-center justify-center h-full text-gray-300 text-xs italic">No MB records with measurement dates uploaded yet</div>
             </div>
           </div>
 
@@ -1211,7 +1225,10 @@ const generateWorkPDF = async () => {
                                     <span v-if="!entry.receive_note_no && !entry.challan_no" class="text-gray-300">—</span>
                                   </td>
                                   <td class="px-4 py-2.5 text-gray-600 font-medium">{{ entry.udm_entry || '—' }}</td>
-                                  <td class="px-4 py-2.5 text-gray-600 font-medium">{{ entry.submitted_by_user?.username || entry.submitted_by_user?.name || '—' }}</td>
+                                  <td class="px-4 py-2.5 text-gray-600 font-medium">
+                                    <span class="block font-semibold text-gray-800">{{ entry.submitted_by_user?.full_name || entry.submitted_by_user?.username || '—' }}</span>
+                                    <span v-if="entry.submitted_by_user?.designation" class="block text-[10px] text-gray-400">{{ entry.submitted_by_user.designation }}</span>
+                                  </td>
                                   <td class="px-4 py-2.5 text-gray-400 whitespace-nowrap">
                                     <span v-if="entry.date_of_receipt" class="block font-medium text-gray-600">{{ fmtDate(entry.date_of_receipt) }}</span>
                                     <span class="text-[10px]">{{ fmtDateTime(entry.submitted_at) }}</span>

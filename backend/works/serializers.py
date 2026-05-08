@@ -4,9 +4,16 @@ from django.contrib.auth.models import User
 
 class UserSerializer(serializers.ModelSerializer):
     role = serializers.CharField(source='profile.role', read_only=True)
+    designation = serializers.CharField(source='profile.designation', read_only=True)
+    full_name = serializers.SerializerMethodField()
+
+    def get_full_name(self, obj):
+        name = f"{obj.first_name} {obj.last_name}".strip()
+        return name or obj.username
+
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'role']
+        fields = ['id', 'username', 'email', 'role', 'full_name', 'designation']
 
 class WorkItemEntrySerializer(serializers.ModelSerializer):
     submitted_by_user = UserSerializer(source='submitted_by', read_only=True)

@@ -183,13 +183,29 @@ def parse_receipt_pdf(file_obj):
         warnings.append('Qty. Accepted not found')
 
     # ── LOA Number ────────────────────────────────────────────────────────────
-    val = _lv_find(lv, 'loa') or _lv_find(lv, 'po no') or _lv_find(lv, 'po/loa')
-    if not val:
-        m = re.search(r'(?:LOA|PO)\s*No\.?\s*[:\s]\s*(\S+)', text, re.IGNORECASE)
+    # "PO/Contract No. & Date" cell contains the LOA number at the start,
+    # e.g. "00890160138264 dt. 04-09-2025 (LOA No. AHMEDABAD DIVISION-S ...)"
+    # Extract the leading digit sequence (8-14 digits) from that cell.
+    loa_val = None
+    po_cell = _lv_find(lv, 'po/contract no') or _lv_find(lv, 'po', 'contract')
+    if po_cell:
+        m = re.search(r'\b(\d{8,14})\b', po_cell)
         if m:
-            val = m.group(1).strip()
-    if val:
-        result['loa_number'] = val.strip()
+            loa_val = m.group(1)
+    # Fallback: search full text for a bare 8-14 digit LOA number
+    if not loa_val:
+        m = re.search(r'(?:LOA|PO)\s*No\.?\s*[\s:]*(\d{8,14})', text, re.IGNORECASE)
+        if m:
+            loa_val = m.group(1).strip()
+    # Last resort: old key-based lookup (for PDFs that have an explicit LOA label)
+    if not loa_val:
+        loa_val = _lv_find(lv, 'loa') or _lv_find(lv, 'po no') or _lv_find(lv, 'po/loa')
+    if loa_val:
+        # Zero-pad to 14 digits if Excel/PDF stripped leading zeros
+        s = str(loa_val).strip()
+        if s.isdigit() and len(s) < 14:
+            s = s.zfill(14)
+        result['loa_number'] = s
 
     # ── Contract Agreement Number ──────────────────────────────────────────────
     val = (_lv_find(lv, 'contract', 'agreement')

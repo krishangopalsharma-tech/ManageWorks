@@ -6,7 +6,11 @@ const getCsrfToken = () => { const m = document.cookie.match(/csrftoken=([^;]+)/
 
 const fmtDate = (val) => {
   if (!val) return '—'
-  return String(val).split(' ')[0].split('T')[0]
+  const s = String(val).split('T')[0].split(' ')[0]
+  if (/^\d{2}[\/\-]\d{2}[\/\-]\d{4}$/.test(s)) return s.replace(/-/g, '/')
+  const m = s.match(/^(\d{4})[\/\-](\d{2})[\/\-](\d{2})$/)
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`
+  return s
 }
 const fmtDateTime = (val) => {
   if (!val) return '—'
@@ -49,6 +53,19 @@ const currentUser  = ref(null)
 const isAdmin       = computed(() => currentUser.value?.role === 'admin' || currentUser.value?.is_staff)
 const isConsignee   = computed(() => currentUser.value?.role === 'consignee')
 const canModifyWork = computed(() => isAdmin.value || isConsignee.value)
+
+// True when logged-in user is the primary consignee assigned to the selected work
+const isWorkConsignee = computed(() => {
+  if (!currentUser.value || !selectedWork.value) return false
+  return currentUser.value.hrms_id === selectedWork.value.hrms_id
+})
+
+// Category helpers for the active lot popup item
+const popupCategory = computed(() => (lotPopupItem.value?.category || '').trim())
+const canSubmitSupply     = computed(() => isWorkConsignee.value || isAdmin.value)
+const canSubmitExecution  = computed(() => isConsignee.value || isAdmin.value)
+const showSupplyTab       = computed(() => popupCategory.value !== 'execution' && canSubmitSupply.value)
+const showExecutionTab    = computed(() => popupCategory.value !== 'supply' && canSubmitExecution.value)
 
 const canEditEntry = (entry) => {
   if (!currentUser.value) return false
@@ -258,6 +275,9 @@ const submitBatchEntries = async () => {
   }
   batchSubmitting.value = false
   batchDone.value = toSubmit.every(r => r.done)
+  if (batchDone.value) {
+    setTimeout(closeBatchModal, 800)
+  }
 }
 
 // ── Load ───────────────────────────────────────────────────────────────────
@@ -363,8 +383,19 @@ const openLotPopup = (item) => {
   editingEntry.value    = null
   entrySaveStatus.value = ''
   pdfFillWarnings.value = []
+
+  // Determine default entry_type based on category and whether user is primary consignee
+  const cat = (item.category || '').trim()
+  const isPrimary = currentUser.value?.hrms_id === selectedWork.value?.hrms_id
+  let defaultEntryType = 'supply'
+  if (cat === 'execution') {
+    defaultEntryType = 'execution'
+  } else if (cat === 'supply_installation' && !isPrimary) {
+    defaultEntryType = 'execution'
+  }
+
   entryForm.value = {
-    entry_type: 'supply', quantity: '',
+    entry_type: defaultEntryType, quantity: '',
     receive_note_no: '', date_of_receipt: '',
     challan_no: '', udm_entry: '',
     location: '', remarks: '',
@@ -711,9 +742,19 @@ const deleteWork = async () => {
                 <td class="px-4 py-3.5 text-center text-[11px] font-semibold text-gray-500">{{ item.serial_number }}</td>
                 <td class="px-4 py-3.5">
                   <p class="text-xs font-medium line-clamp-2 leading-relaxed text-gray-800">{{ item.item_desc }}</p>
-                  <p class="text-[10px] mt-0.5 text-gray-400">
-                    {{ (item.entries || []).length }} entr{{ (item.entries || []).length === 1 ? 'y' : 'ies' }} submitted
-                  </p>
+                  <div class="flex items-center gap-1.5 mt-0.5">
+                    <span v-if="item.category" class="text-[9px] font-semibold px-1.5 py-0.5 rounded"
+                      :class="{
+                        'bg-teal-50 text-teal-600':   item.category === 'supply',
+                        'bg-violet-50 text-violet-600': item.category === 'supply_installation',
+                        'bg-orange-50 text-orange-600': item.category === 'execution',
+                      }">
+                      {{ item.category === 'supply' ? 'Supply' : item.category === 'supply_installation' ? 'S+I' : 'Execution' }}
+                    </span>
+                    <p class="text-[10px] text-gray-400">
+                      {{ (item.entries || []).length }} entr{{ (item.entries || []).length === 1 ? 'y' : 'ies' }} submitted
+                    </p>
+                  </div>
                 </td>
                 <td class="px-4 py-3.5 text-right text-xs font-semibold text-gray-600">
                   {{ item.qty }} <span class="font-normal text-gray-400">{{ item.unit }}</span>
@@ -951,8 +992,8 @@ const deleteWork = async () => {
                 </ul>
               </div>
 
-              <!-- Entry type selector (Schedule B only) -->
-              <div v-if="!popupIsSchA" class="flex gap-1 p-1 bg-gray-100 rounded-xl mb-4">
+              <!-- Entry type selector — shown only when both tabs are accessible -->
+              <div v-if="!popupIsSchA && showSupplyTab && showExecutionTab" class="flex gap-1 p-1 bg-gray-100 rounded-xl mb-4">
                 <button @click="entryForm.entry_type = 'supply'"
                   :class="entryForm.entry_type === 'supply' ? 'bg-white text-[#1D5F5E] shadow-sm' : 'text-gray-500 hover:text-gray-700'"
                   class="flex-1 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5">
@@ -963,6 +1004,16 @@ const deleteWork = async () => {
                   class="flex-1 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5">
                   <div class="i-carbon-checkmark-outline text-xs"></div> Execution Entry
                 </button>
+              </div>
+
+              <!-- Category lock notice for non-primary consignees on supply_installation items -->
+              <div v-if="popupCategory === 'supply_installation' && !isWorkConsignee && !isAdmin"
+                class="mb-3 rounded-xl bg-blue-50 border border-blue-200 px-4 py-2.5 flex items-start gap-2">
+                <div class="i-carbon-information text-blue-500 mt-0.5 shrink-0"></div>
+                <p class="text-[11px] text-blue-700">
+                  Supply portion is managed by the assigned consignee.
+                  You can record the <strong>execution/installation</strong> details here.
+                </p>
               </div>
 
               <!-- Supply form -->

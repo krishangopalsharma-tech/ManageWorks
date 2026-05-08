@@ -57,11 +57,44 @@ def _is_blank(val):
     return pd.isna(val) or str(val).strip() == ''
 
 
+def _pad_loa(raw):
+    """Normalise LOA to 14 digits — Excel strips leading zeros from numeric cells."""
+    s = str(raw or '').strip()
+    if not s:
+        return s
+    # Drop any decimal point Excel appends (e.g. "890160138264.0")
+    if '.' in s:
+        try:
+            s = str(int(float(s)))
+        except (ValueError, TypeError):
+            pass
+    if s.isdigit() and len(s) < 14:
+        s = s.zfill(14)
+    return s
+
+
+_CATEGORY_MAP = {
+    'supply & installation': 'supply_installation',
+    'supply and installation': 'supply_installation',
+    's&i': 'supply_installation',
+    's+i': 'supply_installation',
+    'supply installation': 'supply_installation',
+    'supply': 'supply',
+    'execution': 'execution',
+}
+
+def _normalize_category(raw):
+    if not raw:
+        return ''
+    key = raw.strip().lower()
+    return _CATEGORY_MAP.get(key, key)
+
+
 def _parse_two_sheet(xf):
     """Parse new two-tab format: sheet 0 = details, sheet 1 = items with Category column."""
     df_meta = xf.parse(sheet_name=0, header=None)
 
-    loa_number         = _meta_by_label(df_meta, 'loa')
+    loa_number         = _pad_loa(_meta_by_label(df_meta, 'loa'))
     tender_number      = _meta_by_label(df_meta, 'tender')
     date               = _meta_by_label(df_meta, 'date of loa', 'date')
     contract_agreement = _meta_by_label(df_meta, 'contract agreement', 'agreement')
@@ -86,7 +119,7 @@ def _parse_two_sheet(xf):
     for _, row in df_items.iterrows():
         if _is_blank(row.iloc[1]) and _is_blank(row.iloc[3] if len(row) > 3 else None):
             continue
-        category = _clean_str(row.iloc[2]) if len(row) > 2 else ''
+        category = _normalize_category(_clean_str(row.iloc[2]) if len(row) > 2 else '')
         agency   = _clean_str(row.iloc[9]) if len(row) > 9 else ''
         sheet_items.append({
             'schedule':          _clean_str(row.iloc[0]),
@@ -109,7 +142,7 @@ def _parse_single_sheet(xf):
     """Parse old single-sheet format (metadata + items on same sheet, no Category column)."""
     df = xf.parse(sheet_name=0, header=None)
 
-    loa_number         = _meta_by_label(df, 'loa')
+    loa_number         = _pad_loa(_meta_by_label(df, 'loa'))
     tender_number      = _meta_by_label(df, 'tender')
     date               = _meta_by_label(df, 'date of loa', 'date')
     contract_agreement = _meta_by_label(df, 'contract agreement', 'agreement')
@@ -162,7 +195,11 @@ def parse_and_save_work_excel(file_path):
      sheet_items) = result
 
     # ── Upsert: create new work OR update existing ────────────────────────────
-    existing_work = Work.objects.filter(loa_number=loa_number).first() if loa_number else None
+    # Match padded OR stripped form — works saved before this fix may lack leading zeros.
+    existing_work = None
+    if loa_number:
+        candidates = {loa_number, loa_number.lstrip('0')}
+        existing_work = Work.objects.filter(loa_number__in=candidates).first()
 
     if existing_work is None:
         work = Work.objects.create(

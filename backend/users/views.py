@@ -240,7 +240,15 @@ class AssignWorkView(APIView):
         except Work.DoesNotExist:
             return Response({'error': 'Work not found.'}, status=status.HTTP_404_NOT_FOUND)
         work.hrms_id = hrms_id
-        work.save(update_fields=['hrms_id'])
+        if hrms_id:
+            try:
+                new_user = User.objects.get(username=hrms_id)
+                work.consignee = new_user.first_name or new_user.username
+            except User.DoesNotExist:
+                pass
+        else:
+            work.consignee = ''
+        work.save(update_fields=['hrms_id', 'consignee'])
         return Response({
             'id':               work.id,
             'hrms_id':          work.hrms_id,
