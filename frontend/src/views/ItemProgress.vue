@@ -22,6 +22,16 @@ const moveTooltip = (e) => { tooltipPos.value = { x: e.clientX, y: e.clientY } }
 const hideTooltip = () => { hideTimer = setTimeout(() => { hoveredItem.value = null }, 120) }
 const keepTooltip = () => { clearTimeout(hideTimer) }
 
+const tooltipStyle = computed(() => {
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  const left = (tooltipPos.value.x + 340 > vw)
+    ? (tooltipPos.value.x - 344) + 'px'
+    : (tooltipPos.value.x + 12) + 'px'
+  const top = Math.min(tooltipPos.value.y - 16, vh - 380) + 'px'
+  return { left, top }
+})
+
 const fmtDate = (val) => {
   if (!val) return '—'
   const s = String(val).split('T')[0].split(' ')[0]
@@ -150,16 +160,36 @@ const sortedResults = computed(() => {
     let av, bv
     if      (sortKey.value === 'qty')       { av = a.qty || 0;               bv = b.qty || 0 }
     else if (sortKey.value === 'submitted') { av = a.supplied_quantity || 0; bv = b.supplied_quantity || 0 }
+    else if (sortKey.value === 'remaining') { av = remainingQty(a);          bv = remainingQty(b) }
     else if (sortKey.value === 'progress')  { av = progressPct(a);           bv = progressPct(b) }
     else if (sortKey.value === 'entries')   { av = (a.entries||[]).length;   bv = (b.entries||[]).length }
     return sortDir.value === 'asc' ? av - bv : bv - av
   })
 })
 
+// ── Remaining quantity ─────────────────────────────────────────────────────
+const remainingQty = (item) => {
+  const req  = item.qty || 0
+  const done = isSchB(item) ? (item.executed_quantity || 0) : (item.supplied_quantity || 0)
+  return req - done
+}
+
 // ── PDF Export ─────────────────────────────────────────────────────────────
 const isGeneratingPDF = ref(false)
+const showPdfModal    = ref(false)
+const pdfIncludeEntries = ref(null)   // null = not decided yet
 
-const generateItemPDF = async () => {
+const onExportClick = () => {
+  showPdfModal.value    = true
+  pdfIncludeEntries.value = null
+}
+const confirmPdfExport = async (includeEntries) => {
+  pdfIncludeEntries.value = includeEntries
+  showPdfModal.value      = false
+  await generateItemPDF(includeEntries)
+}
+
+const generateItemPDF = async (includeEntries = true) => {
   if (!sortedResults.value.length) return
   isGeneratingPDF.value = true
   try {
@@ -238,22 +268,28 @@ const generateItemPDF = async () => {
         y = 16
       }
 
+      const remaining = (item.qty || 0) - done
+
       // Item header block
       autoTable(doc, {
         startY: y,
         margin: { left: mg, right: mg },
         head: [[
           { content: `${item.loa_number || '—'}  ·  ${item.schedule}  ·  S.No ${item.serial_number}`, styles: { fillColor: [235, 245, 244], textColor: C_TEAL, fontStyle: 'bold', fontSize: 7.5 } },
+          { content: `${item.tender_number || '—'}\n${item.contractor_name || '—'}`, styles: { fillColor: [235, 245, 244], textColor: C_GRAY, fontSize: 7, halign: 'left' } },
           { content: `Required: ${item.qty} ${item.unit}`, styles: { fillColor: [235, 245, 244], textColor: C_GRAY, fontSize: 7.5, halign: 'right' } },
           { content: `${isB ? 'Executed' : 'Supplied'}: ${done} ${item.unit}`, styles: { fillColor: [235, 245, 244], textColor: C_GRAY, fontSize: 7.5, halign: 'right' } },
+          { content: `Remaining: ${remaining} ${item.unit}`, styles: { fillColor: [235, 245, 244], textColor: remaining < 0 ? [220, 80, 30] : C_GRAY, fontSize: 7.5, halign: 'right' } },
           { content: `${pct}%`, styles: { fillColor: [235, 245, 244], textColor: pctNum >= 99 ? C_TEAL : pctNum > 0 ? C_BLUE : C_GRAY, fontStyle: 'bold', fontSize: 8, halign: 'right' } },
         ]],
-        body: [[{ content: item.item_desc || '', colSpan: 4, styles: { fontSize: 7.5, textColor: [50, 50, 50], cellPadding: { top: 2, bottom: 2, left: 3, right: 3 } } }]],
+        body: [[{ content: item.item_desc || '', colSpan: 6, styles: { fontSize: 7.5, textColor: [50, 50, 50], cellPadding: { top: 2, bottom: 2, left: 3, right: 3 } } }]],
         columnStyles: {
           0: { cellWidth: 'auto' },
-          1: { cellWidth: 38 },
-          2: { cellWidth: 40 },
-          3: { cellWidth: 22 },
+          1: { cellWidth: 48 },
+          2: { cellWidth: 32 },
+          3: { cellWidth: 36 },
+          4: { cellWidth: 36 },
+          5: { cellWidth: 20 },
         },
         tableLineColor: [209, 231, 229],
         tableLineWidth: 0.2,
@@ -261,7 +297,7 @@ const generateItemPDF = async () => {
 
       y = doc.lastAutoTable.finalY
 
-      if ((item.entries || []).length > 0) {
+      if (includeEntries && (item.entries || []).length > 0) {
         autoTable(doc, {
           startY: y,
           margin: { left: mg + 3, right: mg },
@@ -410,7 +446,7 @@ const generateItemPDF = async () => {
           <span class="text-xs font-semibold text-gray-600">{{ searchResults.length }} items found</span>
         </div>
 
-        <button @click="generateItemPDF" :disabled="isGeneratingPDF"
+        <button @click="onExportClick" :disabled="isGeneratingPDF"
           class="ml-auto flex items-center gap-1.5 px-4 py-2 rounded-xl border border-gray-300 text-xs font-semibold text-gray-600 hover:bg-gray-100 hover:border-gray-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0">
           <div :class="isGeneratingPDF ? 'i-carbon-circle-dash animate-spin' : 'i-carbon-document-pdf'" class="text-sm"></div>
           {{ isGeneratingPDF ? 'Generating…' : 'Export PDF' }}
@@ -432,6 +468,7 @@ const generateItemPDF = async () => {
       <table class="w-full border-collapse">
         <thead class="bg-gray-50 sticky top-0 z-10">
           <tr class="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100">
+            <th class="px-4 py-3 text-left w-32">Work No.</th>
             <th class="px-4 py-3 text-left w-36">LOA Number</th>
             <th class="px-4 py-3 text-center w-14">Sch</th>
             <th class="px-4 py-3 text-center w-14">S.No</th>
@@ -441,6 +478,9 @@ const generateItemPDF = async () => {
             </th>
             <th @click="toggleSort('submitted')" class="px-4 py-3 text-right w-28 cursor-pointer select-none hover:text-gray-600 transition-colors">
               <div class="flex items-center justify-end gap-1">Supplied <div :class="sortIcon('submitted')" class="text-[9px]" :style="{ opacity: sortKey === 'submitted' ? 1 : 0.35 }"></div></div>
+            </th>
+            <th @click="toggleSort('remaining')" class="px-4 py-3 text-right w-28 cursor-pointer select-none hover:text-gray-600 transition-colors">
+              <div class="flex items-center justify-end gap-1">Remaining <div :class="sortIcon('remaining')" class="text-[9px]" :style="{ opacity: sortKey === 'remaining' ? 1 : 0.35 }"></div></div>
             </th>
             <th @click="toggleSort('progress')" class="px-4 py-3 w-36 cursor-pointer select-none hover:text-gray-600 transition-colors">
               <div class="flex items-center gap-1">Progress <div :class="sortIcon('progress')" class="text-[9px]" :style="{ opacity: sortKey === 'progress' ? 1 : 0.35 }"></div></div>
@@ -453,6 +493,10 @@ const generateItemPDF = async () => {
         <tbody>
           <tr v-for="item in sortedResults" :key="item.id"
             class="border-b border-gray-100 hover:bg-gray-50/60 transition-colors">
+            <td class="px-4 py-3">
+              <p class="text-xs font-semibold text-gray-700 line-clamp-1 leading-snug">{{ item.tender_number || '—' }}</p>
+              <p class="text-[11px] text-gray-400 line-clamp-1 leading-snug mt-0.5">{{ item.contractor_name || '—' }}</p>
+            </td>
             <td class="px-4 py-3">
               <span class="text-[11px] font-semibold text-accent bg-accent-soft px-2 py-0.5 rounded-full whitespace-nowrap">
                 {{ item.loa_number || '—' }}
@@ -477,6 +521,10 @@ const generateItemPDF = async () => {
               {{ item.supplied_quantity || 0 }}
               <span class="text-gray-400 font-normal">{{ item.unit }}</span>
               <span v-if="(item.supplied_quantity || 0) > (item.qty || 0)" class="ml-1 text-[9px] text-orange-400 font-bold">OVER</span>
+            </td>
+            <td class="px-4 py-3 text-right text-xs font-semibold"
+              :class="remainingQty(item) < 0 ? 'text-orange-500' : 'text-gray-600'">
+              {{ remainingQty(item) }} <span class="text-gray-400 font-normal">{{ item.unit }}</span>
             </td>
             <td class="px-4 py-3 cursor-help"
               @mouseenter="showTooltip(item, $event)" @mousemove="moveTooltip($event)" @mouseleave="hideTooltip">
@@ -518,12 +566,7 @@ const generateItemPDF = async () => {
       <Transition name="tip">
         <div v-if="hoveredItem"
           class="fixed z-[9999] w-84 pointer-events-auto"
-          :style="{
-            left: (tooltipPos.x + 340 > (typeof window !== 'undefined' ? window.innerWidth : 1440))
-                    ? (tooltipPos.x - 344) + 'px'
-                    : (tooltipPos.x + 12) + 'px',
-            top: Math.min(tooltipPos.y - 16, (typeof window !== 'undefined' ? window.innerHeight : 900) - 380) + 'px',
-          }"
+          :style="tooltipStyle"
           @mouseenter="keepTooltip"
           @mouseleave="hideTooltip">
 
@@ -640,6 +683,43 @@ const generateItemPDF = async () => {
               </div>
             </div>
 
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- PDF Export Modal -->
+    <Teleport to="body">
+      <Transition name="tip">
+        <div v-if="showPdfModal" class="fixed inset-0 z-[10000] flex items-center justify-center bg-black/30 backdrop-blur-sm"
+          @click.self="showPdfModal = false">
+          <div class="bg-white rounded-2xl shadow-2xl border border-gray-200 w-[420px] overflow-hidden">
+            <div class="px-6 py-5 border-b border-gray-100">
+              <h3 class="text-base font-bold text-gray-900">Export PDF</h3>
+              <p class="text-sm text-gray-400 mt-1">Include individual supply / execution entries in the report?</p>
+            </div>
+            <div class="p-6 flex flex-col gap-3">
+              <button @click="confirmPdfExport(true)"
+                class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border-2 border-accent/30 bg-accent-soft hover:border-accent transition-all text-left">
+                <div class="i-carbon-document-multiple-01 text-accent text-xl flex-shrink-0"></div>
+                <div>
+                  <p class="text-sm font-bold text-accent">Yes, include entries</p>
+                  <p class="text-xs text-gray-400 mt-0.5">Each item will show all supply/execution entries with dates and quantities.</p>
+                </div>
+              </button>
+              <button @click="confirmPdfExport(false)"
+                class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border-2 border-gray-200 hover:border-gray-400 transition-all text-left">
+                <div class="i-carbon-document text-gray-400 text-xl flex-shrink-0"></div>
+                <div>
+                  <p class="text-sm font-bold text-gray-700">No, summary only</p>
+                  <p class="text-xs text-gray-400 mt-0.5">Only item totals — required, supplied/executed, remaining, progress.</p>
+                </div>
+              </button>
+            </div>
+            <div class="px-6 pb-5 flex justify-end">
+              <button @click="showPdfModal = false"
+                class="text-xs font-semibold text-gray-400 hover:text-gray-600 transition-colors">Cancel</button>
+            </div>
           </div>
         </div>
       </Transition>

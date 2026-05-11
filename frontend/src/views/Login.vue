@@ -75,7 +75,7 @@ async function handleLogin() {
             class="w-full py-3 rounded-xl bg-gray-800 text-white text-sm font-semibold tracking-wide hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-1"
           >
             <span v-if="loading" class="flex items-center justify-center gap-2">
-              <div class="i-carbon-loading animate-spin text-base"></div>
+              <div class="i-carbon-circle-dash animate-spin text-base"></div>
               Signing in…
             </span>
             <span v-else>Sign In</span>

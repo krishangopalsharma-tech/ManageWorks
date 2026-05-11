@@ -20,6 +20,7 @@
   },
   "devDependencies": {
     "@iconify-json/carbon": "^1.2.20",
+    "@iconify-json/icon-park-twotone": "^1.2.4",
     "@unocss/preset-attributify": "^66.6.8",
     "@unocss/preset-icons": "^66.6.8",
     "@unocss/preset-uno": "^66.6.8",

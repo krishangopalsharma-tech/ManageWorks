@@ -1,6 +1,7 @@
 import { defineConfig, presetUno, presetAttributify, presetIcons } from 'unocss'
 import presetWebFonts from '@unocss/preset-web-fonts'
 import { icons as carbonIcons } from '@iconify-json/carbon'
+import { icons as parkTwoToneIcons } from '@iconify-json/icon-park-twotone'
 
 export default defineConfig({
   presets: [
@@ -11,6 +12,18 @@ export default defineConfig({
       warn: true,
       collections: {
         carbon: () => carbonIcons,
+        park: () => parkTwoToneIcons,
+      },
+      extraProperties: {
+        display: 'inline-block',
+      },
+      customizations: {
+        iconCustomizer(collection, icon, props) {
+          if (collection === 'park') {
+            props.width = props.width || '1.2em'
+            props.height = props.height || '1.2em'
+          }
+        },
       },
     }),
     presetWebFonts({
@@ -112,8 +125,8 @@ export default defineConfig({
     'flex-start':   'flex items-center justify-start',
 
     // Navigation
-    'nav-item':        'flex items-center gap-3 px-3 py-2 rounded-md text-text-tertiary hover:bg-surface-soft hover:text-text-primary transition-all duration-fast font-medium cursor-pointer select-none',
-    'nav-item-active': 'flex items-center gap-3 px-3 py-2 rounded-md bg-accent-soft text-accent transition-all duration-fast font-medium cursor-pointer select-none',
+    'nav-item':        'flex items-center gap-3 px-3 py-2 rounded-md text-text-tertiary hover:bg-surface-soft hover:text-text-primary transition-all duration-150 font-medium cursor-pointer select-none',
+    'nav-item-active': 'flex items-center gap-3 px-3 py-2 rounded-md bg-accent-soft text-accent transition-all duration-150 font-medium cursor-pointer select-none',
 
     // Surfaces
     'page-card':  'bg-surface border border-border rounded-lg shadow-sm min-h-full w-full flex flex-col overflow-hidden',
@@ -189,8 +202,11 @@ export default defineConfig({
     'i-carbon-chevron-right',
     'i-carbon-chevron-up',
     'i-carbon-arrow-left',
+    'i-carbon-arrow-up',
     'i-carbon-arrow-down',
     'i-carbon-arrows-vertical',
+    'i-carbon-loading',
+    'duration-150',
     'i-carbon-search',
     'i-carbon-filter',
     'i-carbon-close',
@@ -211,5 +227,7 @@ export default defineConfig({
     'i-carbon-construction',
     'i-carbon-chart-evaluation',
     'i-carbon-chat',
+    'i-park-workbench',
+    'i-carbon-document-multiple-01',
   ],
 })

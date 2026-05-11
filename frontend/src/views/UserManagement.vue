@@ -204,7 +204,7 @@ onMounted(loadData)
           </button>
           <button @click="saveUser" :disabled="isSaving"
             class="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#1D5F5E] hover:bg-[#174E4D] text-white text-sm font-semibold transition-colors disabled:opacity-50">
-            <div v-if="isSaving" class="i-carbon-loading animate-spin text-xs"></div>
+            <div v-if="isSaving" class="i-carbon-circle-dash animate-spin text-xs"></div>
             {{ isSaving ? 'Saving…' : 'Save' }}
           </button>
         </template>
@@ -380,7 +380,7 @@ onMounted(loadData)
 
       <!-- Loading -->
       <div v-if="loading" class="flex items-center gap-2 text-sm text-gray-400 p-8">
-        <div class="i-carbon-loading animate-spin text-lg"></div> Loading…
+        <div class="i-carbon-circle-dash animate-spin text-lg"></div> Loading…
       </div>
 
       <div v-else class="flex-1 overflow-y-auto px-6 py-4">

@@ -1,8 +1,8 @@
 <script setup>
+import ManageWorksIcon from './ManageWorksIcon.vue'
 import { ref, watchEffect, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
-import ManageWorksIcon from './ManageWorksIcon.vue'
 
 const router = useRouter()
 const route  = useRoute()

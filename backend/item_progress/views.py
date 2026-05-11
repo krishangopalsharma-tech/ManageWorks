@@ -46,6 +46,7 @@ class ItemSearchView(APIView):
             serialized = WorkItemSerializer(item).data
             serialized['loa_number']      = item.work.loa_number or '—'
             serialized['contractor_name'] = item.work.contractor_name or '—'
+            serialized['tender_number']   = item.work.tender_number or '—'
             data.append(serialized)
 
         return Response(data)
