@@ -9,7 +9,8 @@ import MBDetails      from '../views/MBDetails.vue'
 import Placeholder    from '../views/Placeholder.vue'
 import Login          from '../views/Login.vue'
 import Register       from '../views/Register.vue'
-import UserManagement from '../views/UserManagement.vue'
+import UserManagement          from '../views/UserManagement.vue'
+import InstallationCertificate from '../views/InstallationCertificate.vue'
 
 const routes = [
   { path: '/login',    name: 'Login',    component: Login,    meta: { public: true } },
@@ -21,7 +22,8 @@ const routes = [
   { path: '/add-new-work',             name: 'Add New Work',     component: AddNewWork },
   { path: '/update-work',              name: 'Update Work',      component: UpdateWork },
   { path: '/mb-details',               name: 'MB Details',       component: MBDetails },
-  { path: '/settings/user-management', name: 'User Management',  component: UserManagement, meta: { adminOnly: true } },
+  { path: '/settings/user-management',    name: 'User Management',          component: UserManagement,          meta: { adminOnly: true } },
+  { path: '/installation-certificate',   name: 'Installation Certificate', component: InstallationCertificate },
   { path: '/:pathMatch(.*)*',          name: 'Placeholder',      component: Placeholder },
 ]
 

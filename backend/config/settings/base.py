@@ -24,6 +24,7 @@ INSTALLED_APPS = [
     'users',
     'item_progress',
     'mb_details',
+    'installation_cert',
 ]
 
 MIDDLEWARE = [

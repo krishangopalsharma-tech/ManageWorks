@@ -16,7 +16,14 @@ const menuItems = ref([
   { name: 'Item Progress',icon: 'i-carbon-chart-bar', path: '/item-progress' },
   { name: 'Update Work',  icon: 'i-carbon-edit',      path: '/update-work' },
   { name: 'MB Details',   icon: 'i-carbon-receipt',   path: '/mb-details' },
-  { name: 'Document Generator', icon: 'i-carbon-document', path: '/document-generator' },
+  {
+    name: 'Document Generator',
+    icon: 'i-carbon-document',
+    expanded: false,
+    subItems: [
+      { name: 'Installation Certificate', path: '/installation-certificate' },
+    ],
+  },
   { name: 'Add New Work', icon: 'i-carbon-add-alt',   path: '/add-new-work' },
   {
     name: 'Settings',

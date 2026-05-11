@@ -16,4 +16,5 @@ urlpatterns = [
     path('api/auth/', include('users.urls')),
     path('api/item-progress/', include('item_progress.urls')),
     path('api/mb-details/', include('mb_details.urls')),
+    path('api/installation-cert/', include('installation_cert.urls')),
 ]

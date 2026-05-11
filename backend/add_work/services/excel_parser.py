@@ -74,6 +74,11 @@ def _pad_loa(raw):
 
 
 _CATEGORY_MAP = {
+    # New short codes
+    'si': 'supply_installation',
+    'ss': 'supply',
+    'ee': 'execution',
+    # Legacy long forms (keep for backward compat)
     'supply & installation': 'supply_installation',
     'supply and installation': 'supply_installation',
     's&i': 'supply_installation',
