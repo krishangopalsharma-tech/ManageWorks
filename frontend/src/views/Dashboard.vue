@@ -72,8 +72,8 @@ const barData = computed(() => ({
     {
       label: 'Supply',
       data:  trendData.value.map(d => d.supply ?? 0),
-      backgroundColor: 'rgba(0, 113, 227, 0.85)',
-      hoverBackgroundColor: '#1D5F5E',
+      backgroundColor: '#1D5F5E',
+      hoverBackgroundColor: '#174a49',
       borderRadius: 6,
       borderSkipped: false,
       maxBarThickness: 32,

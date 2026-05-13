@@ -124,6 +124,19 @@ const certNumber      = ref('')
 const isGenerating    = ref(false)
 const isPreviewing    = ref(false)
 const workError       = ref('')
+const showDupModal    = ref(false)
+// conflict modals
+const showOwnReplaceModal   = ref(false)
+const showOtherConflictModal = ref(false)
+const conflictMessage        = ref('')
+const pendingReplaceCertId   = ref(null)
+
+// Cert in history that has same cert_number (any LOA, not just current)
+const duplicateCert = computed(() =>
+  certNumber.value.trim()
+    ? (certs.value.find(c => c.cert_number === certNumber.value.trim()) || null)
+    : null
+)
 
 const filteredItems = computed(() => {
   const q = itemSearch.value.trim().toLowerCase()
@@ -190,7 +203,8 @@ const enterWork = async (loa) => {
   try {
     const numRes = await axios.get('/api/installation-cert/suggest-number/', { params: { loa_id: loa.id } })
     certNumber.value = numRes.data.cert_number
-  } catch {
+  } catch (e) {
+    console.error('suggest-number failed:', e?.response?.data || e)
     /* cert number stays blank — user can type manually */
   }
 }
@@ -293,16 +307,24 @@ const previewCert = async () => {
 }
 
 // ── Generate & Save ────────────────────────────────────────────────────────
-const generate = async () => {
+const generate = () => {
   if (!selectedEntryIds.value.length) { workError.value = 'Select at least one entry.'; return }
+  if (duplicateCert.value) { showDupModal.value = true; return }
+  doGenerate(null)
+}
+
+const doGenerate = async (replaceCertId) => {
+  showDupModal.value = false
   isGenerating.value = true
   workError.value = ''
   try {
-    const res = await axios.post(
-      '/api/installation-cert/generate/',
-      { loa_id: selectedLoa.value.id, entry_ids: selectedEntryIds.value, cert_number: certNumber.value },
-      { responseType: 'blob' },
-    )
+    const payload = {
+      loa_id: selectedLoa.value.id,
+      entry_ids: selectedEntryIds.value,
+      cert_number: certNumber.value,
+    }
+    if (replaceCertId) payload.replace_cert_id = replaceCertId
+    const res = await axios.post('/api/installation-cert/generate/', payload, { responseType: 'blob' })
     const url  = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }))
     const link = document.createElement('a')
     link.href  = url
@@ -310,11 +332,30 @@ const generate = async () => {
     link.click()
     URL.revokeObjectURL(url)
     await loadCerts()
-  } catch {
-    workError.value = 'Failed to generate certificate.'
+  } catch (e) {
+    if (e.response?.status === 409) {
+      // Parse JSON from blob response
+      const text = await e.response.data.text()
+      const data = JSON.parse(text)
+      conflictMessage.value = data.message || 'Certificate conflict.'
+      if (data.error === 'cert_belongs_to_other') {
+        showOtherConflictModal.value = true
+      } else if (data.error === 'cert_exists_own') {
+        pendingReplaceCertId.value = data.existing_cert_id
+        showOwnReplaceModal.value = true
+      }
+    } else {
+      workError.value = 'Failed to generate certificate.'
+    }
   } finally {
     isGenerating.value = false
   }
+}
+
+const confirmOwnReplace = () => {
+  showOwnReplaceModal.value = false
+  doGenerate(pendingReplaceCertId.value)
+  pendingReplaceCertId.value = null
 }
 
 watch(filterMode, () => {
@@ -355,6 +396,7 @@ const onResizerMousedown = (e) => {
 </script>
 
 <template>
+<div style="display: contents;">
   <div class="flex h-full overflow-hidden">
 
     <!-- ════════════════════════════════════════════════════════════════════ -->
@@ -586,13 +628,19 @@ const onResizerMousedown = (e) => {
               </div>
 
               <!-- Bottom action bar -->
-              <div class="flex items-center gap-3 px-4 py-3 border-t shrink-0" style="border-color: var(--color-separator); background: var(--color-surface);">
+              <div class="flex flex-col border-t shrink-0" style="border-color: var(--color-separator); background: var(--color-surface);">
+                <!-- Duplicate warning -->
+                <div v-if="duplicateCert" class="flex items-center gap-2 px-4 py-2 text-xs font-medium" style="background: #fef3c7; color: #92400e; border-bottom: 1px solid #fde68a;">
+                  <div class="i-carbon-warning-alt shrink-0"></div>
+                  Cert No. already used for <span class="font-bold mx-1">{{ duplicateCert.loa_number }}</span> on {{ fmtDateTime(duplicateCert.generated_at) }}.
+                </div>
+                <div class="flex items-center gap-3 px-4 py-3">
                 <!-- Cert number field -->
                 <div class="flex items-center gap-1.5 flex-1 min-w-0">
                   <label class="text-xs font-semibold shrink-0" style="color: var(--color-text-secondary);">Cert No.:</label>
                   <input v-model="certNumber" type="text" placeholder="e.g. Tele-01 of 25-26/001"
-                    class="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg text-xs border font-mono"
-                    style="background: var(--color-surface-secondary); border-color: var(--color-separator); color: var(--color-text-primary);" />
+                    class="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg text-xs border font-mono transition-colors"
+                    :style="`background: var(--color-surface-secondary); color: var(--color-text-primary); border-color: ${duplicateCert ? '#f59e0b' : 'var(--color-separator)'};`" />
                 </div>
 
                 <button @click="previewCert" :disabled="!selectedEntryIds.length || isPreviewing"
@@ -605,11 +653,12 @@ const onResizerMousedown = (e) => {
 
                 <button @click="generate" :disabled="!selectedEntryIds.length || isGenerating"
                   class="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-all disabled:opacity-50"
-                  style="background: var(--color-accent); color: white;">
+                  :style="`color: white; background: ${duplicateCert ? '#f59e0b' : 'var(--color-accent)'};`">
                   <div v-if="isGenerating" class="i-carbon-renew animate-spin"></div>
                   <div v-else class="i-carbon-download"></div>
                   {{ isGenerating ? 'Saving…' : 'Generate & Save' }}
                 </button>
+                </div>
               </div>
             </template>
 
@@ -718,4 +767,103 @@ const onResizerMousedown = (e) => {
     </div>
 
   </div>
+
+  <!-- ── Duplicate Cert Number Modal ──────────────────────────────────────── -->
+  <Teleport to="body">
+    <div v-if="showDupModal" class="fixed inset-0 z-50 flex items-center justify-center" style="background: rgba(0,0,0,0.4);">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+        <div class="flex items-center gap-3 px-6 py-4" style="background: #fef3c7;">
+          <div class="i-carbon-warning-alt text-2xl" style="color: #d97706;"></div>
+          <div>
+            <p class="text-sm font-bold" style="color: #92400e;">Duplicate Certificate Number</p>
+            <p class="text-xs mt-0.5" style="color: #b45309;">
+              <span class="font-mono font-semibold">{{ certNumber }}</span> already exists in history.
+            </p>
+          </div>
+        </div>
+        <div class="px-6 py-4 text-sm" style="color: #374151;">
+          <p class="mb-1">Existing record:</p>
+          <div class="rounded-lg px-3 py-2.5 text-xs" style="background: #f9fafb; border: 1px solid #e5e7eb;">
+            <p class="font-bold font-mono">{{ duplicateCert?.cert_number }}</p>
+            <p class="mt-0.5">LOA: {{ duplicateCert?.loa_number }}</p>
+            <p>{{ duplicateCert?.contractor }}</p>
+            <p class="mt-0.5" style="color: #6b7280;">{{ fmtDateTime(duplicateCert?.generated_at) }} · {{ duplicateCert?.entry_count }} entries</p>
+          </div>
+          <p class="mt-3 text-xs" style="color: #6b7280;">
+            <b>Replace</b> deletes the old record and saves this new one with the same number.<br/>
+            <b>Cancel</b> keeps the old record — edit the Cert No. to use a different one.
+          </p>
+        </div>
+        <div class="flex gap-2 px-6 pb-5">
+          <button @click="showDupModal = false"
+            class="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold border"
+            style="border-color: #e5e7eb; color: #374151;">
+            Cancel
+          </button>
+          <button @click="doGenerate(duplicateCert?.id)"
+            class="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold"
+            style="background: #dc2626; color: white;">
+            Replace Old Certificate
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- Certificate belongs to another user — error -->
+  <Teleport to="body">
+    <div v-if="showOtherConflictModal" class="fixed inset-0 z-50 flex items-center justify-center" style="background: rgba(0,0,0,0.4);">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+        <div class="flex items-center gap-3 px-6 py-4" style="background: #fee2e2;">
+          <div class="i-carbon-warning text-2xl" style="color: #dc2626;"></div>
+          <div>
+            <p class="text-sm font-bold" style="color: #991b1b;">Certificate Not Yours</p>
+            <p class="text-xs mt-0.5" style="color: #b91c1c;">{{ conflictMessage }}</p>
+          </div>
+        </div>
+        <div class="px-6 py-4 text-sm" style="color: #374151;">
+          <p class="text-xs" style="color: #6b7280;">Edit the Cert No. field to use a different number.</p>
+        </div>
+        <div class="flex px-6 pb-5">
+          <button @click="showOtherConflictModal = false"
+            class="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold border"
+            style="border-color: #e5e7eb; color: #374151;">
+            OK
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- Same user — replace own certificate warning -->
+  <Teleport to="body">
+    <div v-if="showOwnReplaceModal" class="fixed inset-0 z-50 flex items-center justify-center" style="background: rgba(0,0,0,0.4);">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+        <div class="flex items-center gap-3 px-6 py-4" style="background: #fef3c7;">
+          <div class="i-carbon-warning-alt text-2xl" style="color: #d97706;"></div>
+          <div>
+            <p class="text-sm font-bold" style="color: #92400e;">Replace Your Certificate?</p>
+            <p class="text-xs mt-0.5" style="color: #b45309;">{{ conflictMessage }}</p>
+          </div>
+        </div>
+        <div class="px-6 py-4 text-sm" style="color: #374151;">
+          <p class="text-xs" style="color: #6b7280;">Old certificate record will be deleted and replaced with this new one.</p>
+        </div>
+        <div class="flex gap-2 px-6 pb-5">
+          <button @click="showOwnReplaceModal = false; pendingReplaceCertId = null"
+            class="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold border"
+            style="border-color: #e5e7eb; color: #374151;">
+            Cancel
+          </button>
+          <button @click="confirmOwnReplace"
+            class="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold"
+            style="background: #d97706; color: white;">
+            Replace
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+</div>
 </template>
