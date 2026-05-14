@@ -125,7 +125,7 @@ export default defineConfig({
     'flex-start':   'flex items-center justify-start',
 
     // Navigation
-    'nav-item':        'flex items-center gap-3 px-3 py-2 rounded-md text-text-tertiary hover:bg-surface-soft hover:text-text-primary transition-all duration-150 font-medium cursor-pointer select-none',
+    'nav-item':        'flex items-center gap-3 px-3 py-2 rounded-md text-text-tertiary hover:bg-[#EEF4F3] hover:text-text-primary transition-all duration-150 font-medium cursor-pointer select-none',
     'nav-item-active': 'flex items-center gap-3 px-3 py-2 rounded-md bg-accent-soft text-accent transition-all duration-150 font-medium cursor-pointer select-none',
 
     // Surfaces

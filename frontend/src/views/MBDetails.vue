@@ -557,7 +557,7 @@ onMounted(() => {
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                   <tr v-for="rec in workRecords(selectedWork.id)" :key="rec.id"
-                    class="bg-white hover:bg-gray-50/60 transition-colors">
+                    class="bg-white hover:bg-accent-soft/40 transition-colors">
                     <td class="px-4 py-2.5 font-bold text-gray-800">{{ fmtMbNum(rec.mb_number) }}</td>
                     <td class="px-4 py-2.5 text-gray-500">
                       {{ rec.items.length }} item{{ rec.items.length === 1 ? '' : 's' }}
@@ -684,7 +684,7 @@ onMounted(() => {
             </thead>
             <tbody class="divide-y divide-gray-100">
               <tr v-for="row in pickedItems" :key="row.key"
-                :class="row.not_received_warning ? 'bg-orange-50/40' : 'hover:bg-gray-50/40'"
+                :class="row.not_received_warning ? 'bg-orange-50/40' : 'hover:bg-accent-soft/40'"
                 class="transition-colors">
                 <td class="px-3 py-2.5 text-center">
                   <input v-model="row.selected" type="checkbox"
@@ -795,7 +795,7 @@ onMounted(() => {
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
-              <tr v-for="(row, idx) in editItems" :key="idx" class="hover:bg-gray-50/40 transition-colors">
+              <tr v-for="(row, idx) in editItems" :key="idx" class="hover:bg-accent-soft/40 transition-colors">
                 <td class="px-4 py-2.5">
                   <span :class="String(row.schedule||'').toUpperCase().startsWith('A') ? 'bg-accent-soft text-accent' : 'bg-accent-b-soft text-accent-b'"
                     class="text-[10px] font-bold px-1.5 py-0.5 rounded">{{ row.schedule }}</span>

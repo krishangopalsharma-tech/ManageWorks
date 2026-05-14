@@ -732,7 +732,7 @@ const deleteWork = async () => {
               <template v-if="filteredItems.length === 0">
                 <tr><td colspan="7" class="p-8 text-center text-gray-400 text-xs font-medium">No items match your filter.</td></tr>
               </template>
-              <tr v-for="item in sortedItems" :key="item.id" class="border-b border-gray-100 hover:bg-gray-50/60 transition-colors">
+              <tr v-for="item in sortedItems" :key="item.id" class="border-b border-gray-100 hover:bg-accent-soft/40 transition-colors">
                 <td class="px-4 py-3.5 text-center">
                   <span class="rounded-md px-2 py-1 text-[10px] font-bold"
                     :class="String(item.schedule||'').toUpperCase().startsWith('A') ? 'bg-accent-soft text-accent' : 'bg-accent-b-soft text-accent-b'">

@@ -25,6 +25,8 @@ INSTALLED_APPS = [
     'item_progress',
     'mb_details',
     'installation_cert',
+    'site_gsheet_settings',
+    'site_register',
 ]
 
 MIDDLEWARE = [

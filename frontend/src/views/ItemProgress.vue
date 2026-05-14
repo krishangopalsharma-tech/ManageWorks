@@ -492,7 +492,7 @@ const generateItemPDF = async (includeEntries = true) => {
         </thead>
         <tbody>
           <tr v-for="item in sortedResults" :key="item.id"
-            class="border-b border-gray-100 hover:bg-gray-50/60 transition-colors">
+            class="border-b border-gray-100 hover:bg-accent-soft/40 transition-colors">
             <td class="px-4 py-3">
               <p class="text-xs font-semibold text-gray-700 line-clamp-1 leading-snug">{{ item.tender_number || '—' }}</p>
               <p class="text-[11px] text-gray-400 line-clamp-1 leading-snug mt-0.5">{{ item.contractor_name || '—' }}</p>
@@ -608,7 +608,7 @@ const generateItemPDF = async (includeEntries = true) => {
             <!-- Entry list -->
             <div v-else class="max-h-64 overflow-y-auto" style="scrollbar-width: thin;">
               <div v-for="(entry, idx) in [...(hoveredItem.entries || [])].reverse()" :key="entry.id"
-                class="px-4 py-2.5 border-b border-gray-50 last:border-0 hover:bg-gray-50/60 transition-colors">
+                class="px-4 py-2.5 border-b border-gray-50 last:border-0 hover:bg-accent-soft/40 transition-colors">
                 <div class="flex items-center justify-between gap-2">
                   <div class="flex items-center gap-2 min-w-0">
                     <!-- Index bubble + type badge -->

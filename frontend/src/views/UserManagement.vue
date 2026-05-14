@@ -369,7 +369,7 @@ onMounted(loadData)
         <button v-for="t in ['pending', 'approved']" :key="t"
           @click="tab = t"
           class="px-5 py-2 rounded-lg text-sm font-semibold capitalize transition-all"
-          :class="tab === t ? 'bg-light-surface soft-shadow text-gray-800' : 'text-gray-500 hover:text-gray-700'">
+          :class="tab === t ? 'bg-[#1D5F5E] text-white' : 'text-gray-500 hover:text-gray-700'">
           {{ t }}
           <span v-if="t === 'pending' && pending.length"
             class="ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full bg-red-100 text-red-600 font-bold">
@@ -439,7 +439,7 @@ onMounted(loadData)
               </thead>
               <tbody>
                 <tr v-for="u in approved" :key="u.id"
-                  class="border-b border-gray-50 hover:bg-light-bg transition-colors cursor-pointer"
+                  class="border-b border-gray-50 hover:bg-accent-soft/40 transition-colors cursor-pointer"
                   @click="openDetail(u)">
                   <td class="px-5 py-3.5">
                     <div class="flex items-center gap-2.5">

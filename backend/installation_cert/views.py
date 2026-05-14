@@ -435,12 +435,19 @@ def _build_pdf(work: Work, entries: list, designation: str, cert_number: str = '
         leading=10,
         wordWrap='CJK',
     )
-    desig_style = ParagraphStyle(
-        'Designation',
+    sig_left_style = ParagraphStyle(
+        'SigLeft',
         parent=styles['Normal'],
         fontSize=8,
         alignment=TA_LEFT,
-        spaceBefore=6,
+        spaceBefore=0,
+    )
+    sig_right_style = ParagraphStyle(
+        'SigRight',
+        parent=styles['Normal'],
+        fontSize=8,
+        alignment=TA_RIGHT,
+        spaceBefore=0,
     )
 
     today = date.today().strftime('%d-%m-%Y')
@@ -526,25 +533,33 @@ def _build_pdf(work: Work, entries: list, designation: str, cert_number: str = '
 
     data_table = Table(rows, colWidths=col_widths, repeatRows=1)
     data_table.setStyle(TableStyle([
-        ('BACKGROUND',     (0, 0), (-1, 0), colors.HexColor('#1a3c5e')),
-        ('TEXTCOLOR',      (0, 0), (-1, 0), colors.white),
-        ('FONTNAME',       (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE',       (0, 0), (-1, 0), 7),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0f4f8')]),
-        ('GRID',           (0, 0), (-1, -1), 0.5, colors.HexColor('#a0aec0')),
-        ('VALIGN',         (0, 0), (-1, -1), 'TOP'),
-        ('TOPPADDING',     (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING',  (0, 0), (-1, -1), 3),
-        ('LEFTPADDING',    (0, 0), (-1, -1), 3),
-        ('RIGHTPADDING',   (0, 0), (-1, -1), 3),
-        ('ALIGN',          (3, 0), (4, -1), 'CENTER'),
+        ('FONTNAME',      (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE',      (0, 0), (-1, 0), 7),
+        ('GRID',          (0, 0), (-1, -1), 0.5, colors.black),
+        ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING',    (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 3),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 3),
+        ('ALIGN',         (3, 0), (4, -1), 'CENTER'),
     ]))
     story.append(data_table)
 
-    # Designation footer
-    story.append(Spacer(1, 10 * mm))
-    if designation:
-        story.append(Paragraph(f'<b>Signature &amp; Designation:</b> {designation}', desig_style))
+    # Signature footer — 2 blank lines gap, then two-column row
+    story.append(Spacer(1, 14 * mm))
+    sig_table = Table(
+        [[Paragraph('Contractor Signature', sig_left_style),
+          Paragraph(designation if designation else '', sig_right_style)]],
+        colWidths=[page_w / 2, page_w / 2],
+    )
+    sig_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING',  (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING',   (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING',(0, 0), (-1, -1), 0),
+    ]))
+    story.append(sig_table)
 
     doc.build(story)
     return buf.getvalue()

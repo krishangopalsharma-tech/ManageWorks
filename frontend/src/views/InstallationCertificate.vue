@@ -716,7 +716,7 @@ const onResizerMousedown = (e) => {
         <div v-else class="flex flex-col divide-y" style="divide-color: var(--color-separator);">
           <div v-for="cert in certs" :key="cert.id"
             @click="previewSavedCert(cert)"
-            class="flex flex-col gap-1 px-4 py-3 cursor-pointer transition-colors hover:bg-gray-50"
+            class="flex flex-col gap-1 px-4 py-3 cursor-pointer transition-colors hover:bg-accent-soft/40"
             :style="previewCertId === cert.id ? 'background: color-mix(in srgb, var(--color-accent) 6%, transparent);' : ''"
           >
             <div class="flex items-start justify-between gap-2">
