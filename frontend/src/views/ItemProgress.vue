@@ -312,7 +312,7 @@ const generateItemPDF = async (includeEntries = true) => {
               const u = e.submitted_by_user
               if (!u) return '—'
               const name = u.full_name || u.username
-              const desig = u.designation
+              const desig = e.submitted_by_designation_display || u.designation
               return desig ? `${name}\n(${desig})` : name
             })(),
             e.date_of_receipt ? fmtDate(e.date_of_receipt) : fmtDateTime(e.submitted_at),
@@ -634,7 +634,7 @@ const generateItemPDF = async (includeEntries = true) => {
                   <span class="flex items-center gap-1 text-[10px] text-gray-500 font-medium">
                     <div class="i-carbon-user text-gray-400" style="font-size:10px;"></div>
                     {{ entry.submitted_by_user?.full_name || entry.submitted_by_user?.username || '—' }}
-                    <span v-if="entry.submitted_by_user?.designation" class="text-gray-400"> · {{ entry.submitted_by_user.designation }}</span>
+                    <span v-if="entry.submitted_by_designation_display || entry.submitted_by_user?.designation" class="text-gray-400"> · {{ entry.submitted_by_designation_display || entry.submitted_by_user?.designation }}</span>
                   </span>
                   <!-- Supply fields -->
                   <template v-if="entry.entry_type === 'supply'">

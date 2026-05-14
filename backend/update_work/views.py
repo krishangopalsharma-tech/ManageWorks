@@ -189,6 +189,7 @@ class WorkItemEntryView(APIView):
             location=request.data.get('location') or '',
             remarks=request.data.get('remarks') or '',
             submitted_by=request.user if request.user.is_authenticated else None,
+            submitted_by_designation=getattr(getattr(request.user, 'profile', None), 'designation', None),
         )
 
         _sync_item_quantities(work_item)

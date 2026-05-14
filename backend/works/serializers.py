@@ -17,13 +17,34 @@ class UserSerializer(serializers.ModelSerializer):
 
 class WorkItemEntrySerializer(serializers.ModelSerializer):
     submitted_by_user = UserSerializer(source='submitted_by', read_only=True)
+    # Returns snapshotted designation; falls back to live profile if snapshot missing (legacy rows)
+    submitted_by_designation_display = serializers.SerializerMethodField()
+
+    def get_submitted_by_designation_display(self, obj):
+        if obj.submitted_by_designation:
+            return obj.submitted_by_designation
+        try:
+            return obj.submitted_by.profile.designation
+        except Exception:
+            return None
+
     class Meta:
         model = WorkItemEntry
         fields = '__all__'
 
 class WorkItemSerializer(serializers.ModelSerializer):
     updated_by_user = UserSerializer(source='updated_by', read_only=True)
+    updated_by_designation_display = serializers.SerializerMethodField()
     entries = WorkItemEntrySerializer(many=True, read_only=True)
+
+    def get_updated_by_designation_display(self, obj):
+        if obj.updated_by_designation:
+            return obj.updated_by_designation
+        try:
+            return obj.updated_by.profile.designation
+        except Exception:
+            return None
+
     class Meta:
         model = WorkItem
         fields = '__all__'

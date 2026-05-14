@@ -755,7 +755,7 @@ const generateWorkPDF = async () => {
             const u = e.submitted_by_user
             if (!u) return '—'
             const name = u.full_name || u.username
-            const desig = u.designation
+            const desig = e.submitted_by_designation_display || u.designation
             return desig ? `${name}\n(${desig})` : name
           })(),
           e.date_of_receipt ? fmtDate(e.date_of_receipt) : fmtDateTime(e.submitted_at),
@@ -1227,7 +1227,7 @@ const generateWorkPDF = async () => {
                                   <td class="px-4 py-2.5 text-gray-600 font-medium">{{ entry.udm_entry || '—' }}</td>
                                   <td class="px-4 py-2.5 text-gray-600 font-medium">
                                     <span class="block font-semibold text-gray-800">{{ entry.submitted_by_user?.full_name || entry.submitted_by_user?.username || '—' }}</span>
-                                    <span v-if="entry.submitted_by_user?.designation" class="block text-[10px] text-gray-400">{{ entry.submitted_by_user.designation }}</span>
+                                    <span v-if="entry.submitted_by_designation_display || entry.submitted_by_user?.designation" class="block text-[10px] text-gray-400">{{ entry.submitted_by_designation_display || entry.submitted_by_user?.designation }}</span>
                                   </td>
                                   <td class="px-4 py-2.5 text-gray-400 whitespace-nowrap">
                                     <span v-if="entry.date_of_receipt" class="block font-medium text-gray-600">{{ fmtDate(entry.date_of_receipt) }}</span>

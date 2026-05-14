@@ -59,6 +59,8 @@ class WorkItem(models.Model):
     executed_quantity = models.FloatField(null=True, blank=True, default=0)
 
     updated_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
+    # Snapshot of designation at update time
+    updated_by_designation = models.CharField(max_length=150, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
@@ -121,6 +123,8 @@ class WorkItemEntry(models.Model):
     date_of_receipt = models.DateField(blank=True, null=True)
 
     submitted_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
+    # Snapshot of designation at submission time — survives user transfers/designation changes
+    submitted_by_designation = models.CharField(max_length=150, blank=True, null=True)
     submitted_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
