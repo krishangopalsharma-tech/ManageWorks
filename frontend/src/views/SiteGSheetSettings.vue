@@ -174,7 +174,17 @@ onMounted(loadSheets)
               class="border-b border-gray-50 hover:bg-accent-soft/40 transition-colors"
             >
               <td class="px-5 py-3.5 text-sm font-semibold text-gray-800">{{ sheet.name }}</td>
-              <td class="px-5 py-3.5 font-mono text-xs text-gray-500">{{ sheet.sheet_id }}</td>
+              <td class="px-5 py-3.5">
+                <a
+                  :href="`https://docs.google.com/spreadsheets/d/${sheet.sheet_id}`"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="font-mono text-xs text-[#1D5F5E] hover:underline flex items-center gap-1 w-fit"
+                >
+                  {{ sheet.sheet_id }}
+                  <div class="i-carbon-launch text-[10px] opacity-60"></div>
+                </a>
+              </td>
               <td class="px-5 py-3.5">
                 <span
                   class="text-[11px] font-bold px-2 py-0.5 rounded-full"

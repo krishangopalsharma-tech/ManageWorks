@@ -90,7 +90,7 @@ class SiteRegisterView(APIView):
             raise PermissionDenied("Authentication required.")
 
         # Admins see all works; consignees only see works assigned to them
-        qs = Work.objects.prefetch_related("items").order_by("contractor_name")
+        qs = Work.objects.prefetch_related("items", "mb_records").order_by("contractor_name")
         if not _is_admin(request.user):
             qs = qs.filter(hrms_id=request.user.username)
 
@@ -154,6 +154,7 @@ class SiteRegisterView(APIView):
                 "entries":         entries,
                 "entry_count":     len(entries),
                 "warning_count":   warning_count,
+                "mb_count":        work.mb_records.count(),
             })
 
         return Response({

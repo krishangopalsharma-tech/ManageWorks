@@ -73,6 +73,14 @@ const selectItem = (item) => { selectedItem.value = item }
 const backToWork = () => { selectedItem.value = null }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
+const entryItem = (entry) => {
+  if (!selectedWork.value) return null
+  return selectedWork.value.items.find(i =>
+    (i.schedule || '').toLowerCase() === (entry.schedule || '').toLowerCase() &&
+    (i.serial_no || '').toLowerCase() === (entry.serial_no || '').toLowerCase()
+  ) || null
+}
+
 const fmtDate = (val) => {
   if (!val) return '—'
   const s = String(val).split('T')[0].split(' ')[0]
@@ -164,14 +172,16 @@ const fmtDate = (val) => {
                   </div>
                 </div>
                 <div class="flex items-center gap-4 flex-shrink-0">
+                  <span v-if="work.mb_count > 0"
+                    class="text-[10px] font-bold text-[#1D5F5E] bg-[#1D5F5E]/10 px-2 py-0.5 rounded-full whitespace-nowrap">
+                    {{ work.mb_count }} MB{{ work.mb_count > 1 ? 's' : '' }}
+                  </span>
                   <div class="text-right">
                     <p class="text-sm font-bold text-gray-800">{{ work.items.length }}</p>
                     <p class="text-[10px] text-gray-400">items</p>
                   </div>
                   <div class="text-right">
-                    <p class="text-sm font-bold" :class="work.entry_count > 0 ? 'text-[#1D5F5E]' : 'text-gray-300'">
-                      {{ work.entry_count }}
-                    </p>
+                    <p class="text-sm font-bold text-gray-800">{{ work.entry_count }}</p>
                     <p class="text-[10px] text-gray-400">site entries</p>
                   </div>
                   <div class="i-carbon-chevron-right text-gray-300 group-hover:text-[#1D5F5E] transition-colors text-lg"></div>
@@ -238,7 +248,7 @@ const fmtDate = (val) => {
                   :class="entry.warnings.length > 0 ? 'bg-amber-50/40' : ''">
                   <td class="px-4 py-3 font-mono text-xs text-gray-500 whitespace-nowrap">{{ entry.datetime }}</td>
                   <td class="px-4 py-3 text-gray-700 max-w-md">
-                    <span class="text-sm">{{ entry.remark || '—' }}</span>
+                    <span class="text-xs">{{ entry.remark || '—' }}</span>
                   </td>
                   <td class="px-4 py-3 text-xs text-gray-400">{{ entry.sheet_name }}</td>
                   <td class="px-4 py-3">
@@ -341,11 +351,11 @@ const fmtDate = (val) => {
                 <thead>
                   <tr class="bg-gray-50 border-b border-gray-200">
                     <th class="text-left px-4 py-3 text-[11px] font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">Date & Time</th>
-                    <th class="text-left px-4 py-3 text-[11px] font-bold text-gray-400 uppercase tracking-wide">Schedule</th>
-                    <th class="text-left px-4 py-3 text-[11px] font-bold text-gray-400 uppercase tracking-wide">Serial No.</th>
+                    <th class="text-left px-4 py-3 text-[11px] font-bold text-gray-400 uppercase tracking-wide">Sch</th>
+                    <th class="text-left px-4 py-3 text-[11px] font-bold text-gray-400 uppercase tracking-wide">S.No.</th>
                     <th class="text-left px-4 py-3 text-[11px] font-bold text-gray-400 uppercase tracking-wide">Item Description</th>
+                    <th class="text-left px-4 py-3 text-[11px] font-bold text-gray-400 uppercase tracking-wide">Quantity</th>
                     <th class="text-left px-4 py-3 text-[11px] font-bold text-gray-400 uppercase tracking-wide">Contractor Remark</th>
-                    <th class="text-left px-4 py-3 text-[11px] font-bold text-gray-400 uppercase tracking-wide">Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -353,23 +363,20 @@ const fmtDate = (val) => {
                     class="border-t border-gray-100 hover:bg-accent-soft/40 transition-colors"
                     :class="entry.warnings.length > 0 ? 'bg-amber-50/40' : ''">
                     <td class="px-4 py-3 font-mono text-xs text-gray-500 whitespace-nowrap">{{ entry.datetime }}</td>
-                    <td class="px-4 py-3 font-semibold text-gray-800">{{ entry.schedule }}</td>
-                    <td class="px-4 py-3 text-gray-700">{{ entry.serial_no }}</td>
+                    <td class="px-4 py-3 text-xs font-semibold text-gray-800">{{ entry.schedule }}</td>
+                    <td class="px-4 py-3 text-xs text-gray-700">{{ entry.serial_no }}</td>
                     <td class="px-4 py-3 max-w-xs">
                       <span class="text-xs text-gray-600 line-clamp-2">{{ entry.item_desc }}</span>
                     </td>
-                    <td class="px-4 py-3 max-w-xs">
-                      <span class="text-sm text-gray-700 line-clamp-2">{{ entry.remark || '—' }}</span>
+                    <td class="px-4 py-3 text-xs font-semibold text-gray-700 whitespace-nowrap">
+                      <template v-if="entryItem(entry)">
+                        {{ entryItem(entry).qty ?? '—' }}
+                        <span class="font-normal text-gray-400">{{ entryItem(entry).unit }}</span>
+                      </template>
+                      <span v-else class="text-gray-300">—</span>
                     </td>
-                    <td class="px-4 py-3">
-                      <span v-if="entry.warnings.length === 0"
-                        class="text-[11px] font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded-full">Valid</span>
-                      <div v-else class="flex flex-col gap-1">
-                        <span v-for="(w, wi) in entry.warnings" :key="wi"
-                          class="text-[11px] font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full flex items-center gap-1 whitespace-nowrap">
-                          <span class="i-carbon-warning-filled text-[10px]"></span>{{ w }}
-                        </span>
-                      </div>
+                    <td class="px-4 py-3 max-w-xs">
+                      <span class="text-xs text-gray-700 line-clamp-2">{{ entry.remark || '—' }}</span>
                     </td>
                   </tr>
                 </tbody>
@@ -413,7 +420,7 @@ const fmtDate = (val) => {
                   {{ item.qty ?? '—' }} <span class="font-normal text-gray-400">{{ item.unit }}</span>
                 </td>
                 <td class="px-4 py-3.5 text-center">
-                  <span class="text-sm font-bold"
+                  <span class="text-[11px] font-bold"
                     :class="item.sheet_entries.length > 0 ? 'text-[#1D5F5E]' : 'text-gray-300'">
                     {{ item.sheet_entries.length }}
                   </span>
