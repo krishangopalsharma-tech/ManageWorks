@@ -645,7 +645,7 @@ const deleteWork = async () => {
                     <p class="text-[10px] text-gray-400">entries</p>
                   </div>
                   <button v-if="canModifyWork" @click.stop="openEditWork(work)"
-                    class="px-3.5 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-semibold transition-colors flex items-center gap-1.5">
+                    class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#1D5F5E] hover:bg-[#174E4D] text-white text-xs font-semibold transition-colors">
                     <div class="i-carbon-edit text-xs"></div> Edit
                   </button>
                   <div class="i-carbon-chevron-right text-gray-300 group-hover:text-[#1D5F5E] transition-colors text-lg"></div>
