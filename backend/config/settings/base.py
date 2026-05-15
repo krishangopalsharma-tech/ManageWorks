@@ -27,6 +27,8 @@ INSTALLED_APPS = [
     'installation_cert',
     'site_gsheet_settings',
     'site_register',
+    'email_service',
+    'smtp_settings',
 ]
 
 MIDDLEWARE = [
@@ -73,6 +75,18 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# ── SMTP (Gmail) ─────────────────────────────────────────────────────────────
+EMAIL_BACKEND       = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST          = 'smtp.gmail.com'
+EMAIL_PORT          = 587
+EMAIL_USE_TLS       = True
+EMAIL_HOST_USER     = 'adimanageworks@gmail.com'
+# Generate an App Password at: https://myaccount.google.com/apppasswords
+# (requires 2-Step Verification enabled on the Gmail account)
+EMAIL_HOST_PASSWORD = ''          # ← paste App Password here
+DEFAULT_FROM_EMAIL  = 'adimanageworks@gmail.com'
+# ─────────────────────────────────────────────────────────────────────────────
 
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True

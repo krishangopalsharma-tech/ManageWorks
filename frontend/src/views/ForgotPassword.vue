@@ -1,24 +1,24 @@
 <script setup>
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 
-const router = useRouter()
-const { login } = useAuth()
+const { forgotPassword } = useAuth()
 
-const hrms_id  = ref('')
-const password = ref('')
-const error    = ref('')
-const loading  = ref(false)
+const hrms_id = ref('')
+const error   = ref('')
+const success = ref(false)
+const loading = ref(false)
 
-async function handleLogin() {
+async function handleSubmit() {
   error.value   = ''
+  success.value = false
   loading.value = true
   try {
-    await login(hrms_id.value.trim(), password.value)
-    router.push('/')
+    await forgotPassword(hrms_id.value.trim())
+    success.value = true
+    hrms_id.value = ''
   } catch (e) {
-    error.value = e.response?.data?.error || 'Login failed.'
+    error.value = e.response?.data?.error || 'Something went wrong.'
   } finally {
     loading.value = false
   }
@@ -34,12 +34,29 @@ async function handleLogin() {
         <span class="text-2xl font-bold text-gray-800 tracking-tight">ManageWorks</span>
       </div>
 
-      <!-- Card -->
-      <div class="bg-light-surface rounded-2xl soft-shadow p-8">
-        <h1 class="text-xl font-bold text-gray-800 mb-1">Welcome back</h1>
-        <p class="text-sm text-gray-500 mb-8">Sign in with your HRMS ID</p>
+      <!-- Success state -->
+      <div v-if="success" class="bg-light-surface rounded-2xl soft-shadow p-8 text-center">
+        <div class="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+          <div class="i-carbon-email text-2xl text-green-600"></div>
+        </div>
+        <h2 class="text-lg font-bold text-gray-800 mb-2">Check Your Email</h2>
+        <p class="text-sm text-gray-500 mb-6">
+          If that HRMS ID is registered, your password has been sent to the associated email address.
+        </p>
+        <router-link
+          to="/login"
+          class="inline-block px-6 py-2.5 rounded-xl bg-gray-800 text-white text-sm font-semibold hover:bg-gray-700 transition-colors"
+        >
+          Back to Login
+        </router-link>
+      </div>
 
-        <form @submit.prevent="handleLogin" class="flex flex-col gap-5">
+      <!-- Form card -->
+      <div v-else class="bg-light-surface rounded-2xl soft-shadow p-8">
+        <h1 class="text-xl font-bold text-gray-800 mb-1">Forgot Password</h1>
+        <p class="text-sm text-gray-500 mb-8">Enter your HRMS ID and we'll send your password to your registered email.</p>
+
+        <form @submit.prevent="handleSubmit" class="flex flex-col gap-5">
           <div class="flex flex-col gap-1.5">
             <label class="text-xs font-semibold text-gray-600 uppercase tracking-wide">HRMS ID</label>
             <input
@@ -47,18 +64,6 @@ async function handleLogin() {
               type="text"
               autocomplete="username"
               placeholder="Enter your HRMS ID"
-              required
-              class="w-full px-4 py-3 rounded-xl bg-light-bg border border-gray-200 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:border-gray-400 transition-colors"
-            />
-          </div>
-
-          <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-semibold text-gray-600 uppercase tracking-wide">Password</label>
-            <input
-              v-model="password"
-              type="password"
-              autocomplete="current-password"
-              placeholder="Enter your password"
               required
               class="w-full px-4 py-3 rounded-xl bg-light-bg border border-gray-200 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:border-gray-400 transition-colors"
             />
@@ -76,19 +81,15 @@ async function handleLogin() {
           >
             <span v-if="loading" class="flex items-center justify-center gap-2">
               <div class="i-carbon-circle-dash animate-spin text-base"></div>
-              Signing in…
+              Sending…
             </span>
-            <span v-else>Sign In</span>
+            <span v-else>Send Password</span>
           </button>
         </form>
 
-        <div class="mt-6 pt-6 border-t border-gray-200 text-center flex flex-col gap-2">
+        <div class="mt-6 pt-6 border-t border-gray-200 text-center">
           <p class="text-sm text-gray-500">
-            <router-link to="/forgot-password" class="font-semibold text-gray-800 hover:underline">Forgot password?</router-link>
-          </p>
-          <p class="text-sm text-gray-500">
-            New user?
-            <router-link to="/register" class="font-semibold text-gray-800 hover:underline">Request access</router-link>
+            <router-link to="/login" class="font-semibold text-gray-800 hover:underline">Back to Login</router-link>
           </p>
         </div>
       </div>

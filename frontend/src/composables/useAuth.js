@@ -54,6 +54,11 @@ async function logout() {
   state.authenticated = false
 }
 
+async function forgotPassword(hrms_id) {
+  const { data } = await axios.post(`${API}/forgot-password/`, { hrms_id }, { headers: authHeaders() })
+  return data
+}
+
 export function useAuth() {
   return {
     state: readonly(state),
@@ -61,5 +66,6 @@ export function useAuth() {
     login,
     register,
     logout,
+    forgotPassword,
   }
 }

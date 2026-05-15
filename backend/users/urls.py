@@ -3,6 +3,7 @@ from .views import (
     RegisterView, LoginView, LogoutView, MeView,
     PendingUsersView, ApproveUserView, RejectUserView, AllUsersView,
     UpdateRoleView, RevokeUserView, UpdateUserView, WorksListView, AssignWorkView,
+    ForgotPasswordView,
 )
 
 urlpatterns = [
@@ -19,4 +20,5 @@ urlpatterns = [
     path('update/<int:user_id>/',      UpdateUserView.as_view(),   name='auth_update_user'),
     path('works/',                     WorksListView.as_view(),    name='auth_works_list'),
     path('assign-work/',               AssignWorkView.as_view(),   name='auth_assign_work'),
+    path('forgot-password/',           ForgotPasswordView.as_view(), name='auth_forgot_password'),
 ]

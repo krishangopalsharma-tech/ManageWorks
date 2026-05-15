@@ -120,16 +120,19 @@ class SiteRegisterView(APIView):
         # Fetch sheet rows
         all_rows, sheet_errors = _fetch_all_sheet_rows()
 
-        # Index sheet rows by loa_number
+        # Index sheet rows by loa_number stripped of leading zeros
+        # GSheets treats LOA numbers as integers and drops leading zeros
         rows_by_loa = defaultdict(list)
         for row in all_rows:
-            rows_by_loa[row["loa_number"]].append(row)
+            normalized = row["loa_number"].lstrip("0") or "0"
+            rows_by_loa[normalized].append(row)
 
         # Build response: one object per work
         result = []
         for work in works:
             loa      = work.loa_number or ""
-            raw_rows = rows_by_loa.get(loa, [])
+            loa_key  = loa.lstrip("0") or "0"
+            raw_rows = rows_by_loa.get(loa_key, [])
 
             entries = []
             for row in raw_rows:

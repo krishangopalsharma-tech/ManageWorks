@@ -9,6 +9,7 @@ const form = ref({
   designation: '',
   hrms_id:     '',
   pf_number:   '',
+  email:       '',
   password:    '',
   confirm:     '',
 })
@@ -37,10 +38,11 @@ async function handleRegister() {
       designation: form.value.designation.trim(),
       hrms_id:     form.value.hrms_id.trim(),
       pf_number:   form.value.pf_number.trim(),
+      email:       form.value.email.trim(),
       password:    form.value.password,
     })
     success.value = true
-    form.value = { name: '', designation: '', hrms_id: '', pf_number: '', password: '', confirm: '' }
+    form.value = { name: '', designation: '', hrms_id: '', pf_number: '', email: '', password: '', confirm: '' }
   } catch (e) {
     error.value = e.response?.data?.error || 'Registration failed.'
   } finally {
@@ -49,12 +51,13 @@ async function handleRegister() {
 }
 
 const fields = [
-  { key: 'name',        label: 'Full Name',    type: 'text',     placeholder: 'Enter your full name',    autocomplete: 'name' },
-  { key: 'designation', label: 'Designation',  type: 'text',     placeholder: 'e.g. Junior Engineer',    autocomplete: 'organization-title' },
-  { key: 'hrms_id',     label: 'HRMS ID',      type: 'text',     placeholder: 'Your HRMS ID (username)', autocomplete: 'username' },
-  { key: 'pf_number',   label: 'PF Number',    type: 'text',     placeholder: 'Enter your PF number',    autocomplete: 'off' },
-  { key: 'password',    label: 'Password',     type: 'password', placeholder: 'Min 8 characters',        autocomplete: 'new-password' },
-  { key: 'confirm',     label: 'Confirm Password', type: 'password', placeholder: 'Re-enter password',  autocomplete: 'new-password' },
+  { key: 'name',        label: 'Full Name',       type: 'text',     placeholder: 'Enter your full name',    autocomplete: 'name' },
+  { key: 'designation', label: 'Designation',     type: 'text',     placeholder: 'e.g. Junior Engineer',    autocomplete: 'organization-title' },
+  { key: 'hrms_id',     label: 'HRMS ID',         type: 'text',     placeholder: 'Your HRMS ID (username)', autocomplete: 'username' },
+  { key: 'pf_number',   label: 'PF Number',       type: 'text',     placeholder: 'Enter your PF number',    autocomplete: 'off' },
+  { key: 'email',       label: 'Email Address',   type: 'email',    placeholder: 'your@email.com',          autocomplete: 'email' },
+  { key: 'password',    label: 'Password',        type: 'password', placeholder: 'Min 8 characters',        autocomplete: 'new-password' },
+  { key: 'confirm',     label: 'Confirm Password',type: 'password', placeholder: 'Re-enter password',       autocomplete: 'new-password' },
 ]
 </script>
 

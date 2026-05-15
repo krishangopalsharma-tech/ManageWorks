@@ -39,6 +39,7 @@ const menuItems = ref([
     subItems: [
       { name: 'User Management', path: '/settings/user-management', adminOnly: true },
       { name: 'Site GSheet',     path: '/settings/site-gsheet',     adminOnly: true },
+      { name: 'SMTP Settings',   path: '/settings/smtp',            adminOnly: true },
     ],
   },
 ])

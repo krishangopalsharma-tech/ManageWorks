@@ -23,6 +23,7 @@ const detailUser    = ref(null)   // selected consignee
 const isEditing     = ref(false)
 const editDesig     = ref('')
 const editRole      = ref('')
+const editEmail     = ref('')
 const isSaving      = ref(false)
 const workSearch    = ref('')
 
@@ -76,6 +77,7 @@ function openDetail(u) {
   isEditing.value  = false
   editDesig.value  = u.designation
   editRole.value   = u.role
+  editEmail.value  = u.email || ''
   workSearch.value = ''
 }
 function closeDetail() {
@@ -88,6 +90,7 @@ function startEdit() {
 function cancelEdit() {
   editDesig.value = detailUser.value.designation
   editRole.value  = detailUser.value.role
+  editEmail.value = detailUser.value.email || ''
   isEditing.value = false
 }
 
@@ -98,10 +101,11 @@ async function saveUser() {
     await axios.patch(`${API}/update/${detailUser.value.id}/`, {
       designation: editDesig.value,
       role:        editRole.value,
+      email:       editEmail.value,
     }, { headers: h() })
     const u = approved.value.find(x => x.id === detailUser.value.id)
-    if (u) { u.designation = editDesig.value; u.role = editRole.value }
-    detailUser.value = { ...detailUser.value, designation: editDesig.value, role: editRole.value }
+    if (u) { u.designation = editDesig.value; u.role = editRole.value; u.email = editEmail.value }
+    detailUser.value = { ...detailUser.value, designation: editDesig.value, role: editRole.value, email: editEmail.value }
     isEditing.value  = false
     showToast('User updated.')
   } catch {
@@ -261,6 +265,13 @@ onMounted(loadData)
                     <option v-for="r in ROLES" :key="r" :value="r" class="bg-white text-gray-800 capitalize">{{ r }}</option>
                   </select>
                   <p v-else class="text-sm font-semibold text-gray-800 dark:text-white capitalize">{{ detailUser.role }}</p>
+                </div>
+                <div class="col-span-2 px-6 py-2 border-t border-gray-100 dark:border-[#3a3a3c] flex items-baseline gap-2">
+                  <p class="text-[9px] font-bold text-gray-400 uppercase tracking-widest shrink-0">Email</p>
+                  <input v-if="isEditing" v-model="editEmail" type="email"
+                    class="w-full bg-gray-50 dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c] rounded-lg px-3 py-1 text-sm font-medium text-gray-800 dark:text-white outline-none focus:border-[#1D5F5E] focus:ring-2 focus:ring-[#1D5F5E]/10 transition-all"
+                    placeholder="user@example.com">
+                  <p v-else class="text-sm font-semibold text-gray-800 dark:text-white">{{ detailUser.email || '—' }}</p>
                 </div>
               </div>
             </div>
@@ -431,8 +442,8 @@ onMounted(loadData)
                 <tr class="border-b border-gray-100">
                   <th class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-5 py-3">Name</th>
                   <th class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-5 py-3">HRMS ID</th>
+                  <th class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-5 py-3">Email</th>
                   <th class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-5 py-3">Designation</th>
-                  <th class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-5 py-3">PF No.</th>
                   <th class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-5 py-3">Role</th>
                   <th class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-5 py-3">Actions</th>
                 </tr>
@@ -451,8 +462,8 @@ onMounted(loadData)
                     </div>
                   </td>
                   <td class="px-5 py-3.5 text-gray-600 font-mono text-xs">{{ u.hrms_id }}</td>
+                  <td class="px-5 py-3.5 text-gray-600 text-xs">{{ u.email || '—' }}</td>
                   <td class="px-5 py-3.5 text-gray-600">{{ u.designation }}</td>
-                  <td class="px-5 py-3.5 text-gray-600 font-mono text-xs">{{ u.pf_number }}</td>
                   <td class="px-5 py-3.5">
                     <span class="text-[11px] font-bold px-2 py-0.5 rounded-full capitalize"
                       :class="ROLE_STYLE[u.role] || 'bg-gray-100 text-gray-600'">

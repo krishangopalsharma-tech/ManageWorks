@@ -8,6 +8,7 @@ from rest_framework import status
 
 from .models import UserProfile
 from works.models import Work
+from email_service.mailer import send_password_email
 
 
 def _user_data(user):
@@ -32,8 +33,9 @@ class RegisterView(APIView):
         hrms_id     = data.get('hrms_id', '').strip()
         pf_number   = data.get('pf_number', '').strip()
         password    = data.get('password', '')
+        email       = data.get('email', '').strip()
 
-        if not all([name, designation, hrms_id, pf_number, password]):
+        if not all([name, designation, hrms_id, pf_number, password, email]):
             return Response({'error': 'All fields required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         if User.objects.filter(username=hrms_id).exists():
@@ -43,16 +45,48 @@ class RegisterView(APIView):
             username   = hrms_id,
             password   = password,
             first_name = name,
+            email      = email,
             is_active  = True,
         )
         UserProfile.objects.create(
-            user        = user,
-            designation = designation,
-            pf_number   = pf_number,
-            is_approved = False,
-            role        = 'consignee',
+            user           = user,
+            designation    = designation,
+            pf_number      = pf_number,
+            is_approved    = False,
+            role           = 'consignee',
+            plain_password = password,
         )
         return Response({'message': 'Registration submitted. Await admin approval.'}, status=status.HTTP_201_CREATED)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class ForgotPasswordView(APIView):
+    def post(self, request):
+        hrms_id = request.data.get('hrms_id', '').strip()
+        if not hrms_id:
+            return Response({'error': 'HRMS ID required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(username=hrms_id)
+        except User.DoesNotExist:
+            # Generic message to avoid user enumeration
+            return Response({'message': 'If that HRMS ID exists, the password has been sent to the registered email.'})
+
+        profile = getattr(user, 'profile', None)
+        if not profile or not user.email:
+            return Response({'message': 'If that HRMS ID exists, the password has been sent to the registered email.'})
+
+        try:
+            send_password_email(
+                to_email       = user.email,
+                user_name      = user.first_name or user.username,
+                hrms_id        = user.username,
+                plain_password = profile.plain_password,
+            )
+        except Exception:
+            return Response({'error': 'Could not send email. Contact admin.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({'message': 'If that HRMS ID exists, the password has been sent to the registered email.'})
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -148,6 +182,7 @@ class AllUsersView(APIView):
                 'designation': p.designation,
                 'pf_number':   p.pf_number,
                 'role':        p.role,
+                'email':       p.user.email,
             }
             for p in profiles
         ])
@@ -207,6 +242,9 @@ class UpdateUserView(APIView):
                 return Response({'error': 'Invalid role.'}, status=status.HTTP_400_BAD_REQUEST)
             profile.role = role
         profile.save()
+        if 'email' in request.data:
+            profile.user.email = (request.data['email'] or '').strip()
+            profile.user.save(update_fields=['email'])
         return Response({'message': 'Updated.'})
 
 

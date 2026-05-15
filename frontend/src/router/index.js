@@ -7,16 +7,19 @@ import AddNewWork     from '../views/AddNewWork.vue'
 import UpdateWork     from '../views/UpdateWork.vue'
 import MBDetails      from '../views/MBDetails.vue'
 import Placeholder    from '../views/Placeholder.vue'
-import Login          from '../views/Login.vue'
-import Register       from '../views/Register.vue'
+import Login           from '../views/Login.vue'
+import Register        from '../views/Register.vue'
+import ForgotPassword  from '../views/ForgotPassword.vue'
 import UserManagement          from '../views/UserManagement.vue'
 import InstallationCertificate from '../views/InstallationCertificate.vue'
 import SiteRegister       from '../views/SiteRegister.vue'
 import SiteGSheetSettings from '../views/SiteGSheetSettings.vue'
+import SmtpSettings       from '../views/SmtpSettings.vue'
 
 const routes = [
-  { path: '/login',    name: 'Login',    component: Login,    meta: { public: true } },
-  { path: '/register', name: 'Register', component: Register, meta: { public: true } },
+  { path: '/login',            name: 'Login',           component: Login,          meta: { public: true } },
+  { path: '/register',         name: 'Register',        component: Register,       meta: { public: true } },
+  { path: '/forgot-password',  name: 'ForgotPassword',  component: ForgotPassword, meta: { public: true } },
 
   { path: '/',                         name: 'Dashboard',        component: Dashboard },
   { path: '/work-details',             name: 'Work Details',     component: WorkDetails },
@@ -27,6 +30,7 @@ const routes = [
   { path: '/site-register',               name: 'Site Register',            component: SiteRegister },
   { path: '/settings/user-management',    name: 'User Management',          component: UserManagement,          meta: { adminOnly: true } },
   { path: '/settings/site-gsheet',        name: 'Site GSheet',              component: SiteGSheetSettings,      meta: { adminOnly: true } },
+  { path: '/settings/smtp',               name: 'SMTP Settings',            component: SmtpSettings,            meta: { adminOnly: true } },
   { path: '/installation-certificate',   name: 'Installation Certificate', component: InstallationCertificate },
   { path: '/:pathMatch(.*)*',          name: 'Placeholder',      component: Placeholder },
 ]
