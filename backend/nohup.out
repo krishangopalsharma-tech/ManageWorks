@@ -534,3 +534,12 @@ Bad Request: /api/mb-details/records/
 [15/May/2026 06:24:30] "GET /api/item-progress/search/?q=Excavation+of+tre HTTP/1.1" 200 2
 [15/May/2026 06:24:31] "GET /api/item-progress/search/?q=Excavation+of+trench HTTP/1.1" 200 2
 [15/May/2026 06:24:35] "GET /api/item-progress/search/?q=Excavation HTTP/1.1" 200 1443
+Unauthorized: /api/auth/me/
+[15/May/2026 07:11:48] "GET /api/auth/me/ HTTP/1.0" 401 23
+[15/May/2026 07:12:00] "POST /api/auth/login/ HTTP/1.0" 200 153
+[15/May/2026 07:12:00] "GET /api/dashboard/trend/?period=monthly HTTP/1.0" 200 540
+[15/May/2026 07:12:00] "GET /api/dashboard/ HTTP/1.0" 200 212
+[15/May/2026 07:17:53] "GET /api/dashboard/trend/?period=monthly&loa_ids=17 HTTP/1.0" 200 540
+[15/May/2026 07:17:53] "GET /api/dashboard/?loa_ids=17 HTTP/1.0" 200 212
+[15/May/2026 07:17:56] "GET /api/dashboard/trend/?period=monthly HTTP/1.0" 200 540
+[15/May/2026 07:17:56] "GET /api/dashboard/ HTTP/1.0" 200 212
