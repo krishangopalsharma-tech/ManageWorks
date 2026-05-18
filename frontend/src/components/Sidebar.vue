@@ -40,6 +40,9 @@ const menuItems = ref([
       { name: 'User Management', path: '/settings/user-management', adminOnly: true },
       { name: 'Site GSheet',     path: '/settings/site-gsheet',     adminOnly: true },
       { name: 'SMTP Settings',   path: '/settings/smtp',            adminOnly: true },
+      { name: 'Telegram Bot',    path: '/settings/telegram',               adminOnly: true },
+      { name: 'LOA Parties',   path: '/settings/site-register-parties', adminOnly: true },
+      { name: 'Link Telegram', path: '/settings/telegram-link' },
     ],
   },
 ])

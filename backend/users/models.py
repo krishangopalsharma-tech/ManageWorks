@@ -3,7 +3,12 @@ from django.contrib.auth.models import User
 
 
 class UserProfile(models.Model):
-    ROLE_CHOICES = [('consignee', 'Consignee'), ('admin', 'Admin')]
+    ROLE_CHOICES = [
+        ('consignee', 'Consignee'),
+        ('admin', 'Admin'),
+        ('sse', 'SSE'),
+        ('contractor', 'Contractor'),
+    ]
 
     user           = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     designation    = models.CharField(max_length=150)

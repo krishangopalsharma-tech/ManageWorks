@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     'installation_cert',
     'site_gsheet_settings',
     'site_register',
+    'telegram_settings',
     'email_service',
     'smtp_settings',
 ]

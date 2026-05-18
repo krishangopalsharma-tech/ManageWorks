@@ -14,7 +14,10 @@ import UserManagement          from '../views/UserManagement.vue'
 import InstallationCertificate from '../views/InstallationCertificate.vue'
 import SiteRegister       from '../views/SiteRegister.vue'
 import SiteGSheetSettings from '../views/SiteGSheetSettings.vue'
-import SmtpSettings       from '../views/SmtpSettings.vue'
+import SmtpSettings        from '../views/SmtpSettings.vue'
+import TelegramSettings    from '../views/TelegramSettings.vue'
+import TelegramLink           from '../views/TelegramLink.vue'
+import SiteRegisterParties   from '../views/SiteRegisterParties.vue'
 
 const routes = [
   { path: '/login',            name: 'Login',           component: Login,          meta: { public: true } },
@@ -31,6 +34,9 @@ const routes = [
   { path: '/settings/user-management',    name: 'User Management',          component: UserManagement,          meta: { adminOnly: true } },
   { path: '/settings/site-gsheet',        name: 'Site GSheet',              component: SiteGSheetSettings,      meta: { adminOnly: true } },
   { path: '/settings/smtp',               name: 'SMTP Settings',            component: SmtpSettings,            meta: { adminOnly: true } },
+  { path: '/settings/telegram',           name: 'Telegram Settings',        component: TelegramSettings,        meta: { adminOnly: true } },
+  { path: '/settings/telegram-link',          name: 'Link Telegram',            component: TelegramLink },
+  { path: '/settings/site-register-parties', name: 'LOA Parties',              component: SiteRegisterParties, meta: { adminOnly: true } },
   { path: '/installation-certificate',   name: 'Installation Certificate', component: InstallationCertificate },
   { path: '/:pathMatch(.*)*',          name: 'Placeholder',      component: Placeholder },
 ]

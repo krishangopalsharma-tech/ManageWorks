@@ -13,14 +13,16 @@ from email_service.mailer import send_password_email
 
 def _user_data(user):
     profile = getattr(user, 'profile', None)
+    tg_link = getattr(user, 'telegram_link', None)
     return {
-        'id':          user.id,
-        'hrms_id':     user.username,
-        'name':        user.first_name,
-        'designation': profile.designation if profile else '',
-        'pf_number':   profile.pf_number   if profile else '',
-        'role':        profile.role         if profile else ('admin' if user.is_staff else 'consignee'),
-        'is_approved': profile.is_approved  if profile else user.is_staff,
+        'id':              user.id,
+        'hrms_id':         user.username,
+        'name':            user.first_name,
+        'designation':     profile.designation if profile else '',
+        'pf_number':       profile.pf_number   if profile else '',
+        'role':            profile.role         if profile else ('admin' if user.is_staff else 'consignee'),
+        'is_approved':     profile.is_approved  if profile else user.is_staff,
+        'telegram_linked': bool(tg_link and tg_link.is_verified),
     }
 
 
@@ -173,16 +175,20 @@ class AllUsersView(APIView):
     def get(self, request):
         if not _is_admin(request.user):
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
-        profiles = UserProfile.objects.filter(is_approved=True).select_related('user')
+        profiles = UserProfile.objects.filter(is_approved=True).select_related('user', 'user__telegram_link')
         return Response([
             {
-                'id':          p.user.id,
-                'hrms_id':     p.user.username,
-                'name':        p.user.first_name,
-                'designation': p.designation,
-                'pf_number':   p.pf_number,
-                'role':        p.role,
-                'email':       p.user.email,
+                'id':              p.user.id,
+                'hrms_id':         p.user.username,
+                'name':            p.user.first_name,
+                'designation':     p.designation,
+                'pf_number':       p.pf_number,
+                'role':            p.role,
+                'email':           p.user.email,
+                'telegram_linked': bool(
+                    getattr(p.user, 'telegram_link', None) and
+                    p.user.telegram_link.is_verified
+                ),
             }
             for p in profiles
         ])
@@ -193,7 +199,7 @@ class UpdateRoleView(APIView):
         if not _is_admin(request.user):
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
         role = request.data.get('role', '').strip()
-        if role not in ('consignee', 'admin'):
+        if role not in ('consignee', 'admin', 'sse', 'contractor'):
             return Response({'error': 'Invalid role.'}, status=status.HTTP_400_BAD_REQUEST)
         try:
             profile = UserProfile.objects.get(user_id=user_id)

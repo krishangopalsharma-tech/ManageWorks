@@ -4,10 +4,12 @@ import axios from 'axios'
 
 const API = '/api/auth'
 
-const ROLES = ['consignee', 'admin']
+const ROLES = ['consignee', 'admin', 'sse', 'contractor']
 const ROLE_STYLE = {
-  consignee: 'bg-amber-100 text-amber-700',
-  admin:     'bg-purple-100 text-purple-700',
+  consignee:  'bg-amber-100 text-amber-700',
+  admin:      'bg-purple-100 text-purple-700',
+  sse:        'bg-blue-100 text-blue-700',
+  contractor: 'bg-green-100 text-green-700',
 }
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -169,6 +171,18 @@ async function unassignWork(work) {
   }
 }
 
+// ── Telegram link (admin view of a user's link status) ────────────────────
+const tgOtp       = ref(null)   // OTP code string or null
+const tgLinked    = ref(false)  // whether user has linked Telegram
+const tgLoading   = ref(false)
+
+async function loadTelegramStatus(userId) {
+  // Admin cannot fetch another user's OTP via the current endpoint (self-only).
+  // We only show the "linked" badge here; OTP generation is user's own action.
+  tgOtp.value    = null
+  tgLinked.value = false
+}
+
 // ── Toast ─────────────────────────────────────────────────────────────────
 function showToast(msg, type = 'success') {
   toast.value = { show: true, msg, type }
@@ -272,6 +286,14 @@ onMounted(loadData)
                     class="w-full bg-gray-50 dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c] rounded-lg px-3 py-1 text-sm font-medium text-gray-800 dark:text-white outline-none focus:border-[#1D5F5E] focus:ring-2 focus:ring-[#1D5F5E]/10 transition-all"
                     placeholder="user@example.com">
                   <p v-else class="text-sm font-semibold text-gray-800 dark:text-white">{{ detailUser.email || '—' }}</p>
+                </div>
+                <div class="col-span-2 px-6 py-2 border-t border-gray-100 dark:border-[#3a3a3c] flex items-center gap-2">
+                  <p class="text-[9px] font-bold text-gray-400 uppercase tracking-widest shrink-0">Telegram</p>
+                  <span v-if="detailUser.telegram_linked"
+                    class="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                    <div class="i-carbon-checkmark text-xs"></div> Linked
+                  </span>
+                  <span v-else class="text-[11px] text-gray-400">Not linked — user must connect from their profile</span>
                 </div>
               </div>
             </div>
