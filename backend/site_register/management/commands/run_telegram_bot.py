@@ -6,18 +6,22 @@ Long-polls Telegram getUpdates and routes messages through conversation flows.
 States
 ------
 idle
-rly_select_loa
-rly_select_category
-rly_select_item
-rly_type_text          ← also accepts photo/document; /done to finish
-rly_confirm
+rly_loa_search          ← type last-5 digits of LOA or contractor nickname
+rly_loa_list            ← select from matched LOA list
+rly_loa_confirm         ← show LOA details (tender + brief name), YES/NO
+rly_choose_type         ← ITEM or GENERAL instruction
+rly_item_input          ← type item ref e.g. A-12 or A1-14
+rly_item_confirm        ← show item description, YES/NO
+rly_type_text           ← type instruction text; also accepts photo/document; /done to finish
+rly_confirm             ← review + confirm send
 ss_select_thread
 ss_thread_action
-ss_type_reply          ← also accepts photo/document; /done to finish
+ss_type_reply           ← also accepts photo/document; /done to finish
 ss_confirm_reply
 """
 
 import logging
+import re
 import time
 
 import requests
@@ -47,18 +51,16 @@ ONBOARD_RLY_INVITE_STATES = {
     'rly_invite_name', 'rly_invite_desig', 'rly_invite_mobile',
 }
 
-CATEGORIES = [
-    ('order',               '📋 Rly Official Order'),
-    ('progress',            '📈 Progress Update'),
-    ('hindrance',           '🚧 Hindrance'),
-    ('inspection_request',  '🔍 Inspection Request'),
-    ('document_submission', '📎 Document Submission'),
-    ('general_remark',      '💬 General Remark'),
-]
-ITEM_CATEGORIES    = {'order', 'progress', 'hindrance', 'inspection_request'}
-CATEGORY_LABELS    = dict(CATEGORIES)
-REMOVE_KEYBOARD    = {"remove_keyboard": True}
-TEXT_INPUT_STATES  = {'rly_type_text', 'ss_type_reply'}
+CATEGORY_LABELS = {
+    'order':               '📋 Rly Official Order',
+    'progress':            '📈 Progress Update',
+    'hindrance':           '🚧 Hindrance',
+    'inspection_request':  '🔍 Inspection Request',
+    'document_submission': '📎 Document Submission',
+    'general_remark':      '💬 General Remark',
+}
+REMOVE_KEYBOARD   = {"remove_keyboard": True}
+TEXT_INPUT_STATES = {'rly_type_text', 'ss_type_reply'}
 
 
 # ── Telegram API helpers ─────────────────────────────────────────────────────
@@ -121,7 +123,6 @@ def extract_attachment(message: dict) -> dict | None:
     message_id = message["message_id"]
 
     if message.get("photo"):
-        # Telegram sends multiple sizes; last is largest
         largest = message["photo"][-1]
         return {
             "tg_file_id":        largest["file_id"],
@@ -174,7 +175,6 @@ def resolve_user(tg_user_id: int):
       'rly_official'   — SSE, consignee, or any rly delegate (sees all LOAs)
       'site_supervisor'— contractor supervisor (sees only mapped LOAs)
     """
-    # 1. Check TelegramUserLink (self-linked via OTP, and contractor ghost tg_ users)
     try:
         link = TelegramUserLink.objects.select_related(
             'user', 'user__profile'
@@ -182,27 +182,23 @@ def resolve_user(tg_user_id: int):
         user    = link.user
         profile = getattr(user, 'profile', None)
 
-        # Contractor ghost users (tg_ prefix) = site supervisor
         if user.username.startswith('tg_'):
             has_active = WorkContractorTelegram.objects.filter(
                 telegram_link=link, is_active=True).exists()
             role = 'site_supervisor' if has_active else 'observer'
             return user, role
 
-        # System users — map profile role
         if user.is_staff:
             return user, 'admin'
         if profile:
             if profile.role == 'admin':
                 return user, 'admin'
-            # sse / consignee / contractor-firm → treat as rly_official in bot
             return user, 'rly_official'
         return user, 'rly_official'
 
     except TelegramUserLink.DoesNotExist:
         pass
 
-    # 2. Check RlyTelegramLink (delegate railway officials added via invite)
     try:
         rly_link = RlyTelegramLink.objects.select_related(
             'system_user', 'ghost_user'
@@ -219,9 +215,9 @@ def _time_ago(dt) -> str:
     now   = timezone.now()
     delta = now - dt
     secs  = int(delta.total_seconds())
-    if secs < 60:   return "just now"
-    if secs < 3600: return f"{secs // 60}m ago"
-    if secs < 86400:return f"{secs // 3600}h ago"
+    if secs < 60:    return "just now"
+    if secs < 3600:  return f"{secs // 60}m ago"
+    if secs < 86400: return f"{secs // 3600}h ago"
     return f"{delta.days}d ago"
 
 
@@ -230,13 +226,8 @@ def _time_ago(dt) -> str:
 def _save_attachments(token: str, upload_chat_id: str,
                       message_obj: SiteRegisterMessage,
                       attachments: list[dict]):
-    """
-    Forward each pending attachment to archive group and create DB records.
-    attachments = list of dicts from extract_attachment() stored in session context.
-    """
     if not upload_chat_id or not attachments:
         return
-
     for att in attachments:
         archive_msg_id = copy_message(
             token,
@@ -254,90 +245,249 @@ def _save_attachments(token: str, upload_chat_id: str,
         )
 
 
+# ── LOA / contractor helpers ──────────────────────────────────────────────────
+
+def _contractor_nickname(name: str) -> str:
+    """First letter of each word → 'MAHESHWARI COMPUTERS PVT. LTD' → 'MCPL'."""
+    words = re.split(r'[\s.,&()/\-]+', name)
+    return ''.join(w[0].upper() for w in words if w and w[0].isalpha())
+
+
+def _work_brief_name(name_of_work: str, max_len: int = 80) -> str:
+    if not name_of_work:
+        return '—'
+    s = name_of_work.strip()
+    return (s[:max_len] + '…') if len(s) > max_len else s
+
+
+def _parse_item_ref(text: str):
+    """'A-12', 'A - 12', 'A1-14' → (schedule_upper, serial_str) or (None, None)."""
+    m = re.match(r'^([A-Za-z][A-Za-z0-9]*)\s*-\s*(\d+)$', text.strip())
+    if not m:
+        return None, None
+    return m.group(1).upper(), m.group(2)
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # RLY OFFICIAL FLOW
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def rly_works_page(page: int):
-    """All LOAs — railway officials see everything."""
-    from works.models import Work
-    all_works = list(Work.objects.order_by('loa_number'))
-    start = page * PAGE_SIZE
-    end   = start + PAGE_SIZE
-    return all_works[start:end], len(all_works), len(all_works) > end
-
-
 def _display_name(user) -> str:
-    """Safe display name — works for real users, ghost users, and None."""
     if user is None:
         return 'Unknown'
     return user.first_name or user.username
 
 
-def show_loa_list(token: str, session: BotSession, user, page: int = 0):
-    works, total, has_next = rly_works_page(page)
-    if not works:
-        send(token, session.telegram_chat_id,
-             "⚠️ No LOAs found in the system.",
-             remove_kb=True)
-        reset_session(session)
+def show_loa_search(token: str, session: BotSession):
+    """Entry point for rly official — prompt to find LOA."""
+    session.state   = "rly_loa_search"
+    session.context = {}
+    session.save(update_fields=["state", "context", "updated_at"])
+    send(token, session.telegram_chat_id,
+         "📋 <b>New Entry — Find LOA</b>\n\n"
+         "Type one of:\n"
+         "• <b>Last 5 digits</b> of LOA number (e.g. <code>12345</code>)\n"
+         "• <b>Contractor nickname</b> — first letter of each word\n"
+         "  e.g. <code>MCPL</code> for MAHESHWARI COMPUTERS PVT. LTD\n"
+         "  e.g. <code>GAEC</code> for GENERAL AUTO ELECTRIC CORPORATION\n\n"
+         "Send <b>❌ Cancel</b> to exit.",
+         remove_kb=True)
+
+
+def _show_loa_list(token: str, session: BotSession, works: list):
+    """Show a numbered list of LOAs for the user to pick."""
+    lines = [f"<b>Select LOA</b> ({len(works)} found):\n"]
+    for i, w in enumerate(works, 1):
+        brief = _work_brief_name(w.name_of_work, 50)
+        lines.append(f"{i}. <b>{w.loa_number}</b> — {w.contractor_name or '—'}\n   {brief}\n")
+    session.context["loa_choices"] = [w.id for w in works]
+    session.state = "rly_loa_list"
+    session.save(update_fields=["state", "context", "updated_at"])
+    send(token, session.telegram_chat_id, "\n".join(lines),
+         keyboard=number_keyboard(len(works), extras=["◀ Back", "❌ Cancel"]))
+
+
+def _set_loa_and_confirm(token: str, session: BotSession, work):
+    """Store selected work in context and show LOA confirm prompt."""
+    brief = _work_brief_name(work.name_of_work)
+    session.context.update({
+        "work_id":         work.id,
+        "loa_number":      work.loa_number,
+        "tender_number":   work.tender_number or '—',
+        "contractor_name": work.contractor_name or '—',
+        "work_brief_name": brief,
+        "category":        "order",
+        "category_label":  "📋 Rly Official Order",
+    })
+    session.state = "rly_loa_confirm"
+    session.save(update_fields=["state", "context", "updated_at"])
+    send(token, session.telegram_chat_id,
+         f"📋 <b>LOA Details</b>\n\n"
+         f"<b>LOA No:</b> {work.loa_number}\n"
+         f"<b>Tender No:</b> {work.tender_number or '—'}\n"
+         f"<b>Contractor:</b> {work.contractor_name or '—'}\n"
+         f"<b>Work:</b> {brief}\n\n"
+         "Is this the correct LOA?",
+         keyboard=[["✅ Yes"], ["❌ No — search again"]])
+
+
+def handle_rly_loa_search(token: str, session: BotSession, text: str):
+    from works.models import Work
+    t = text.strip()
+
+    if t.isdigit():
+        matches = list(Work.objects.filter(loa_number__endswith=t).order_by('loa_number'))
+        if not matches:
+            send(token, session.telegram_chat_id,
+                 f"⚠️ No LOA ending in <code>{t}</code> found.\n"
+                 "Try again or type contractor nickname.")
+            return
+        if len(matches) == 1:
+            _set_loa_and_confirm(token, session, matches[0])
+            return
+        _show_loa_list(token, session, matches)
         return
 
-    lines = [f"<b>📋 New Entry</b> (page {page+1}) — Select LOA:\n"]
-    for i, w in enumerate(works, 1):
-        lines.append(f"{i}. {w.loa_number} — {w.contractor_name or '—'}")
+    if t.isalpha():
+        nickname  = t.upper()
+        all_works = list(Work.objects.order_by('contractor_name', 'loa_number'))
+        matched   = [w for w in all_works
+                     if _contractor_nickname(w.contractor_name or '') == nickname]
+        if not matched:
+            send(token, session.telegram_chat_id,
+                 f"⚠️ No contractor with nickname <code>{nickname}</code> found.\n"
+                 "Try again with a different nickname or type last 5 digits of LOA.")
+            return
+        _show_loa_list(token, session, matched)
+        return
 
-    extras = []
-    if has_next: extras.append("Next ▶")
-    if page > 0: extras.append("◀ Prev")
-    extras.append("❌ Cancel")
+    send(token, session.telegram_chat_id,
+         "⚠️ Type <b>digits only</b> for LOA suffix or <b>letters only</b> for nickname.")
 
-    session.context = {"loa_page": page, "loa_choices": [w.id for w in works]}
-    session.state   = "rly_select_loa"
+
+def handle_rly_loa_list(token: str, session: BotSession, text: str):
+    if text == "◀ Back":
+        show_loa_search(token, session)
+        return
+    try:
+        idx = int(text.strip()) - 1
+    except ValueError:
+        send(token, session.telegram_chat_id, "⚠️ Send the LOA number.")
+        return
+    choices = session.context.get("loa_choices", [])
+    if not (0 <= idx < len(choices)):
+        send(token, session.telegram_chat_id, f"⚠️ Enter 1–{len(choices)}.")
+        return
+    from works.models import Work
+    work = Work.objects.get(pk=choices[idx])
+    _set_loa_and_confirm(token, session, work)
+
+
+def handle_rly_loa_confirm(token: str, session: BotSession, text: str):
+    t = text.strip().upper()
+    if "YES" in t or t == "✅ YES":
+        show_instruction_type(token, session)
+    elif "NO" in t:
+        show_loa_search(token, session)
+    else:
+        send(token, session.telegram_chat_id, "⚠️ Reply Yes or No.")
+
+
+def show_instruction_type(token: str, session: BotSession):
+    ctx = session.context
+    session.state = "rly_choose_type"
+    session.save(update_fields=["state", "updated_at"])
+    send(token, session.telegram_chat_id,
+         f"<b>LOA:</b> {ctx['loa_number']}\n"
+         f"<b>Contractor:</b> {ctx['contractor_name']}\n\n"
+         "Select instruction type:",
+         keyboard=[["1. 📦 Item-wise"], ["2. 📋 General"], ["❌ Cancel"]])
+
+
+def handle_rly_choose_type(token: str, session: BotSession, text: str):
+    t = text.strip()
+    if t.startswith("1") or "item" in t.lower():
+        session.state = "rly_item_input"
+        session.save(update_fields=["state", "updated_at"])
+        send(token, session.telegram_chat_id,
+             "📦 <b>Item-wise Instruction</b>\n\n"
+             "Type the item reference:\n"
+             "• <code>A-12</code>  → Schedule A, Item 12\n"
+             "• <code>A1-14</code> → Schedule A1, Item 14",
+             remove_kb=True)
+    elif t.startswith("2") or "general" in t.lower():
+        session.context["instruction_type"] = "general"
+        session.context.pop("work_item_id", None)
+        session.context.pop("work_item_desc", None)
+        session.save(update_fields=["context", "updated_at"])
+        show_text_prompt(token, session)
+    else:
+        send(token, session.telegram_chat_id, "⚠️ Send 1 for Item-wise or 2 for General.")
+
+
+def handle_rly_item_input(token: str, session: BotSession, text: str):
+    schedule, serial = _parse_item_ref(text)
+    if not schedule:
+        send(token, session.telegram_chat_id,
+             "⚠️ Invalid format.\nUse <code>A-12</code> or <code>A1-14</code>.")
+        return
+    candidates = list(WorkItem.objects.filter(
+        work_id=session.context["work_id"],
+        schedule__iexact=schedule,
+    ))
+    item = None
+    for it in candidates:
+        if (it.serial_number or '').strip() == serial:
+            item = it
+            break
+    if not item:
+        send(token, session.telegram_chat_id,
+             f"⚠️ Item <code>{text.strip()}</code> not found in this LOA.\nTry again.")
+        return
+
+    desc       = (item.item_desc or '').strip()
+    brief_desc = desc[:120] + ('…' if len(desc) > 120 else '')
+    full_ref   = f"{item.schedule}-{item.serial_number}"
+
+    session.context.update({
+        "work_item_id":   item.id,
+        "work_item_ref":  full_ref,
+        "work_item_desc": f"{full_ref} — {brief_desc}",
+        "instruction_type": "item",
+    })
+    session.state = "rly_item_confirm"
     session.save(update_fields=["state", "context", "updated_at"])
-    send(token, session.telegram_chat_id, "\n".join(lines),
-         keyboard=number_keyboard(len(works), extras=extras))
+    send(token, session.telegram_chat_id,
+         f"📦 <b>Item Found:</b>\n\n"
+         f"<b>Schedule:</b> {item.schedule}\n"
+         f"<b>Item No:</b> {item.serial_number}\n"
+         f"<b>Description:</b> {brief_desc}\n\n"
+         "Is this the correct item?",
+         keyboard=[["✅ Yes"], ["❌ No — re-enter"]])
 
 
-def show_categories(token: str, session: BotSession):
-    lines = ["<b>Select entry type:</b>\n"]
-    for i, (_, label) in enumerate(CATEGORIES, 1):
-        lines.append(f"{i}. {label}")
-    send(token, session.telegram_chat_id, "\n".join(lines),
-         keyboard=number_keyboard(len(CATEGORIES), extras=["❌ Cancel"]))
-
-
-def show_items(token: str, session: BotSession, work_id: int, page: int = 0):
-    items      = list(WorkItem.objects.filter(work_id=work_id).order_by('schedule', 'serial_number'))
-    start      = page * PAGE_SIZE
-    end        = start + PAGE_SIZE
-    page_items = items[start:end]
-    has_next   = len(items) > end
-
-    lines = [f"<b>Select work item</b> (page {page+1}):\n0. ⏭ Skip\n"]
-    for i, item in enumerate(page_items, 1):
-        desc = (item.item_desc or '').strip()[:50]
-        lines.append(f"{i}. {item.schedule}/{item.serial_number} — {desc}")
-
-    extras = ["0"]
-    if has_next: extras.append("Next ▶")
-    if page > 0: extras.append("◀ Prev")
-    extras.append("❌ Cancel")
-
-    session.context.update({"item_page": page, "item_choices": [item.id for item in page_items]})
-    session.state = "rly_select_item"
-    session.save(update_fields=["state", "context", "updated_at"])
-    send(token, session.telegram_chat_id, "\n".join(lines),
-         keyboard=number_keyboard(len(page_items), extras=extras))
+def handle_rly_item_confirm(token: str, session: BotSession, text: str):
+    t = text.strip().upper()
+    if "YES" in t:
+        show_text_prompt(token, session)
+    elif "NO" in t:
+        session.state = "rly_item_input"
+        session.save(update_fields=["state", "updated_at"])
+        send(token, session.telegram_chat_id,
+             "Type the item reference again (e.g. <code>A-12</code>):",
+             remove_kb=True)
+    else:
+        send(token, session.telegram_chat_id, "⚠️ Reply Yes or No.")
 
 
 def show_text_prompt(token: str, session: BotSession):
-    ctx       = session.context
-    item_line = f"\n<b>Item:</b> {ctx['work_item_desc']}" if ctx.get('work_item_id') else ""
+    ctx        = session.context
+    instr_type = "Item-wise" if ctx.get("work_item_id") else "General"
+    item_line  = f"\n<b>Item:</b> {ctx['work_item_desc']}" if ctx.get("work_item_id") else ""
     send(token, session.telegram_chat_id,
          f"<b>LOA:</b> {ctx['loa_number']}\n"
-         f"<b>Type:</b> {ctx['category_label']}{item_line}\n\n"
-         "✏️ <b>Type your message</b> (you can also send photos/documents).\n"
+         f"<b>Type:</b> {instr_type} Instruction{item_line}\n\n"
+         "✏️ <b>Type your instruction</b> (you can also send photos/documents).\n"
          "Send <code>/done</code> after attachments to finish without text.",
          remove_kb=True)
     session.state = "rly_type_text"
@@ -350,13 +500,15 @@ def _att_line(ctx: dict) -> str:
 
 
 def show_rly_confirm(token: str, session: BotSession):
-    ctx       = session.context
-    item_line = f"\n<b>Item:</b> {ctx['work_item_desc']}" if ctx.get('work_item_id') else ""
+    ctx        = session.context
+    instr_type = "Item-wise" if ctx.get("work_item_id") else "General"
+    item_line  = f"\n<b>Item:</b> {ctx['work_item_desc']}" if ctx.get("work_item_id") else ""
     send(token, session.telegram_chat_id,
-         "📋 <b>Review your entry:</b>\n\n"
+         "📋 <b>Review your instruction:</b>\n\n"
          f"<b>LOA:</b> {ctx['loa_number']}\n"
+         f"<b>Tender No:</b> {ctx.get('tender_number', '—')}\n"
          f"<b>Contractor:</b> {ctx['contractor_name']}\n"
-         f"<b>Type:</b> {ctx['category_label']}{item_line}\n"
+         f"<b>Type:</b> {instr_type} Instruction{item_line}\n"
          f"<b>Message:</b>\n{ctx.get('text', '—')}"
          f"{_att_line(ctx)}\n\n"
          "Send this to the site supervisor?",
@@ -378,7 +530,6 @@ def do_create_thread(token: str, upload_chat_id: str, session: BotSession, user)
             status            = 'open',
             created_by        = user,
         )
-        # Create initial message so attachments have a FK target
         attachments = ctx.get("attachments", [])
         if attachments:
             msg = SiteRegisterMessage.objects.create(
@@ -389,21 +540,23 @@ def do_create_thread(token: str, upload_chat_id: str, session: BotSession, user)
             )
             _save_attachments(token, upload_chat_id, msg, attachments)
 
-    # Notify site supervisors
+    instr_type = "Item-wise" if ctx.get('work_item_id') else "General"
+    item_line  = f"\n📦 <b>Item:</b> {ctx['work_item_desc']}" if ctx.get('work_item_id') else ""
+    att_note   = f"\n📎 {len(attachments)} attachment(s) included." if attachments else ""
+    notify_text = (
+        f"📋 <b>New Rly Official Instruction — SR-{thread.pk:06d}</b>\n\n"
+        f"<b>LOA:</b> {ctx['loa_number']}\n"
+        f"<b>Tender No:</b> {ctx.get('tender_number', '—')}\n"
+        f"<b>Type:</b> {instr_type}{item_line}\n\n"
+        f"{ctx.get('text', '')}{att_note}\n\n"
+        f"— <i>{_display_name(user)}</i>\n\n"
+        "Reply via bot menu."
+    )
+
     ss_links = (
         WorkContractorTelegram.objects
         .filter(work_id=ctx['work_id'], role='site_supervisor', is_active=True)
         .select_related('telegram_link')
-    )
-    item_line  = f"\n📦 <b>Item:</b> {ctx['work_item_desc']}" if ctx.get('work_item_id') else ""
-    att_note   = f"\n📎 {len(attachments)} attachment(s) included." if attachments else ""
-    notify_text = (
-        f"📋 <b>New Rly Official Entry — SR-{thread.pk:06d}</b>\n\n"
-        f"<b>LOA:</b> {ctx['loa_number']}\n"
-        f"<b>Type:</b> {ctx['category_label']}{item_line}\n\n"
-        f"{ctx.get('text', '')}{att_note}\n\n"
-        f"— <i>{_display_name(user)}</i>\n\n"
-        "Reply via bot menu."
     )
     notified = 0
     for m in ss_links:
@@ -417,80 +570,12 @@ def do_create_thread(token: str, upload_chat_id: str, session: BotSession, user)
     reset_session(session)
 
 
-# ── Rly Official state handlers ───────────────────────────────────────────────
-
-def handle_rly_select_loa(token: str, session: BotSession, user, text: str):
-    ctx = session.context
-    if text == "Next ▶":
-        show_loa_list(token, session, user, page=ctx.get("loa_page", 0) + 1); return
-    if text == "◀ Prev":
-        show_loa_list(token, session, user, page=max(0, ctx.get("loa_page", 0) - 1)); return
-    try:
-        idx = int(text.strip()) - 1
-    except ValueError:
-        send(token, session.telegram_chat_id, "⚠️ Send the LOA number."); return
-    choices = ctx.get("loa_choices", [])
-    if not (0 <= idx < len(choices)):
-        send(token, session.telegram_chat_id, f"⚠️ Enter 1–{len(choices)}."); return
-
-    from works.models import Work
-    work = Work.objects.get(pk=choices[idx])
-    session.context.update({
-        "work_id": work.id, "loa_number": work.loa_number,
-        "contractor_name": work.contractor_name or "—",
-    })
-    session.state = "rly_select_category"
-    session.save(update_fields=["state", "context", "updated_at"])
-    show_categories(token, session)
-
-
-def handle_rly_select_category(token: str, session: BotSession, text: str):
-    try:
-        idx = int(text.strip()) - 1
-    except ValueError:
-        send(token, session.telegram_chat_id, "⚠️ Send the category number."); return
-    if not (0 <= idx < len(CATEGORIES)):
-        send(token, session.telegram_chat_id, f"⚠️ Enter 1–{len(CATEGORIES)}."); return
-    cat_key, cat_label = CATEGORIES[idx]
-    session.context.update({"category": cat_key, "category_label": cat_label})
-    session.save(update_fields=["context", "updated_at"])
-    if cat_key in ITEM_CATEGORIES:
-        show_items(token, session, session.context["work_id"], page=0)
-    else:
-        show_text_prompt(token, session)
-
-
-def handle_rly_select_item(token: str, session: BotSession, text: str):
-    ctx = session.context
-    if text == "Next ▶":
-        show_items(token, session, ctx["work_id"], page=ctx.get("item_page", 0) + 1); return
-    if text == "◀ Prev":
-        show_items(token, session, ctx["work_id"], page=max(0, ctx.get("item_page", 0) - 1)); return
-    if text.strip() == "0":
-        session.context.pop("work_item_id", None)
-        session.context.pop("work_item_desc", None)
-        session.save(update_fields=["context", "updated_at"])
-        show_text_prompt(token, session); return
-    try:
-        idx = int(text.strip()) - 1
-    except ValueError:
-        send(token, session.telegram_chat_id, "⚠️ Send item number or 0 to skip."); return
-    choices = ctx.get("item_choices", [])
-    if not (0 <= idx < len(choices)):
-        send(token, session.telegram_chat_id, f"⚠️ Enter 1–{len(choices)} or 0."); return
-    item = WorkItem.objects.get(pk=choices[idx])
-    desc = f"{item.schedule}/{item.serial_number} — {(item.item_desc or '').strip()[:60]}"
-    session.context.update({"work_item_id": item.id, "work_item_desc": desc})
-    session.save(update_fields=["context", "updated_at"])
-    show_text_prompt(token, session)
-
-
 def handle_rly_type_text(token: str, session: BotSession,
                          text: str | None, attachment: dict | None):
     if attachment:
-        atts = session.context.setdefault("attachments", [])
+        atts    = session.context.setdefault("attachments", [])
         atts.append(attachment)
-        n = len(atts)
+        n       = len(atts)
         caption = text or ""
         if caption:
             session.context["text"] = caption
@@ -498,16 +583,15 @@ def handle_rly_type_text(token: str, session: BotSession,
         send(token, session.telegram_chat_id,
              f"📎 Attachment {n} saved."
              + (f" Caption: <i>{caption[:60]}</i>" if caption else "")
-             + "\n\nSend more files, type your message, or <code>/done</code> to continue.")
+             + "\n\nSend more files, type your instruction, or <code>/done</code> to continue.")
         return
 
-    # Text (or /done with no text yet)
     if text:
         session.context["text"] = text
         session.save(update_fields=["context", "updated_at"])
     elif not session.context.get("text") and not session.context.get("attachments"):
         send(token, session.telegram_chat_id,
-             "⚠️ Send your message text or at least one attachment first.")
+             "⚠️ Send your instruction text or at least one attachment first.")
         return
 
     show_rly_confirm(token, session)
@@ -679,7 +763,7 @@ def do_send_reply(token: str, upload_chat_id: str, session: BotSession, user):
         f"— <i>{_display_name(user)}</i>"
     )
     notified = 0
-    chat_id = _creator_chat_id(thread.created_by)
+    chat_id  = _creator_chat_id(thread.created_by)
     if chat_id:
         send(token, chat_id, notify_text)
         notified = 1
@@ -750,12 +834,12 @@ def handle_ss_thread_action(token: str, session: BotSession, user, text: str):
     if t.startswith("1"):   show_ss_reply_prompt(token, session)
     elif t.startswith("2"): do_mark_resolved(token, session, user)
     elif t.startswith("3"): show_ss_threads(token, session, user,
-                                                     page=session.context.get("thread_page", 0))
+                                             page=session.context.get("thread_page", 0))
     else: send(token, session.telegram_chat_id, "⚠️ Send 1, 2, or 3.")
 
 
 def handle_ss_type_reply(token: str, session: BotSession,
-                                 text: str | None, attachment: dict | None):
+                         text: str | None, attachment: dict | None):
     if attachment:
         atts    = session.context.setdefault("attachments", [])
         atts.append(attachment)
@@ -782,7 +866,7 @@ def handle_ss_type_reply(token: str, session: BotSession,
 
 
 def handle_ss_confirm_reply(token: str, upload_chat_id: str,
-                                    session: BotSession, user, text: str):
+                            session: BotSession, user, text: str):
     if text.strip().startswith("1"):
         do_send_reply(token, upload_chat_id, session, user)
     elif text.strip().startswith("2"):
@@ -831,8 +915,7 @@ def handle_ss_onboard(token: str, session: BotSession,
         session.context['onboard_desig'] = text.strip()
         session.state = 'ss_onboard_mobile'
         session.save(update_fields=['state', 'context', 'updated_at'])
-        send(token, chat_id,
-             "What is your <b>mobile number</b>?")
+        send(token, chat_id, "What is your <b>mobile number</b>?")
 
     elif session.state == 'ss_onboard_mobile':
         mobile = text.strip()
@@ -880,11 +963,11 @@ def handle_ss_onboard(token: str, session: BotSession,
                 },
             )
             if not created:
-                link.telegram_chat_id  = chat_id
-                link.is_verified       = True
-                link.onboard_name      = name
+                link.telegram_chat_id    = chat_id
+                link.is_verified         = True
+                link.onboard_name        = name
                 link.onboard_designation = desig
-                link.onboard_mobile    = mobile
+                link.onboard_mobile      = mobile
                 link.save(update_fields=['telegram_chat_id', 'is_verified',
                                          'onboard_name', 'onboard_designation', 'onboard_mobile'])
 
@@ -918,7 +1001,7 @@ def handle_ss_onboard(token: str, session: BotSession,
 
 
 def handle_rly_onboard(token: str, session: BotSession, user, text: str):
-    """Ask HRMS ID confirmation for railway officials after OTP self-link."""
+    """HRMS ID confirmation for railway officials after OTP self-link (legacy path)."""
     if not text:
         return
     hrms_id = text.strip()
@@ -964,7 +1047,6 @@ def handle_rly_invite_onboard(token: str, session: BotSession,
     if state == 'rly_invite_hrms':
         hrms_id = text.strip()
         ctx['hrms_id'] = hrms_id
-        # Check if HRMS exists in system
         try:
             sys_user = DjUser.objects.select_related('profile').get(username=hrms_id)
             profile  = getattr(sys_user, 'profile', None)
@@ -1053,8 +1135,8 @@ def _finalize_rly_invite(token: str, session: BotSession,
                 reset_session(session)
                 return
 
-            system_user  = None
-            ghost_user   = None
+            system_user = None
+            ghost_user  = None
 
             if system_user_id:
                 try:
@@ -1063,7 +1145,6 @@ def _finalize_rly_invite(token: str, session: BotSession,
                     pass
 
             if not system_user:
-                # Create ghost user for non-system HRMS
                 ghost_username = f"rly_{tg_user_id}"
                 ghost_user, _ = DjUser.objects.get_or_create(
                     username=ghost_username,
@@ -1132,7 +1213,6 @@ def try_link_otp(token: str, chat_id: int, tg_user_id: int, code: str, tg_from: 
             otp.save(update_fields=["used"])
 
         logger.info("Linked tg=%s → mw=%s", tg_user_id, otp.user.username)
-        # Show confirmation — OTP proves identity, no need to re-enter HRMS
         linked_user = otp.user
         profile     = getattr(linked_user, 'profile', None)
         designation = profile.designation if profile else '—'
@@ -1162,7 +1242,7 @@ def try_link_otp(token: str, chat_id: int, tg_user_id: int, code: str, tg_from: 
 
         tg_name = ''
         if tg_from:
-            parts = [tg_from.get('first_name', ''), tg_from.get('last_name', '')]
+            parts   = [tg_from.get('first_name', ''), tg_from.get('last_name', '')]
             tg_name = ' '.join(p for p in parts if p).strip()
 
         send(token, chat_id,
@@ -1183,7 +1263,6 @@ def try_link_otp(token: str, chat_id: int, tg_user_id: int, code: str, tg_from: 
             send(token, chat_id, "❌ Invite code expired. Ask for a new one.")
             return True
 
-        # Check if tg_user_id already linked
         if RlyTelegramLink.objects.filter(telegram_user_id=tg_user_id, is_verified=True).exists():
             send(token, chat_id, "⚠️ Your Telegram is already registered as a Railway Official delegate.")
             return True
@@ -1217,20 +1296,16 @@ def dispatch(token: str, upload_chat_id: str, update: dict):
     text       = (message.get("text") or message.get("caption") or "").strip()
     attachment = extract_attachment(message)
 
-    # Skip if no content at all
     if not text and not attachment:
         return
 
-    # /start — welcome message
     if text.startswith("/start"):
         handle_start(token, chat_id)
         return
 
-    # 6-digit link code — try before resolving user (unlinked user)
     if try_link_otp(token, chat_id, tg_user_id, text, tg_from=message.get("from")):
         return
 
-    # Onboarding states — handled before resolve_user (user not fully linked yet)
     _session_peek = get_session(chat_id)
     if _session_peek.state in ONBOARD_SS_STATES:
         handle_ss_onboard(token, _session_peek, tg_user_id, chat_id, text)
@@ -1246,7 +1321,6 @@ def dispatch(token: str, upload_chat_id: str, update: dict):
 
     user, role = resolve_user(tg_user_id)
 
-    # Cancel — any state
     if text in ("/cancel", "❌ Cancel"):
         if user:
             session = get_session(chat_id)
@@ -1264,9 +1338,8 @@ def dispatch(token: str, upload_chat_id: str, update: dict):
 
     session = get_session(chat_id)
 
-    # /done finalises text-input states
     if text == "/done" and session.state in TEXT_INPUT_STATES:
-        text = None   # treat as "no new text, just finish"
+        text = None
 
     if session.state == "idle":
         if attachment:
@@ -1274,19 +1347,25 @@ def dispatch(token: str, upload_chat_id: str, update: dict):
                  "⚠️ Start a new entry first — just send any message to begin.")
             return
         if role in ('rly_official', 'admin'):
-            show_loa_list(token, session, user, page=0)
+            show_loa_search(token, session)
         elif role == 'site_supervisor':
             show_ss_threads(token, session, user, page=0)
         else:
             send(token, chat_id,
                  "ℹ️ Your account is linked. You will receive notifications here.")
 
-    elif session.state == "rly_select_loa":
-        handle_rly_select_loa(token, session, user, text or "")
-    elif session.state == "rly_select_category":
-        handle_rly_select_category(token, session, text or "")
-    elif session.state == "rly_select_item":
-        handle_rly_select_item(token, session, text or "")
+    elif session.state == "rly_loa_search":
+        handle_rly_loa_search(token, session, text or "")
+    elif session.state == "rly_loa_list":
+        handle_rly_loa_list(token, session, text or "")
+    elif session.state == "rly_loa_confirm":
+        handle_rly_loa_confirm(token, session, text or "")
+    elif session.state == "rly_choose_type":
+        handle_rly_choose_type(token, session, text or "")
+    elif session.state == "rly_item_input":
+        handle_rly_item_input(token, session, text or "")
+    elif session.state == "rly_item_confirm":
+        handle_rly_item_confirm(token, session, text or "")
     elif session.state == "rly_type_text":
         handle_rly_type_text(token, session, text, attachment)
     elif session.state == "rly_confirm":

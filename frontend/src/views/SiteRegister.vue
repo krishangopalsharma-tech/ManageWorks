@@ -3,19 +3,16 @@ import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
 
 // ── State ─────────────────────────────────────────────────────────────────
-const allWorks    = ref([])
-const isLoading   = ref(false)
-const sheetErrors = ref([])
-const searchQuery = ref('')
+const allWorks      = ref([])
+const isLoading     = ref(false)
+const sheetErrors   = ref([])
+const searchQuery   = ref('')
 
-// Drill-down: selected work card
-const selectedWork = ref(null)
+const selectedWork   = ref(null)   // Level 1: work detail
+const selectedItem   = ref(null)   // Level 2: item drill-down
+const selectedThread = ref(null)   // Level 3: thread detail
 
-// Inside work: view mode
-const viewMode = ref('date')   // 'date' | 'item'
-
-// Inside item-wise: selected item
-const selectedItem = ref(null)
+const viewMode = ref('date')       // 'date' | 'item'
 
 // ── Load ──────────────────────────────────────────────────────────────────
 const load = async () => {
@@ -44,11 +41,33 @@ const filteredWorks = computed(() => {
   )
 })
 
-// ── Item-wise grouping ─────────────────────────────────────────────────────
-// For each WorkItem in selectedWork.items, collect matching entries by schedule+serial
+// ── Threads ────────────────────────────────────────────────────────────────
+const workThreads = computed(() => {
+  if (!selectedWork.value) return []
+  return [...(selectedWork.value.threads || [])].sort((a, b) =>
+    a.created_at > b.created_at ? -1 : 1
+  )
+})
+
+// Item-wise: items enriched with thread count
+const itemsWithThreads = computed(() => {
+  if (!selectedWork.value) return []
+  return selectedWork.value.items.map(item => {
+    const threads = workThreads.value.filter(t => t.work_item_id === item.id)
+    return { ...item, threads }
+  })
+})
+
+// Threads for the selected item (level 2 drill-down)
+const itemThreads = computed(() => {
+  if (!selectedItem.value) return []
+  return workThreads.value.filter(t => t.work_item_id === selectedItem.value.id)
+})
+
+// ── Item-wise grouping (GSheet, kept for legacy display) ───────────────────
 const itemsWithEntries = computed(() => {
   if (!selectedWork.value) return []
-  const entries = selectedWork.value.entries
+  const entries = selectedWork.value.entries || []
   return selectedWork.value.items.map(item => {
     const matched = entries.filter(e =>
       e.schedule.toLowerCase() === (item.schedule || '').toLowerCase() &&
@@ -61,26 +80,28 @@ const itemsWithEntries = computed(() => {
 
 // ── Navigation ────────────────────────────────────────────────────────────
 const selectWork = (work) => {
-  selectedWork.value = work
-  viewMode.value     = 'date'
-  selectedItem.value = null
+  selectedWork.value   = work
+  selectedItem.value   = null
+  selectedThread.value = null
+  viewMode.value       = 'date'
 }
 const backToList = () => {
-  selectedWork.value = null
-  selectedItem.value = null
+  selectedWork.value   = null
+  selectedItem.value   = null
+  selectedThread.value = null
 }
-const selectItem = (item) => { selectedItem.value = item }
-const backToWork = () => { selectedItem.value = null }
+const selectItem = (item) => {
+  selectedItem.value   = item
+  selectedThread.value = null
+}
+const backToWork = () => {
+  selectedItem.value   = null
+  selectedThread.value = null
+}
+const openThread = (thread) => { selectedThread.value = thread }
+const closeThread = () => { selectedThread.value = null }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
-const entryItem = (entry) => {
-  if (!selectedWork.value) return null
-  return selectedWork.value.items.find(i =>
-    (i.schedule || '').toLowerCase() === (entry.schedule || '').toLowerCase() &&
-    (i.serial_no || '').toLowerCase() === (entry.serial_no || '').toLowerCase()
-  ) || null
-}
-
 const fmtDate = (val) => {
   if (!val) return '—'
   const s = String(val).split('T')[0].split(' ')[0]
@@ -89,6 +110,30 @@ const fmtDate = (val) => {
   if (m) return `${m[3]}/${m[2]}/${m[1]}`
   return s
 }
+
+const fmtDatetime = (iso) => {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  const dd   = String(d.getDate()).padStart(2, '0')
+  const mm   = String(d.getMonth() + 1).padStart(2, '0')
+  const yyyy = d.getFullYear()
+  const hh   = String(d.getHours()).padStart(2, '0')
+  const min  = String(d.getMinutes()).padStart(2, '0')
+  return `${dd}/${mm}/${yyyy} ${hh}:${min}`
+}
+
+const statusClass = (s) => ({
+  open:     'bg-blue-50 text-blue-600',
+  replied:  'bg-amber-50 text-amber-600',
+  verified: 'bg-green-50 text-green-600',
+  closed:   'bg-gray-100 text-gray-500',
+}[s] || 'bg-gray-100 text-gray-500')
+
+const roleClass = (r) => r === 'rly_official'
+  ? 'bg-blue-100 text-blue-700'
+  : 'bg-green-100 text-green-700'
+
+const roleLabel = (r) => r === 'rly_official' ? 'Rly Official' : 'Site Supervisor'
 </script>
 
 <template>
@@ -100,7 +145,7 @@ const fmtDate = (val) => {
       <div class="flex-shrink-0 px-8 pt-7 pb-5 border-b border-gray-100">
         <h1 class="text-2xl font-bold text-gray-900 tracking-tight mb-1">Site Register</h1>
         <p class="text-gray-400 text-sm font-medium mb-5">
-          All works in system — open a work to see contractor activity from linked Google Sheets.
+          All works — bot instructions, contractor replies, and sheet data.
         </p>
         <div class="flex items-center gap-3">
           <div class="flex-1 flex items-center bg-gray-50 border border-gray-200 rounded-2xl px-5 py-3
@@ -120,7 +165,6 @@ const fmtDate = (val) => {
             <div class="i-carbon-renew text-base" :class="isLoading ? 'animate-spin' : ''"></div>
           </button>
         </div>
-
         <div v-if="sheetErrors.length > 0" class="mt-3 rounded-xl bg-red-50 border border-red-200 px-4 py-3">
           <p class="text-xs font-semibold text-red-600 mb-1">Sheet fetch errors:</p>
           <p v-for="e in sheetErrors" :key="e.sheet" class="text-xs text-red-500">{{ e.sheet }}: {{ e.error }}</p>
@@ -130,14 +174,12 @@ const fmtDate = (val) => {
       <div v-if="isLoading" class="flex-1 flex items-center justify-center py-24">
         <div class="i-carbon-circle-dash animate-spin text-3xl text-[#1D5F5E]"></div>
       </div>
-
       <div v-else-if="filteredWorks.length === 0" class="flex-1 flex flex-col items-center justify-center py-24 text-center">
         <div class="i-carbon-document-unknown text-5xl text-gray-200 mb-4"></div>
         <p class="text-sm font-semibold text-gray-400">
           {{ searchQuery ? 'No works match your search.' : 'No works in system.' }}
         </p>
       </div>
-
       <template v-else>
         <div class="flex-1 overflow-auto px-8 py-5">
           <p class="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4">
@@ -172,17 +214,13 @@ const fmtDate = (val) => {
                   </div>
                 </div>
                 <div class="flex items-center gap-4 flex-shrink-0">
-                  <span v-if="work.mb_count > 0"
-                    class="text-[10px] font-bold text-[#1D5F5E] bg-[#1D5F5E]/10 px-2 py-0.5 rounded-full whitespace-nowrap">
-                    {{ work.mb_count }} MB{{ work.mb_count > 1 ? 's' : '' }}
-                  </span>
+                  <div class="text-right">
+                    <p class="text-sm font-bold text-gray-800">{{ work.thread_count || 0 }}</p>
+                    <p class="text-[10px] text-gray-400">SR entries</p>
+                  </div>
                   <div class="text-right">
                     <p class="text-sm font-bold text-gray-800">{{ work.items.length }}</p>
                     <p class="text-[10px] text-gray-400">items</p>
-                  </div>
-                  <div class="text-right">
-                    <p class="text-sm font-bold text-gray-800">{{ work.entry_count }}</p>
-                    <p class="text-[10px] text-gray-400">site entries</p>
                   </div>
                   <div class="i-carbon-chevron-right text-gray-300 group-hover:text-[#1D5F5E] transition-colors text-lg"></div>
                 </div>
@@ -193,7 +231,103 @@ const fmtDate = (val) => {
       </template>
     </template>
 
-    <!-- ══ WORK DETAIL — ITEM DRILL-DOWN ══════════════════════════════════ -->
+    <!-- ══ THREAD DETAIL (Level 3) ════════════════════════════════════════ -->
+    <template v-else-if="selectedWork && selectedThread">
+      <div class="flex flex-col h-full overflow-hidden animate-fade-in">
+
+        <!-- Header -->
+        <div class="flex-shrink-0 px-6 pt-5 pb-4 border-b border-gray-100">
+          <div class="flex items-start gap-4 min-w-0">
+            <button @click="closeThread"
+              class="mt-0.5 w-9 h-9 flex-shrink-0 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 transition-all">
+              <div class="i-carbon-arrow-left text-base"></div>
+            </button>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-[11px] font-bold text-[#1D5F5E] bg-[#1D5F5E]/10 px-2 py-0.5 rounded-full">
+                  {{ selectedThread.sr_number }}
+                </span>
+                <span v-if="selectedThread.work_item_ref"
+                  class="text-[11px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full">
+                  {{ selectedThread.work_item_ref }}
+                </span>
+                <span class="text-[11px] font-medium text-gray-500">{{ selectedThread.category_label }}</span>
+                <span :class="['text-[11px] font-semibold px-2 py-0.5 rounded-full', statusClass(selectedThread.status)]">
+                  {{ selectedThread.status.toUpperCase() }}
+                </span>
+              </div>
+              <p class="text-xs text-gray-500 mt-1">
+                {{ selectedWork.loa_number }} · {{ selectedWork.contractor_name }} ·
+                {{ fmtDatetime(selectedThread.created_at) }} by {{ selectedThread.created_by_name }}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Conversation thread -->
+        <div class="flex-1 overflow-auto px-6 py-5 space-y-0">
+
+          <!-- Original instruction -->
+          <div class="flex gap-3 mb-0">
+            <div class="flex flex-col items-center">
+              <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                <span class="i-carbon-user-avatar text-blue-600 text-sm"></span>
+              </div>
+              <div class="w-0.5 bg-gray-200 flex-1 mt-1"></div>
+            </div>
+            <div class="flex-1 pb-5">
+              <div class="flex items-center gap-2 mb-1.5">
+                <span class="text-xs font-bold text-blue-700">{{ selectedThread.created_by_name }}</span>
+                <span class="text-[11px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full">Rly Official</span>
+                <span class="text-[11px] text-gray-400">{{ fmtDatetime(selectedThread.created_at) }}</span>
+              </div>
+              <div class="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
+                <p class="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{{ selectedThread.initial_text || '—' }}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Replies -->
+          <div v-for="(msg, idx) in selectedThread.messages" :key="msg.id" class="flex gap-3 mb-0">
+            <div class="flex flex-col items-center">
+              <div :class="['w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0',
+                msg.sender_role === 'rly_official' ? 'bg-blue-100' : 'bg-green-100']">
+                <span :class="['i-carbon-user-avatar text-sm',
+                  msg.sender_role === 'rly_official' ? 'text-blue-600' : 'text-green-600']"></span>
+              </div>
+              <div v-if="idx < selectedThread.messages.length - 1"
+                class="w-0.5 bg-gray-200 flex-1 mt-1"></div>
+            </div>
+            <div class="flex-1 pb-5">
+              <div class="flex items-center gap-2 mb-1.5">
+                <span :class="['text-xs font-bold',
+                  msg.sender_role === 'rly_official' ? 'text-blue-700' : 'text-green-700']">
+                  {{ msg.sender_name }}
+                </span>
+                <span :class="['text-[11px] font-semibold px-1.5 py-0.5 rounded-full', roleClass(msg.sender_role)]">
+                  {{ roleLabel(msg.sender_role) }}
+                </span>
+                <span class="text-[11px] text-gray-400">{{ fmtDatetime(msg.created_at) }}</span>
+              </div>
+              <div :class="['border rounded-xl px-4 py-3',
+                msg.sender_role === 'rly_official'
+                  ? 'bg-blue-50 border-blue-100'
+                  : 'bg-green-50 border-green-100']">
+                <p class="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{{ msg.text || '—' }}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- No replies yet -->
+          <div v-if="!selectedThread.messages.length"
+            class="text-center py-6 text-xs text-gray-400 font-medium">
+            No replies yet from site supervisor.
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- ══ ITEM DRILL-DOWN (Level 2) ══════════════════════════════════════ -->
     <template v-else-if="selectedWork && selectedItem">
       <div class="flex flex-col h-full overflow-hidden animate-fade-in">
 
@@ -219,61 +353,54 @@ const fmtDate = (val) => {
               <div class="flex items-center gap-4 mt-1 text-xs text-gray-500">
                 <span>Qty: <span class="font-semibold text-gray-700">{{ selectedItem.qty ?? '—' }} {{ selectedItem.unit }}</span></span>
                 <span class="text-gray-200">·</span>
-                <span>{{ selectedItem.sheet_entries.length }} contractor remark{{ selectedItem.sheet_entries.length !== 1 ? 's' : '' }}</span>
+                <span>{{ itemThreads.length }} SR entr{{ itemThreads.length !== 1 ? 'ies' : 'y' }}</span>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Entries for this item -->
+        <!-- Threads for this item -->
         <div class="flex-1 overflow-auto px-6 py-5">
-          <div v-if="selectedItem.sheet_entries.length === 0"
+          <div v-if="itemThreads.length === 0"
             class="flex flex-col items-center justify-center py-16 text-center">
             <div class="i-carbon-document-unknown text-5xl text-gray-200 mb-4"></div>
-            <p class="text-sm font-semibold text-gray-400">No contractor remarks for this item yet.</p>
+            <p class="text-sm font-semibold text-gray-400">No site register entries for this item yet.</p>
           </div>
-          <div v-else class="rounded-xl border border-gray-200 overflow-hidden">
-            <table class="w-full text-sm">
-              <thead>
-                <tr class="bg-gray-50 border-b border-gray-200">
-                  <th class="text-left px-4 py-3 text-[11px] font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">Date & Time</th>
-                  <th class="text-left px-4 py-3 text-[11px] font-bold text-gray-400 uppercase tracking-wide">Contractor Remark</th>
-                  <th class="text-left px-4 py-3 text-[11px] font-bold text-gray-400 uppercase tracking-wide">Source Sheet</th>
-                  <th class="text-left px-4 py-3 text-[11px] font-bold text-gray-400 uppercase tracking-wide">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(entry, idx) in selectedItem.sheet_entries" :key="idx"
-                  class="border-t border-gray-100 hover:bg-accent-soft/40 transition-colors"
-                  :class="entry.warnings.length > 0 ? 'bg-amber-50/40' : ''">
-                  <td class="px-4 py-3 font-mono text-xs text-gray-500 whitespace-nowrap">{{ entry.datetime }}</td>
-                  <td class="px-4 py-3 text-gray-700 max-w-md">
-                    <span class="text-xs">{{ entry.remark || '—' }}</span>
-                  </td>
-                  <td class="px-4 py-3 text-xs text-gray-400">{{ entry.sheet_name }}</td>
-                  <td class="px-4 py-3">
-                    <span v-if="entry.warnings.length === 0"
-                      class="text-[11px] font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded-full">Valid</span>
-                    <div v-else class="flex flex-col gap-1">
-                      <span v-for="(w, wi) in entry.warnings" :key="wi"
-                        class="text-[11px] font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full flex items-center gap-1 whitespace-nowrap">
-                        <span class="i-carbon-warning-filled text-[10px]"></span>{{ w }}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div v-else class="space-y-3">
+            <div v-for="t in itemThreads" :key="t.id"
+              class="border border-gray-200 hover:border-[#1D5F5E] hover:bg-[#1D5F5E]/5 rounded-xl px-4 py-3.5 cursor-pointer transition-all group"
+              @click="openThread(t)">
+              <div class="flex items-center justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-2 flex-wrap mb-1">
+                    <span class="text-[11px] font-bold text-[#1D5F5E]">{{ t.sr_number }}</span>
+                    <span :class="['text-[11px] font-semibold px-1.5 py-0.5 rounded-full', statusClass(t.status)]">
+                      {{ t.status.toUpperCase() }}
+                    </span>
+                    <span class="text-[11px] text-gray-400">{{ fmtDatetime(t.created_at) }}</span>
+                    <span class="text-[11px] text-gray-500">by {{ t.created_by_name }}</span>
+                  </div>
+                  <p class="text-xs text-gray-700 line-clamp-2">{{ t.initial_text }}</p>
+                </div>
+                <div class="flex items-center gap-3 flex-shrink-0">
+                  <div class="text-right">
+                    <p class="text-xs font-bold text-gray-700">{{ t.messages.length }}</p>
+                    <p class="text-[10px] text-gray-400">repl{{ t.messages.length !== 1 ? 'ies' : 'y' }}</p>
+                  </div>
+                  <div class="i-carbon-chevron-right text-gray-300 group-hover:text-[#1D5F5E] text-lg"></div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </template>
 
-    <!-- ══ WORK DETAIL — DATE / ITEM VIEW ═════════════════════════════════ -->
+    <!-- ══ WORK DETAIL — DATE / ITEM TABS (Level 1) ═══════════════════════ -->
     <template v-else-if="selectedWork">
       <div class="flex flex-col h-full overflow-hidden animate-fade-in">
 
-        <!-- Header — matches UpdateWork exactly -->
+        <!-- Header -->
         <div class="px-8 pt-6 pb-5 border-b border-gray-100 flex-shrink-0">
           <div class="flex items-start justify-between gap-6">
             <div class="flex items-start gap-4 min-w-0">
@@ -306,86 +433,74 @@ const fmtDate = (val) => {
                     <span class="font-medium text-gray-400">Completion</span>
                     <span class="font-semibold text-gray-800">{{ fmtDate(selectedWork.date_of_completion) }}</span>
                   </span>
-                  <span v-if="selectedWork.warning_count > 0"
-                    class="text-[11px] font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <span class="i-carbon-warning-filled text-[10px]"></span>
-                    {{ selectedWork.warning_count }} warning{{ selectedWork.warning_count > 1 ? 's' : '' }}
-                  </span>
                 </div>
               </div>
             </div>
           </div>
-
-          <!-- View toggle tabs -->
           <div class="flex gap-1.5 mt-4">
             <button @click="viewMode = 'date'"
-              :class="viewMode === 'date'
-                ? 'bg-[#1D5F5E] text-white'
-                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'"
+              :class="viewMode === 'date' ? 'bg-[#1D5F5E] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'"
               class="px-4 py-1.5 rounded-lg text-xs font-semibold transition-all">
               Date-wise
             </button>
             <button @click="viewMode = 'item'"
-              :class="viewMode === 'item'
-                ? 'bg-[#1D5F5E] text-white'
-                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'"
+              :class="viewMode === 'item' ? 'bg-[#1D5F5E] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'"
               class="px-4 py-1.5 rounded-lg text-xs font-semibold transition-all">
               Item-wise
             </button>
           </div>
         </div>
 
-        <!-- ── DATE-WISE VIEW ─────────────────────────────────────────── -->
+        <!-- ── DATE-WISE: all SR threads ──────────────────────────────── -->
         <div v-if="viewMode === 'date'" class="flex-1 overflow-auto px-6 py-5">
-          <div v-if="selectedWork.entries.length === 0"
+          <div v-if="workThreads.length === 0"
             class="flex flex-col items-center justify-center py-16 text-center">
             <div class="i-carbon-document-unknown text-5xl text-gray-200 mb-4"></div>
-            <p class="text-sm font-semibold text-gray-400">No contractor remarks found for this LOA in any linked sheet.</p>
+            <p class="text-sm font-semibold text-gray-400">No site register entries for this LOA yet.</p>
+            <p class="text-xs text-gray-300 mt-1">Use the Telegram bot to create entries.</p>
           </div>
           <div v-else>
             <p class="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4">
-              {{ selectedWork.entries.length }} entr{{ selectedWork.entries.length === 1 ? 'y' : 'ies' }}
+              {{ workThreads.length }} entr{{ workThreads.length === 1 ? 'y' : 'ies' }}
             </p>
-            <div class="rounded-xl border border-gray-200 overflow-hidden">
-              <table class="w-full text-sm min-w-[800px]">
-                <thead>
-                  <tr class="bg-gray-50 border-b border-gray-200">
-                    <th class="text-left px-4 py-3 text-[11px] font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">Date & Time</th>
-                    <th class="text-left px-4 py-3 text-[11px] font-bold text-gray-400 uppercase tracking-wide">Sch</th>
-                    <th class="text-left px-4 py-3 text-[11px] font-bold text-gray-400 uppercase tracking-wide">S.No.</th>
-                    <th class="text-left px-4 py-3 text-[11px] font-bold text-gray-400 uppercase tracking-wide">Item Description</th>
-                    <th class="text-left px-4 py-3 text-[11px] font-bold text-gray-400 uppercase tracking-wide">Quantity</th>
-                    <th class="text-left px-4 py-3 text-[11px] font-bold text-gray-400 uppercase tracking-wide">Contractor Remark</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(entry, idx) in selectedWork.entries" :key="idx"
-                    class="border-t border-gray-100 hover:bg-accent-soft/40 transition-colors"
-                    :class="entry.warnings.length > 0 ? 'bg-amber-50/40' : ''">
-                    <td class="px-4 py-3 font-mono text-xs text-gray-500 whitespace-nowrap">{{ entry.datetime }}</td>
-                    <td class="px-4 py-3 text-xs font-semibold text-gray-800">{{ entry.schedule }}</td>
-                    <td class="px-4 py-3 text-xs text-gray-700">{{ entry.serial_no }}</td>
-                    <td class="px-4 py-3 max-w-xs">
-                      <span class="text-xs text-gray-600 line-clamp-2">{{ entry.item_desc }}</span>
-                    </td>
-                    <td class="px-4 py-3 text-xs font-semibold text-gray-700 whitespace-nowrap">
-                      <template v-if="entryItem(entry)">
-                        {{ entryItem(entry).qty ?? '—' }}
-                        <span class="font-normal text-gray-400">{{ entryItem(entry).unit }}</span>
-                      </template>
-                      <span v-else class="text-gray-300">—</span>
-                    </td>
-                    <td class="px-4 py-3 max-w-xs">
-                      <span class="text-xs text-gray-700 line-clamp-2">{{ entry.remark || '—' }}</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+            <div class="space-y-3">
+              <div v-for="t in workThreads" :key="t.id"
+                class="border border-gray-200 hover:border-[#1D5F5E] hover:bg-[#1D5F5E]/5 rounded-xl px-4 py-3.5 cursor-pointer transition-all group"
+                @click="openThread(t)">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2 flex-wrap mb-1.5">
+                      <span class="text-[11px] font-bold text-[#1D5F5E]">{{ t.sr_number }}</span>
+                      <span v-if="t.work_item_ref"
+                        class="text-[11px] font-semibold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded-full">
+                        {{ t.work_item_ref }}
+                      </span>
+                      <span v-else class="text-[11px] font-medium text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-full">
+                        General
+                      </span>
+                      <span :class="['text-[11px] font-semibold px-1.5 py-0.5 rounded-full', statusClass(t.status)]">
+                        {{ t.status.toUpperCase() }}
+                      </span>
+                    </div>
+                    <p class="text-xs text-gray-700 line-clamp-2 mb-1">{{ t.initial_text }}</p>
+                    <p class="text-[11px] text-gray-400">
+                      {{ fmtDatetime(t.created_at) }} · {{ t.created_by_name }}
+                    </p>
+                  </div>
+                  <div class="flex items-center gap-3 flex-shrink-0 mt-1">
+                    <div class="text-right">
+                      <p class="text-xs font-bold text-gray-700">{{ t.messages.length }}</p>
+                      <p class="text-[10px] text-gray-400">repl{{ t.messages.length !== 1 ? 'ies' : 'y' }}</p>
+                    </div>
+                    <div class="i-carbon-chevron-right text-gray-300 group-hover:text-[#1D5F5E] text-lg"></div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
-        <!-- ── ITEM-WISE VIEW ─────────────────────────────────────────── -->
+        <!-- ── ITEM-WISE: items with SR thread counts ──────────────────── -->
         <div v-if="viewMode === 'item'" class="overflow-y-auto flex-1">
           <table class="w-full border-collapse">
             <thead class="bg-gray-50 sticky top-0 z-10">
@@ -393,16 +508,16 @@ const fmtDate = (val) => {
                 <th class="px-4 py-3 text-center w-14">Sch</th>
                 <th class="px-4 py-3 text-center w-14">S.No</th>
                 <th class="px-4 py-3 text-left">Item Description</th>
-                <th class="px-4 py-3 text-right w-32">Required</th>
-                <th class="px-4 py-3 text-center w-32">Site Remarks</th>
+                <th class="px-4 py-3 text-right w-32">Required Qty</th>
+                <th class="px-4 py-3 text-center w-32">SR Entries</th>
                 <th class="px-4 py-3 text-center w-28">Action</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-if="itemsWithEntries.length === 0">
+              <tr v-if="itemsWithThreads.length === 0">
                 <td colspan="6" class="p-8 text-center text-gray-400 text-xs font-medium">No items for this work.</td>
               </tr>
-              <tr v-for="item in itemsWithEntries" :key="item.id"
+              <tr v-for="item in itemsWithThreads" :key="item.id"
                 class="border-b border-gray-100 hover:bg-accent-soft/40 transition-colors">
                 <td class="px-4 py-3.5 text-center">
                   <span class="rounded-md px-2 py-1 text-[10px] font-bold"
@@ -421,14 +536,18 @@ const fmtDate = (val) => {
                 </td>
                 <td class="px-4 py-3.5 text-center">
                   <span class="text-[11px] font-bold"
-                    :class="item.sheet_entries.length > 0 ? 'text-[#1D5F5E]' : 'text-gray-300'">
-                    {{ item.sheet_entries.length }}
+                    :class="item.threads.length > 0 ? 'text-[#1D5F5E]' : 'text-gray-300'">
+                    {{ item.threads.length }}
                   </span>
-                  <p class="text-[10px] text-gray-400">remark{{ item.sheet_entries.length !== 1 ? 's' : '' }}</p>
+                  <p class="text-[10px] text-gray-400">entr{{ item.threads.length !== 1 ? 'ies' : 'y' }}</p>
                 </td>
                 <td class="px-4 py-3.5 text-center">
                   <button @click="selectItem(item)"
-                    class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#1D5F5E]/10 hover:bg-[#1D5F5E]/20 text-[#1D5F5E] text-[11px] font-semibold transition-all">
+                    :disabled="item.threads.length === 0"
+                    :class="item.threads.length > 0
+                      ? 'bg-[#1D5F5E]/10 hover:bg-[#1D5F5E]/20 text-[#1D5F5E] cursor-pointer'
+                      : 'bg-gray-50 text-gray-300 cursor-not-allowed'"
+                    class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[11px] font-semibold transition-all">
                     <div class="i-carbon-list text-xs"></div> View
                   </button>
                 </td>

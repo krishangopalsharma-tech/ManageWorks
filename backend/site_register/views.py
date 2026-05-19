@@ -12,7 +12,19 @@ from rest_framework import status
 
 from site_gsheet_settings.models import SiteGSheet
 from works.models import Work
-from .models import TelegramLinkOTP, TelegramUserLink, WorkContractorTelegram, SupervisorInvite, RlyTelegramLink, RlyOfficialInvite
+from .models import (
+    TelegramLinkOTP, TelegramUserLink, WorkContractorTelegram, SupervisorInvite,
+    RlyTelegramLink, RlyOfficialInvite, SiteRegisterThread,
+)
+
+SR_CATEGORY_LABELS = {
+    'order':               'Rly Official Order',
+    'progress':            'Progress Update',
+    'hindrance':           'Hindrance',
+    'inspection_request':  'Inspection Request',
+    'document_submission': 'Document Submission',
+    'general_remark':      'General Remark',
+}
 
 
 def _is_admin(user):
@@ -163,6 +175,46 @@ class SiteRegisterView(APIView):
                 "warning_count":   warning_count,
                 "mb_count":        work.mb_records.count(),
             })
+
+        # Fetch all SR threads for these works, with messages
+        threads_qs = (
+            SiteRegisterThread.objects
+            .filter(work__in=works)
+            .select_related('work_item', 'created_by')
+            .prefetch_related('messages__sender')
+            .order_by('-created_at')
+        )
+        threads_by_work = defaultdict(list)
+        for t in threads_qs:
+            msgs = [
+                {
+                    'id':          m.id,
+                    'sender_role': m.sender_role,
+                    'sender_name': (m.sender.first_name or m.sender.username) if m.sender else '—',
+                    'text':        m.message_text,
+                    'created_at':  m.created_at.isoformat(),
+                }
+                for m in t.messages.order_by('created_at')
+            ]
+            threads_by_work[t.work_id].append({
+                'id':               t.pk,
+                'sr_number':        f'SR-{t.pk:06d}',
+                'category':         t.category,
+                'category_label':   SR_CATEGORY_LABELS.get(t.category, t.category),
+                'initial_text':     t.initial_text,
+                'status':           t.status,
+                'initiated_by_role': t.initiated_by_role,
+                'created_by_name':  (t.created_by.first_name or t.created_by.username) if t.created_by else '—',
+                'created_at':       t.created_at.isoformat(),
+                'work_item_id':     t.work_item_id,
+                'work_item_ref':    f"{t.work_item.schedule}-{t.work_item.serial_number}" if t.work_item else None,
+                'messages':         msgs,
+            })
+
+        # Attach thread data to each work result
+        for item in result:
+            item['threads']      = threads_by_work[item['work_id']]
+            item['thread_count'] = len(item['threads'])
 
         return Response({
             "works":        result,
