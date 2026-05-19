@@ -29,6 +29,7 @@ from site_register.models import (
     BotSession, TelegramLinkOTP, TelegramUserLink,
     WorkContractorTelegram, SiteRegisterThread, SiteRegisterMessage,
     SiteRegisterAttachment, SupervisorInvite,
+    RlyTelegramLink, RlyOfficialInvite,
 )
 from telegram_settings.models import TelegramBotConfig
 from works.models import WorkItem
@@ -41,6 +42,10 @@ PAGE_SIZE    = 8
 
 ONBOARD_SS_STATES  = {'ss_onboard_name', 'ss_onboard_desig', 'ss_onboard_mobile'}
 ONBOARD_RLY_STATES = {'rly_onboard_hrms'}
+ONBOARD_RLY_INVITE_STATES = {
+    'rly_invite_hrms', 'rly_invite_confirm',
+    'rly_invite_name', 'rly_invite_desig', 'rly_invite_mobile',
+}
 
 CATEGORIES = [
     ('order',               '📋 Rly Official Order'),
@@ -60,7 +65,8 @@ TEXT_INPUT_STATES  = {'rly_type_text', 'ss_type_reply'}
 
 def _api(token: str, method: str, **kwargs) -> dict:
     url  = f"https://api.telegram.org/bot{token}/{method}"
-    resp = requests.post(url, json=kwargs, timeout=POLL_TIMEOUT + 5)
+    resp = requests.post(url, json=kwargs, timeout=POLL_TIMEOUT + 5,
+                         headers={"Connection": "close"})
     resp.raise_for_status()
     return resp.json()
 
@@ -161,16 +167,52 @@ def reset_session(session: BotSession):
 # ── User identity ─────────────────────────────────────────────────────────────
 
 def resolve_user(tg_user_id: int):
-    """Return (user, role_str) or (None, None) if not linked."""
+    """Return (user, role_str) or (None, None) if not linked.
+
+    role_str values used by dispatcher:
+      'admin'          — staff / admin profile
+      'rly_official'   — SSE, consignee, or any rly delegate (sees all LOAs)
+      'site_supervisor'— contractor supervisor (sees only mapped LOAs)
+    """
+    # 1. Check TelegramUserLink (self-linked via OTP, and contractor ghost tg_ users)
     try:
         link = TelegramUserLink.objects.select_related(
             'user', 'user__profile'
         ).get(telegram_user_id=tg_user_id, is_verified=True)
+        user    = link.user
+        profile = getattr(user, 'profile', None)
+
+        # Contractor ghost users (tg_ prefix) = site supervisor
+        if user.username.startswith('tg_'):
+            has_active = WorkContractorTelegram.objects.filter(
+                telegram_link=link, is_active=True).exists()
+            role = 'site_supervisor' if has_active else 'observer'
+            return user, role
+
+        # System users — map profile role
+        if user.is_staff:
+            return user, 'admin'
+        if profile:
+            if profile.role == 'admin':
+                return user, 'admin'
+            # sse / consignee / contractor-firm → treat as rly_official in bot
+            return user, 'rly_official'
+        return user, 'rly_official'
+
     except TelegramUserLink.DoesNotExist:
-        return None, None
-    profile = getattr(link.user, 'profile', None)
-    role    = profile.role if profile else ('admin' if link.user.is_staff else 'consignee')
-    return link.user, role
+        pass
+
+    # 2. Check RlyTelegramLink (delegate railway officials added via invite)
+    try:
+        rly_link = RlyTelegramLink.objects.select_related(
+            'system_user', 'ghost_user'
+        ).get(telegram_user_id=tg_user_id, is_verified=True)
+        eff_user = rly_link.effective_user
+        return eff_user, 'rly_official'
+    except RlyTelegramLink.DoesNotExist:
+        pass
+
+    return None, None
 
 
 def _time_ago(dt) -> str:
@@ -217,11 +259,19 @@ def _save_attachments(token: str, upload_chat_id: str,
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def rly_works_page(page: int):
+    """All LOAs — railway officials see everything."""
     from works.models import Work
     all_works = list(Work.objects.order_by('loa_number'))
     start = page * PAGE_SIZE
     end   = start + PAGE_SIZE
     return all_works[start:end], len(all_works), len(all_works) > end
+
+
+def _display_name(user) -> str:
+    """Safe display name — works for real users, ghost users, and None."""
+    if user is None:
+        return 'Unknown'
+    return user.first_name or user.username
 
 
 def show_loa_list(token: str, session: BotSession, user, page: int = 0):
@@ -352,7 +402,7 @@ def do_create_thread(token: str, upload_chat_id: str, session: BotSession, user)
         f"<b>LOA:</b> {ctx['loa_number']}\n"
         f"<b>Type:</b> {ctx['category_label']}{item_line}\n\n"
         f"{ctx.get('text', '')}{att_note}\n\n"
-        f"— <i>{user.first_name or user.username}</i>\n\n"
+        f"— <i>{_display_name(user)}</i>\n\n"
         "Reply via bot menu."
     )
     notified = 0
@@ -601,24 +651,29 @@ def do_send_reply(token: str, upload_chat_id: str, session: BotSession, user):
         thread.status = 'replied'
         thread.save(update_fields=['status'])
 
-    # Notify all Rly Officials (no LOA mapping — they see everything)
-    rly_links = (
-        TelegramUserLink.objects
-        .filter(is_verified=True, user__profile__role='rly_official')
-        .select_related('user')
-    )
     att_note    = f"\n📎 {len(attachments)} attachment(s) included." if attachments else ""
     notify_text = (
         f"💬 <b>Site Supervisor Reply — SR-{thread.pk:06d}</b>\n\n"
         f"<b>LOA:</b> {thread.work.loa_number}\n"
         f"<b>Type:</b> {CATEGORY_LABELS.get(thread.category, thread.category)}\n\n"
         f"{ctx.get('reply_text', '')}{att_note}\n\n"
-        f"— <i>{user.first_name or user.username}</i>"
+        f"— <i>{_display_name(user)}</i>"
     )
     notified = 0
-    for lnk in rly_links:
-        send(token, lnk.telegram_chat_id, notify_text)
-        notified += 1
+    notified_chat_ids = set()
+    # Self-linked rly officials via OTP (non-contractor TelegramUserLink users)
+    for lnk in TelegramUserLink.objects.filter(is_verified=True).exclude(
+            user__username__startswith='tg_').select_related('user'):
+        if lnk.telegram_chat_id not in notified_chat_ids:
+            send(token, lnk.telegram_chat_id, notify_text)
+            notified_chat_ids.add(lnk.telegram_chat_id)
+            notified += 1
+    # Delegate rly officials via RlyOfficialInvite
+    for rly_lnk in RlyTelegramLink.objects.filter(is_verified=True):
+        if rly_lnk.telegram_chat_id not in notified_chat_ids:
+            send(token, rly_lnk.telegram_chat_id, notify_text)
+            notified_chat_ids.add(rly_lnk.telegram_chat_id)
+            notified += 1
 
     send(token, session.telegram_chat_id,
          f"✅ Reply sent. Notified {notified} Rly Official(s).", remove_kb=True)
@@ -642,20 +697,22 @@ def do_mark_resolved(token: str, session: BotSession, user):
         thread.status = 'verified'
         thread.save(update_fields=['status'])
 
-    # Notify all Rly Officials
-    rly_links = (
-        TelegramUserLink.objects
-        .filter(is_verified=True, user__profile__role='rly_official')
-        .select_related('user')
-    )
     notify = (
         f"✅ <b>SR-{thread.pk:06d} Resolved</b>\n\n"
         f"<b>LOA:</b> {thread.work.loa_number}\n"
         f"<b>Type:</b> {CATEGORY_LABELS.get(thread.category, thread.category)}\n\n"
-        f"Resolved by <i>{user.first_name or user.username}</i>."
+        f"Resolved by <i>{_display_name(user)}</i>."
     )
-    for lnk in rly_links:
-        send(token, lnk.telegram_chat_id, notify)
+    notified_chat_ids = set()
+    for lnk in TelegramUserLink.objects.filter(is_verified=True).exclude(
+            user__username__startswith='tg_'):
+        if lnk.telegram_chat_id not in notified_chat_ids:
+            send(token, lnk.telegram_chat_id, notify)
+            notified_chat_ids.add(lnk.telegram_chat_id)
+    for rly_lnk in RlyTelegramLink.objects.filter(is_verified=True):
+        if rly_lnk.telegram_chat_id not in notified_chat_ids:
+            send(token, rly_lnk.telegram_chat_id, notify)
+            notified_chat_ids.add(rly_lnk.telegram_chat_id)
 
     send(token, session.telegram_chat_id,
          f"✅ SR-{thread.pk:06d} marked resolved.", remove_kb=True)
@@ -859,7 +916,7 @@ def handle_ss_onboard(token: str, session: BotSession,
 
 
 def handle_rly_onboard(token: str, session: BotSession, user, text: str):
-    """Ask HRMS ID confirmation for railway officials after OTP link."""
+    """Ask HRMS ID confirmation for railway officials after OTP self-link."""
     if not text:
         return
     hrms_id = text.strip()
@@ -874,12 +931,180 @@ def handle_rly_onboard(token: str, session: BotSession, user, text: str):
     role_label  = profile.role.replace('_', ' ').title() if profile else 'Official'
     send(token, session.telegram_chat_id,
          f"✅ <b>HRMS confirmed!</b>\n\n"
-         f"<b>Name:</b> {user.first_name or user.username}\n"
+         f"<b>Name:</b> {_display_name(user)}\n"
          f"<b>HRMS ID:</b> {user.username}\n"
          f"<b>Designation:</b> {designation}\n"
          f"<b>Role:</b> {role_label}\n\n"
          "Your account is fully set up. You will receive Site Register notifications here.")
     reset_session(session)
+
+
+def handle_rly_invite_onboard(token: str, session: BotSession,
+                               tg_user_id: int, chat_id: int, text: str):
+    """
+    Multi-step onboarding for a delegate railway official via RlyOfficialInvite.
+
+    States:
+      rly_invite_hrms    → user sends HRMS ID
+      rly_invite_confirm → HRMS found in system; user confirms Y/N
+      rly_invite_name    → HRMS not found; ask name
+      rly_invite_desig   → ask designation
+      rly_invite_mobile  → ask mobile, then finalize
+    """
+    from django.contrib.auth.models import User as DjUser
+
+    if not text:
+        return
+
+    state = session.state
+    ctx   = session.context
+
+    if state == 'rly_invite_hrms':
+        hrms_id = text.strip()
+        ctx['hrms_id'] = hrms_id
+        # Check if HRMS exists in system
+        try:
+            sys_user = DjUser.objects.select_related('profile').get(username=hrms_id)
+            profile  = getattr(sys_user, 'profile', None)
+            name     = sys_user.first_name or sys_user.username
+            desig    = profile.designation if profile else '—'
+            ctx['system_user_id'] = sys_user.id
+            ctx['system_name']    = name
+            ctx['system_desig']   = desig
+            session.state = 'rly_invite_confirm'
+            session.save(update_fields=['state', 'context', 'updated_at'])
+            send(token, chat_id,
+                 f"✅ <b>HRMS found in system:</b>\n\n"
+                 f"<b>Name:</b> {name}\n"
+                 f"<b>Designation:</b> {desig}\n\n"
+                 "Is this you? Reply <b>YES</b> to confirm or <b>NO</b> to enter manually.",
+                 keyboard=[["YES"], ["NO"]])
+        except DjUser.DoesNotExist:
+            ctx.pop('system_user_id', None)
+            session.state = 'rly_invite_name'
+            session.save(update_fields=['state', 'context', 'updated_at'])
+            send(token, chat_id,
+                 f"ℹ️ HRMS ID <code>{hrms_id}</code> not in system. I'll record your details.\n\n"
+                 "What is your <b>full name</b>?")
+
+    elif state == 'rly_invite_confirm':
+        answer = text.strip().upper()
+        if answer == 'YES':
+            _finalize_rly_invite(token, session, tg_user_id, chat_id,
+                                 system_user_id=ctx.get('system_user_id'),
+                                 hrms_id=ctx['hrms_id'],
+                                 name=ctx['system_name'],
+                                 desig=ctx['system_desig'],
+                                 mobile='')
+        elif answer == 'NO':
+            ctx.pop('system_user_id', None)
+            session.state = 'rly_invite_name'
+            session.save(update_fields=['state', 'context', 'updated_at'])
+            send(token, chat_id, "What is your <b>full name</b>?", remove_kb=True)
+        else:
+            send(token, chat_id, "⚠️ Reply <b>YES</b> or <b>NO</b>.")
+
+    elif state == 'rly_invite_name':
+        ctx['invite_name'] = text.strip()
+        session.state = 'rly_invite_desig'
+        session.save(update_fields=['state', 'context', 'updated_at'])
+        send(token, chat_id,
+             f"👍 <b>{text.strip()}</b>.\n\nWhat is your <b>designation</b>?\n"
+             "<i>(e.g. JE, SSE, Technician)</i>", remove_kb=True)
+
+    elif state == 'rly_invite_desig':
+        ctx['invite_desig'] = text.strip()
+        session.state = 'rly_invite_mobile'
+        session.save(update_fields=['state', 'context', 'updated_at'])
+        send(token, chat_id, "What is your <b>mobile number</b>?")
+
+    elif state == 'rly_invite_mobile':
+        _finalize_rly_invite(token, session, tg_user_id, chat_id,
+                             system_user_id=ctx.get('system_user_id'),
+                             hrms_id=ctx['hrms_id'],
+                             name=ctx.get('invite_name', ''),
+                             desig=ctx.get('invite_desig', ''),
+                             mobile=text.strip())
+
+
+def _finalize_rly_invite(token: str, session: BotSession,
+                          tg_user_id: int, chat_id: int,
+                          system_user_id, hrms_id: str,
+                          name: str, desig: str, mobile: str):
+    """Create RlyTelegramLink and ghost user (if no system user)."""
+    from django.contrib.auth.models import User as DjUser
+
+    ctx = session.context
+    try:
+        invite_code = ctx['pending_rly_invite_code']
+        with transaction.atomic():
+            try:
+                invite = RlyOfficialInvite.objects.select_for_update().get(
+                    code=invite_code, used=False)
+            except RlyOfficialInvite.DoesNotExist:
+                send(token, chat_id, "❌ Invite expired or already used. Ask for a new code.")
+                reset_session(session)
+                return
+
+            if invite.is_expired:
+                send(token, chat_id, "❌ Invite expired. Ask for a new code.")
+                reset_session(session)
+                return
+
+            system_user  = None
+            ghost_user   = None
+
+            if system_user_id:
+                try:
+                    system_user = DjUser.objects.get(pk=system_user_id)
+                except DjUser.DoesNotExist:
+                    pass
+
+            if not system_user:
+                # Create ghost user for non-system HRMS
+                ghost_username = f"rly_{tg_user_id}"
+                ghost_user, _ = DjUser.objects.get_or_create(
+                    username=ghost_username,
+                    defaults={'first_name': name or ghost_username, 'password': '!'},
+                )
+                if name and not ghost_user.first_name:
+                    ghost_user.first_name = name
+                    ghost_user.save(update_fields=['first_name'])
+
+            rly_link, created = RlyTelegramLink.objects.update_or_create(
+                telegram_user_id=tg_user_id,
+                defaults={
+                    'added_by':         invite.created_by,
+                    'system_user':      system_user,
+                    'ghost_user':       ghost_user,
+                    'hrms_id':          hrms_id,
+                    'telegram_chat_id': chat_id,
+                    'name':             name,
+                    'designation':      desig,
+                    'mobile':           mobile,
+                    'is_verified':      True,
+                },
+            )
+
+            invite.used         = True
+            invite.used_by_link = rly_link
+            invite.save(update_fields=['used', 'used_by_link'])
+
+        display = name or hrms_id
+        send(token, chat_id,
+             f"✅ <b>Registration complete!</b>\n\n"
+             f"<b>Name:</b> {display}\n"
+             f"<b>HRMS ID:</b> {hrms_id}\n"
+             f"<b>Designation:</b> {desig or '—'}\n\n"
+             "You are now linked as a Railway Official delegate. "
+             "You can create and view Site Register entries for all LOAs.")
+        logger.info("RlyDelegate onboarded tg=%s hrms=%s", tg_user_id, hrms_id)
+        reset_session(session)
+
+    except Exception as exc:
+        logger.exception("RlyInvite finalize error tg=%s: %s", tg_user_id, exc)
+        send(token, chat_id, "❌ An error occurred. Please try again.")
+        reset_session(session)
 
 
 def try_link_otp(token: str, chat_id: int, tg_user_id: int, code: str, tg_from: dict | None = None) -> bool:
@@ -925,7 +1150,6 @@ def try_link_otp(token: str, chat_id: int, tg_user_id: int, code: str, tg_from: 
             send(token, chat_id, "❌ Invite code expired. Ask admin to generate a new one.")
             return True
 
-        # Start onboarding — name/designation/mobile collected before creating user
         session = get_session(chat_id)
         session.state   = 'ss_onboard_name'
         session.context = {'pending_invite_code': code}
@@ -945,6 +1169,32 @@ def try_link_otp(token: str, chat_id: int, tg_user_id: int, code: str, tg_from: 
         return True
 
     except SupervisorInvite.DoesNotExist:
+        pass
+
+    # ── Rly Official Invite ──────────────────────────────────────────────────
+    try:
+        rly_invite = RlyOfficialInvite.objects.get(code=code, used=False)
+        if rly_invite.is_expired:
+            send(token, chat_id, "❌ Invite code expired. Ask for a new one.")
+            return True
+
+        # Check if tg_user_id already linked
+        if RlyTelegramLink.objects.filter(telegram_user_id=tg_user_id, is_verified=True).exists():
+            send(token, chat_id, "⚠️ Your Telegram is already registered as a Railway Official delegate.")
+            return True
+
+        session = get_session(chat_id)
+        session.state   = 'rly_invite_hrms'
+        session.context = {'pending_rly_invite_code': code}
+        session.save(update_fields=['state', 'context', 'updated_at'])
+
+        send(token, chat_id,
+             "✅ <b>Valid Railway Official invite code!</b>\n\n"
+             "Please enter your <b>HRMS ID</b> to complete registration.")
+        logger.info("RlyOfficialInvite %s accepted by tg=%s", code, tg_user_id)
+        return True
+
+    except RlyOfficialInvite.DoesNotExist:
         return False
 
 
@@ -975,7 +1225,7 @@ def dispatch(token: str, upload_chat_id: str, update: dict):
     if try_link_otp(token, chat_id, tg_user_id, text, tg_from=message.get("from")):
         return
 
-    # Onboarding states — handled before resolve_user (contractor not linked yet)
+    # Onboarding states — handled before resolve_user (user not fully linked yet)
     _session_peek = get_session(chat_id)
     if _session_peek.state in ONBOARD_SS_STATES:
         handle_ss_onboard(token, _session_peek, tg_user_id, chat_id, text)
@@ -984,6 +1234,9 @@ def dispatch(token: str, upload_chat_id: str, update: dict):
         _rly_user, _ = resolve_user(tg_user_id)
         if _rly_user:
             handle_rly_onboard(token, _session_peek, _rly_user, text)
+        return
+    if _session_peek.state in ONBOARD_RLY_INVITE_STATES:
+        handle_rly_invite_onboard(token, _session_peek, tg_user_id, chat_id, text)
         return
 
     user, role = resolve_user(tg_user_id)
@@ -1021,7 +1274,7 @@ def dispatch(token: str, upload_chat_id: str, update: dict):
             show_ss_threads(token, session, user, page=0)
         else:
             send(token, chat_id,
-                 "ℹ️ You will receive notifications here when entries are created for your LOAs.")
+                 "ℹ️ Your account is linked. You will receive notifications here.")
 
     elif session.state == "rly_select_loa":
         handle_rly_select_loa(token, session, user, text or "")
@@ -1095,8 +1348,9 @@ class Command(BaseCommand):
             except requests.exceptions.Timeout:
                 continue
             except requests.exceptions.RequestException as exc:
-                logger.warning("Telegram API error: %s — retrying in %ds", exc, RETRY_SLEEP)
-                time.sleep(RETRY_SLEEP)
+                sleep = 65 if "409" in str(exc) else RETRY_SLEEP
+                logger.warning("Telegram API error: %s — retrying in %ds", exc, sleep)
+                time.sleep(sleep)
             except KeyboardInterrupt:
                 self.stdout.write("\nBot stopped.")
                 break

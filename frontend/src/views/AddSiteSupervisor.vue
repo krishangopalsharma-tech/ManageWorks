@@ -33,9 +33,10 @@ let pollTimer      = null
 const tgUsers         = ref([])
 const tgUsersLoading  = ref(false)
 const tgSearch        = ref('')
-const editingId       = ref(null)
+const editingLinkId   = ref(null)
 const editForm        = ref({ onboard_name: '', onboard_designation: '', onboard_mobile: '' })
 const saving          = ref(false)
+const unlinking       = ref(null)
 
 const filteredTgUsers = computed(() => {
   const q = tgSearch.value.toLowerCase()
@@ -47,10 +48,26 @@ const filteredTgUsers = computed(() => {
   )
 })
 
+// dedupe by link_id so one row per user (multiple LOA mappings collapsed)
+const dedupedTgUsers = computed(() => {
+  const seen = new Set()
+  const out = []
+  for (const u of filteredTgUsers.value) {
+    if (!seen.has(u.link_id)) {
+      seen.add(u.link_id)
+      out.push(u)
+    }
+  }
+  return out
+})
+
 async function loadTgUsers() {
   tgUsersLoading.value = true
   try {
-    const { data } = await axios.get('/api/site-register/linked-users/')
+    const loaIds = allLoas.value.map(l => l.id).join(',')
+    const { data } = await axios.get('/api/site-register/linked-users/', {
+      params: loaIds ? { loa_ids: loaIds } : {}
+    })
     tgUsers.value = data
   } catch { /* ignore */ } finally {
     tgUsersLoading.value = false
@@ -58,32 +75,54 @@ async function loadTgUsers() {
 }
 
 function startEdit(u) {
-  editingId.value = u.link_id
-  editForm.value  = {
+  editingLinkId.value = u.link_id
+  editForm.value = {
     onboard_name:        u.name || '',
     onboard_designation: u.designation || '',
     onboard_mobile:      u.mobile || '',
   }
 }
-
-function cancelEdit() { editingId.value = null }
+function cancelEdit() { editingLinkId.value = null }
 
 async function saveEdit(u) {
   saving.value = true
   try {
-    const { data } = await axios.patch(
+    await axios.patch(
       `/api/site-register/linked-users/${u.link_id}/`,
       editForm.value,
       { headers: h() }
     )
-    const idx = tgUsers.value.findIndex(x => x.link_id === u.link_id)
-    if (idx !== -1) tgUsers.value[idx] = data
-    editingId.value = null
+    // update all rows for this link_id
+    tgUsers.value = tgUsers.value.map(x =>
+      x.link_id === u.link_id
+        ? { ...x, name: editForm.value.onboard_name, designation: editForm.value.onboard_designation, mobile: editForm.value.onboard_mobile }
+        : x
+    )
+    editingLinkId.value = null
     showToast('Saved.')
   } catch {
     showToast('Save failed.', 'error')
   } finally {
     saving.value = false
+  }
+}
+
+async function unlinkFromAll(u) {
+  const loaIds = allLoas.value.map(l => l.id).join(',')
+  if (!confirm(`Remove ${u.name || u.telegram_user_id} as supervisor from ALL ${allLoas.value.length} LOA(s)?`)) return
+  unlinking.value = u.link_id
+  try {
+    await axios.delete(
+      `/api/site-register/linked-users/${u.link_id}/`,
+      { data: { loa_ids: loaIds }, headers: h() }
+    )
+    tgUsers.value = tgUsers.value.filter(x => x.link_id !== u.link_id)
+    editingLinkId.value = null
+    showToast('Supervisor unlinked from all LOAs.')
+  } catch {
+    showToast('Unlink failed.', 'error')
+  } finally {
+    unlinking.value = null
   }
 }
 
@@ -314,34 +353,22 @@ onUnmounted(() => {
       <table v-else class="w-full text-xs">
         <thead>
           <tr class="border-b border-gray-100 dark:border-[#2c2c2e]">
-            <th class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">Type</th>
             <th class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">Name</th>
             <th class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">Designation</th>
             <th class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">Mobile</th>
             <th class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">Telegram ID</th>
-            <th class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">Chat ID</th>
             <th class="px-5 py-2.5 text-right font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
           </tr>
         </thead>
         <tbody>
-          <template v-for="u in filteredTgUsers" :key="u.link_id">
+          <template v-for="u in dedupedTgUsers" :key="u.link_id">
             <!-- View row -->
-            <tr v-if="editingId !== u.link_id"
+            <tr v-if="editingLinkId !== u.link_id"
               class="border-b border-gray-50 dark:border-[#2c2c2e] hover:bg-gray-50 dark:hover:bg-[#2c2c2e] transition-colors">
-              <td class="px-5 py-3">
-                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium"
-                  :class="u.is_contractor
-                    ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
-                    : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'">
-                  <div :class="u.is_contractor ? 'i-carbon-construction' : 'i-carbon-user-avatar'" class="text-xs"></div>
-                  {{ u.is_contractor ? 'Contractor' : 'Official' }}
-                </span>
-              </td>
               <td class="px-5 py-3 font-semibold text-gray-800 dark:text-white">{{ u.name }}</td>
               <td class="px-5 py-3 text-gray-500">{{ u.designation || '—' }}</td>
               <td class="px-5 py-3 text-gray-500">{{ u.mobile || '—' }}</td>
               <td class="px-5 py-3 font-mono text-gray-500">{{ u.telegram_user_id }}</td>
-              <td class="px-5 py-3 font-mono text-gray-400">{{ u.telegram_chat_id }}</td>
               <td class="px-5 py-3 text-right">
                 <button @click="startEdit(u)"
                   class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-gray-200 dark:border-[#3a3a3c] text-gray-500 hover:text-[#1D5F5E] hover:border-[#1D5F5E] transition-colors">
@@ -352,27 +379,23 @@ onUnmounted(() => {
             <!-- Edit row -->
             <tr v-else class="border-b border-[#1D5F5E]/20 bg-[#1D5F5E]/5">
               <td class="px-5 py-3">
-                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium"
-                  :class="u.is_contractor
-                    ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
-                    : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'">
-                  {{ u.is_contractor ? 'Contractor' : 'Official' }}
-                </span>
-              </td>
-              <td class="px-5 py-3">
                 <input v-model="editForm.onboard_name" class="w-full text-xs px-2 py-1 rounded-lg border border-[#1D5F5E]/30 bg-white dark:bg-[#2c2c2e] outline-none focus:border-[#1D5F5E]" placeholder="Name" />
               </td>
               <td class="px-5 py-3">
                 <input v-model="editForm.onboard_designation" class="w-full text-xs px-2 py-1 rounded-lg border border-[#1D5F5E]/30 bg-white dark:bg-[#2c2c2e] outline-none focus:border-[#1D5F5E]" placeholder="Designation" />
               </td>
               <td class="px-5 py-3">
-                <input v-if="u.is_contractor" v-model="editForm.onboard_mobile" class="w-full text-xs px-2 py-1 rounded-lg border border-[#1D5F5E]/30 bg-white dark:bg-[#2c2c2e] outline-none focus:border-[#1D5F5E]" placeholder="Mobile" />
-                <span v-else class="text-gray-400">—</span>
+                <input v-model="editForm.onboard_mobile" class="w-full text-xs px-2 py-1 rounded-lg border border-[#1D5F5E]/30 bg-white dark:bg-[#2c2c2e] outline-none focus:border-[#1D5F5E]" placeholder="Mobile" />
               </td>
               <td class="px-5 py-3 font-mono text-gray-400">{{ u.telegram_user_id }}</td>
-              <td class="px-5 py-3 font-mono text-gray-400 text-xs">{{ u.telegram_chat_id }}<span class="text-gray-300 ml-1">(locked)</span></td>
               <td class="px-5 py-3 text-right">
                 <div class="flex items-center justify-end gap-2">
+                  <button @click="unlinkFromAll(u)" :disabled="unlinking === u.link_id"
+                    class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-red-200 dark:border-red-900/40 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-400 transition-colors disabled:opacity-50 text-xs">
+                    <div v-if="unlinking === u.link_id" class="i-carbon-circle-dash animate-spin text-xs"></div>
+                    <div v-else class="i-carbon-unlink text-xs"></div>
+                    Unlink
+                  </button>
                   <button @click="saveEdit(u)" :disabled="saving"
                     class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#1D5F5E] text-white text-xs font-semibold hover:bg-[#174E4D] disabled:opacity-50 transition-colors">
                     <div v-if="saving" class="i-carbon-circle-dash animate-spin text-xs"></div>
@@ -391,7 +414,7 @@ onUnmounted(() => {
       </table>
 
       <div class="px-5 py-3 border-t border-gray-100 dark:border-[#3a3a3c]">
-        <p class="text-xs text-gray-400">{{ tgUsers.length }} user{{ tgUsers.length !== 1 ? 's' : '' }} linked · Chat ID is not editable</p>
+        <p class="text-xs text-gray-400">{{ dedupedTgUsers.length }} supervisor{{ dedupedTgUsers.length !== 1 ? 's' : '' }} linked to these LOAs</p>
       </div>
     </div>
 

@@ -4,6 +4,7 @@ from .views import (
     TelegramOTPView, TelegramUnlinkView,
     LoaPartiesListView, LinkedUsersView, LoaPartyView,
     SupervisorInviteView,
+    RlyLinkedUsersView, RlyOfficialInviteView,
 )
 
 urlpatterns = [
@@ -19,4 +20,9 @@ urlpatterns = [
 
     path('supervisor-invite/',              SupervisorInviteView.as_view(), name='supervisor_invite_create'),
     path('supervisor-invite/<str:code>/',   SupervisorInviteView.as_view(), name='supervisor_invite_status'),
+
+    path('rly-linked-users/',              RlyLinkedUsersView.as_view(), name='rly_linked_users'),
+    path('rly-linked-users/<int:link_id>/', RlyLinkedUsersView.as_view(), name='rly_linked_user_detail'),
+    path('rly-invite/',              RlyOfficialInviteView.as_view(), name='rly_invite_create'),
+    path('rly-invite/<str:code>/',   RlyOfficialInviteView.as_view(), name='rly_invite_status'),
 ]

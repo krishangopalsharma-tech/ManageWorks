@@ -12,7 +12,7 @@ from rest_framework import status
 
 from site_gsheet_settings.models import SiteGSheet
 from works.models import Work
-from .models import TelegramLinkOTP, TelegramUserLink, WorkContractorTelegram, SupervisorInvite
+from .models import TelegramLinkOTP, TelegramUserLink, WorkContractorTelegram, SupervisorInvite, RlyTelegramLink, RlyOfficialInvite
 
 
 def _is_admin(user):
@@ -296,12 +296,34 @@ def _serialize_link(lnk):
 
 class LinkedUsersView(APIView):
     """
-    GET  /api/site-register/linked-users/       — list all
-    PATCH /api/site-register/linked-users/<id>/ — edit name/designation/mobile
+    GET  /api/site-register/linked-users/?loa_ids=1,2,3  — supervisors for given LOAs
+    GET  /api/site-register/linked-users/                 — all linked users
+    PATCH /api/site-register/linked-users/<id>/           — edit name/designation/mobile
+    DELETE /api/site-register/linked-users/<id>/          — remove supervisor mapping for given loa_ids
     """
     def get(self, request, link_id=None):
         if not _is_admin(request.user):
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
+        loa_ids_raw = request.query_params.get('loa_ids', '')
+        if loa_ids_raw:
+            try:
+                loa_ids = [int(x) for x in loa_ids_raw.split(',') if x.strip()]
+            except ValueError:
+                return Response({'error': 'Invalid loa_ids.'}, status=status.HTTP_400_BAD_REQUEST)
+            mappings = (
+                WorkContractorTelegram.objects
+                .filter(work_id__in=loa_ids, is_active=True)
+                .select_related('telegram_link__user', 'telegram_link__user__profile', 'work')
+                .order_by('telegram_link__onboard_name')
+            )
+            result = []
+            for m in mappings:
+                row = _serialize_link(m.telegram_link)
+                row['mapping_id'] = m.pk
+                row['work_id']    = m.work_id
+                row['loa_number'] = m.work.loa_number or f'LOA #{m.work_id}'
+                result.append(row)
+            return Response(result)
         links = (
             TelegramUserLink.objects
             .filter(is_verified=True)
@@ -309,6 +331,32 @@ class LinkedUsersView(APIView):
             .order_by('user__first_name')
         )
         return Response([_serialize_link(lnk) for lnk in links])
+
+    def delete(self, request, link_id=None):
+        if not _is_admin(request.user):
+            return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
+        # bulk unlink: link_id + loa_ids → deactivate all mappings for that user in those LOAs
+        loa_ids_raw = request.data.get('loa_ids') or request.query_params.get('loa_ids')
+        if loa_ids_raw and link_id:
+            try:
+                loa_ids = [int(x) for x in str(loa_ids_raw).split(',') if str(x).strip()]
+            except ValueError:
+                return Response({'error': 'Invalid loa_ids.'}, status=status.HTTP_400_BAD_REQUEST)
+            updated = WorkContractorTelegram.objects.filter(
+                telegram_link_id=link_id, work_id__in=loa_ids, is_active=True
+            ).update(is_active=False)
+            return Response({'ok': True, 'removed': updated})
+        # single unlink by mapping_id
+        mapping_id = request.data.get('mapping_id') or request.query_params.get('mapping_id')
+        if not mapping_id:
+            return Response({'error': 'mapping_id or (link_id + loa_ids) required.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            mapping = WorkContractorTelegram.objects.get(pk=mapping_id)
+        except WorkContractorTelegram.DoesNotExist:
+            return Response({'error': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+        mapping.is_active = False
+        mapping.save(update_fields=['is_active'])
+        return Response({'ok': True})
 
     def patch(self, request, link_id=None):
         if not _is_admin(request.user):
@@ -444,4 +492,95 @@ class SupervisorInviteView(APIView):
                                    lnk.user.profile.designation or '',
                 },
             })
+        return Response({'used': False})
+
+
+# ── Rly Official Delegate Links ─────────────────────────────────────────────
+
+def _serialize_rly_link(lnk):
+    return {
+        'id':               lnk.id,
+        'hrms_id':          lnk.hrms_id,
+        'name':             lnk.display_name,
+        'designation':      lnk.designation,
+        'mobile':           lnk.mobile,
+        'telegram_user_id': lnk.telegram_user_id,
+        'telegram_chat_id': lnk.telegram_chat_id,
+        'is_verified':      lnk.is_verified,
+        'linked_at':        lnk.linked_at.strftime('%Y-%m-%d %H:%M') if lnk.linked_at else None,
+        'in_system':        lnk.system_user_id is not None,
+    }
+
+
+class RlyLinkedUsersView(APIView):
+    """
+    GET    /api/site-register/rly-linked-users/      — list delegates added by current user
+    PATCH  /api/site-register/rly-linked-users/<id>/ — edit name/designation/mobile
+    DELETE /api/site-register/rly-linked-users/<id>/ — unlink (hard delete)
+    """
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
+        links = (
+            RlyTelegramLink.objects
+            .filter(added_by=request.user)
+            .order_by('name', 'linked_at')
+        )
+        return Response([_serialize_rly_link(lnk) for lnk in links])
+
+    def patch(self, request, link_id=None):
+        if not request.user.is_authenticated:
+            return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
+        try:
+            lnk = RlyTelegramLink.objects.get(pk=link_id, added_by=request.user)
+        except RlyTelegramLink.DoesNotExist:
+            return Response({'error': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+        fields = []
+        for f in ('name', 'designation', 'mobile'):
+            if f in request.data:
+                setattr(lnk, f, request.data[f])
+                fields.append(f)
+        if fields:
+            lnk.save(update_fields=fields)
+        return Response(_serialize_rly_link(lnk))
+
+    def delete(self, request, link_id=None):
+        if not request.user.is_authenticated:
+            return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
+        try:
+            lnk = RlyTelegramLink.objects.get(pk=link_id, added_by=request.user)
+        except RlyTelegramLink.DoesNotExist:
+            return Response({'error': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+        # Delete ghost user if it was created for this link (no real account)
+        if lnk.ghost_user and not lnk.system_user:
+            lnk.ghost_user.delete()
+        lnk.delete()
+        return Response({'ok': True})
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class RlyOfficialInviteView(APIView):
+    """
+    POST /api/site-register/rly-invite/          — generate invite code
+    GET  /api/site-register/rly-invite/<code>/   — check if code was used
+    """
+    def post(self, request):
+        if not request.user.is_authenticated:
+            return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
+        invite = RlyOfficialInvite.generate(created_by=request.user)
+        return Response({
+            'code':       invite.code,
+            'expires_at': invite.expires_at.isoformat(),
+        })
+
+    def get(self, request, code=None):
+        if not request.user.is_authenticated:
+            return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
+        try:
+            invite = RlyOfficialInvite.objects.get(code=code, created_by=request.user)
+        except RlyOfficialInvite.DoesNotExist:
+            return Response({'error': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if invite.used and invite.used_by_link:
+            lnk = invite.used_by_link
+            return Response({'used': True, 'linked_user': _serialize_rly_link(lnk)})
         return Response({'used': False})
