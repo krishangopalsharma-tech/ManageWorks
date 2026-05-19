@@ -181,8 +181,21 @@ class TelegramOTPView(APIView):
     def _link_status(self, user):
         link = getattr(user, 'telegram_link', None)
         if link and link.is_verified:
-            return {'linked': True, 'telegram_user_id': link.telegram_user_id}
-        return {'linked': False}
+            profile = getattr(user, 'profile', None)
+            return {
+                'linked': True,
+                'link_info': {
+                    'telegram_user_id': link.telegram_user_id,
+                    'telegram_chat_id': link.telegram_chat_id,
+                    'name':        user.first_name or user.username,
+                    'hrms_id':     user.username,
+                    'designation': profile.designation if profile else '',
+                    'mobile':      link.onboard_mobile or '',
+                    'in_system':   True,
+                    'is_self':     True,
+                },
+            }
+        return {'linked': False, 'link_info': None}
 
     def _otp_payload(self, otp):
         if not otp or otp.used:
@@ -211,6 +224,18 @@ class TelegramOTPView(APIView):
                 'expires_at': otp.expires_at.isoformat(),
             }
         })
+
+    def patch(self, request):
+        """Update mobile on the logged-in user's own TelegramUserLink."""
+        if not request.user.is_authenticated:
+            return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
+        link = getattr(request.user, 'telegram_link', None)
+        if not link or not link.is_verified:
+            return Response({'error': 'Not linked.'}, status=status.HTTP_404_NOT_FOUND)
+        mobile = request.data.get('mobile', '').strip()
+        link.onboard_mobile = mobile
+        link.save(update_fields=['onboard_mobile'])
+        return Response({'ok': True, 'mobile': mobile})
 
 
 @method_decorator(csrf_exempt, name='dispatch')

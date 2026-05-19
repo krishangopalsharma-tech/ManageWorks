@@ -12,12 +12,12 @@ function getCsrf() {
 }
 const h = () => ({ 'X-CSRFToken': getCsrf() })
 
-// ── Personal OTP link (top section) ──────────────────────────────────────────
+// ── Personal OTP state ────────────────────────────────────────────────────────
 const linked      = ref(false)
+const selfEntry   = ref(null)   // shown in table
 const otp         = ref(null)
 const loading     = ref(true)
 const generating  = ref(false)
-const unlinking   = ref(false)
 const copied      = ref(false)
 const toast       = ref({ show: false, msg: '', type: 'success' })
 const qrDataUrl   = ref(null)
@@ -51,8 +51,9 @@ async function load() {
   loading.value = true
   try {
     const { data } = await axios.get('/api/site-register/telegram/otp/')
-    linked.value = data.linked
-    otp.value    = data.otp || null
+    linked.value    = data.linked
+    selfEntry.value = data.link_info || null
+    otp.value       = data.otp || null
     if (otp.value) startCountdown(otp.value.expires_at)
     await buildQr()
   } finally {
@@ -73,22 +74,6 @@ async function generateOtp() {
   }
 }
 
-async function unlink() {
-  if (!confirm('Unlink your personal Telegram account?')) return
-  unlinking.value = true
-  try {
-    await axios.delete('/api/site-register/telegram/unlink/', { headers: h() })
-    linked.value = false
-    otp.value    = null
-    clearInterval(countdownTimer)
-    showToast('Telegram account unlinked.')
-  } catch {
-    showToast('Failed to unlink.', 'error')
-  } finally {
-    unlinking.value = false
-  }
-}
-
 async function copyCode() {
   if (!otp.value) return
   await navigator.clipboard.writeText(otp.value.code)
@@ -106,7 +91,7 @@ const saving            = ref(false)
 const unlinkingId       = ref(null)
 
 // invite
-const invite            = ref(null)   // { code, expires_at }
+const invite            = ref(null)
 const inviteSecondsLeft = ref(0)
 const generatingInvite  = ref(false)
 const inviteCopied      = ref(false)
@@ -114,10 +99,16 @@ const inviteQrUrl       = ref(null)
 let inviteCountdown = null
 let invitePollTimer = null
 
+// Combined list: self entry first, then delegates
+const allLinked = computed(() => {
+  const list = selfEntry.value ? [selfEntry.value] : []
+  return list.concat(delegates.value)
+})
+
 const filteredDelegates = computed(() => {
   const q = delegateSearch.value.toLowerCase()
-  if (!q) return delegates.value
-  return delegates.value.filter(u =>
+  if (!q) return allLinked.value
+  return allLinked.value.filter(u =>
     (u.name || '').toLowerCase().includes(q) ||
     (u.hrms_id || '').toLowerCase().includes(q) ||
     (u.designation || '').toLowerCase().includes(q)
@@ -140,10 +131,24 @@ async function loadDelegates() {
 }
 
 function startEdit(u) {
-  editingId.value = u.id
+  editingId.value = u.is_self ? 'self' : u.id
   editForm.value  = { name: u.name || '', designation: u.designation || '', mobile: u.mobile || '' }
 }
 function cancelEdit() { editingId.value = null }
+
+async function saveSelf() {
+  saving.value = true
+  try {
+    await axios.patch('/api/site-register/telegram/otp/', { mobile: editForm.value.mobile }, { headers: h() })
+    selfEntry.value = { ...selfEntry.value, mobile: editForm.value.mobile }
+    editingId.value = null
+    showToast('Saved.')
+  } catch {
+    showToast('Save failed.', 'error')
+  } finally {
+    saving.value = false
+  }
+}
 
 async function saveEdit(u) {
   saving.value = true
@@ -163,8 +168,28 @@ async function saveEdit(u) {
   }
 }
 
-async function unlinkDelegate(u) {
-  if (!confirm(`Unlink ${u.name || u.hrms_id} from Telegram?`)) return
+async function unlinkUser(u) {
+  const label = u.name || u.hrms_id || 'this user'
+  if (!confirm(`Unlink ${label} from Telegram?`)) return
+
+  if (u.is_self) {
+    unlinkingId.value = 'self'
+    try {
+      await axios.delete('/api/site-register/telegram/unlink/', { headers: h() })
+      linked.value    = false
+      selfEntry.value = null
+      otp.value       = null
+      clearInterval(countdownTimer)
+      editingId.value = null
+      showToast('Your Telegram account unlinked.')
+    } catch {
+      showToast('Unlink failed.', 'error')
+    } finally {
+      unlinkingId.value = null
+    }
+    return
+  }
+
   unlinkingId.value = u.id
   try {
     await axios.delete(`/api/site-register/rly-linked-users/${u.id}/`, { headers: h() })
@@ -187,7 +212,7 @@ function startInviteCountdown(expiresAt) {
     if (diff === 0) {
       clearInterval(inviteCountdown)
       clearInterval(invitePollTimer)
-      invite.value     = null
+      invite.value      = null
       inviteQrUrl.value = null
     }
   }
@@ -287,29 +312,22 @@ onUnmounted(() => {
             <span class="w-5 h-5 rounded-full bg-[#1D5F5E] text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">3</span>
             <div>
               <p class="text-sm font-semibold text-gray-800 dark:text-white">Type the 6-digit code</p>
-              <p class="text-xs text-gray-400 mt-0.5">Send the 6 digits in chat — bot will ask your HRMS ID.</p>
+              <p class="text-xs text-gray-400 mt-0.5">Send the 6 digits — bot will confirm your account details.</p>
             </div>
           </div>
         </div>
 
-        <!-- QR + OTP panel -->
+        <!-- QR + OTP panel — always visible, no unlink here -->
         <div class="w-64 shrink-0 bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-100 dark:border-[#3a3a3c] shadow-sm p-4">
-          <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Your Personal Link</p>
-
-          <div v-if="linked" class="flex flex-col items-center gap-3">
-            <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-              <div class="i-carbon-checkmark text-blue-600 text-lg"></div>
-            </div>
-            <p class="text-sm font-bold text-gray-800 dark:text-white">Telegram Linked</p>
-            <button @click="unlink" :disabled="unlinking"
-              class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 transition-colors disabled:opacity-50">
-              <div v-if="unlinking" class="i-carbon-circle-dash animate-spin text-xs"></div>
-              <div v-else class="i-carbon-unlink text-xs"></div>
-              {{ unlinking ? 'Unlinking…' : 'Unlink' }}
-            </button>
+          <div class="flex items-center justify-between mb-3">
+            <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">Your Personal Link</p>
+            <span v-if="linked"
+              class="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-[10px] font-semibold">
+              <div class="w-1.5 h-1.5 rounded-full bg-green-500"></div> Linked
+            </span>
           </div>
 
-          <div v-else class="flex flex-col items-center gap-3">
+          <div class="flex flex-col items-center gap-3">
             <div class="p-1.5 bg-white rounded-xl shadow-sm border border-gray-100">
               <img v-if="qrDataUrl" :src="qrDataUrl" alt="Scan to open bot" class="w-32 h-32" />
             </div>
@@ -348,7 +366,7 @@ onUnmounted(() => {
       <div class="px-5 py-4 border-b border-gray-100 dark:border-[#3a3a3c] flex items-center gap-3">
         <div class="flex-1">
           <h2 class="text-sm font-bold text-gray-700 dark:text-gray-200">Linked Telegram Users</h2>
-          <p class="text-xs text-gray-400 mt-0.5">Railway officials in your jurisdiction linked via invite code</p>
+          <p class="text-xs text-gray-400 mt-0.5">All Railway Officials linked in your jurisdiction</p>
         </div>
         <input v-model="delegateSearch" type="text" placeholder="Search…"
           class="text-xs px-3 py-1.5 rounded-lg border border-gray-200 dark:border-[#3a3a3c] bg-gray-50 dark:bg-[#2c2c2e] text-gray-700 dark:text-gray-200 placeholder-gray-400 outline-none focus:border-[#1D5F5E] w-40" />
@@ -356,7 +374,6 @@ onUnmounted(() => {
           class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-[#2c2c2e] transition-colors" title="Refresh">
           <div :class="delegatesLoading ? 'animate-spin' : ''" class="i-carbon-renew text-sm text-gray-400"></div>
         </button>
-        <!-- Add delegate button -->
         <button @click="generateInvite" :disabled="generatingInvite || !!invite"
           class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1D5F5E] hover:bg-[#174E4D] text-white text-xs font-semibold transition-colors disabled:opacity-50">
           <div v-if="generatingInvite" class="i-carbon-circle-dash animate-spin text-xs"></div>
@@ -397,11 +414,11 @@ onUnmounted(() => {
       </transition>
 
       <!-- Table -->
-      <div v-if="delegatesLoading && !delegates.length" class="p-6 text-xs text-gray-400 flex items-center gap-2">
+      <div v-if="(delegatesLoading || loading) && !allLinked.length" class="p-6 text-xs text-gray-400 flex items-center gap-2">
         <div class="i-carbon-circle-dash animate-spin"></div> Loading…
       </div>
       <div v-else-if="!filteredDelegates.length" class="p-6 text-xs text-gray-400 text-center">
-        No Railway Officials linked. Click "Add Official" to generate an invite.
+        No Railway Officials linked. Link your account above or click "Add Official" to invite others.
       </div>
 
       <table v-else class="w-full text-xs">
@@ -416,14 +433,20 @@ onUnmounted(() => {
           </tr>
         </thead>
         <tbody>
-          <template v-for="u in filteredDelegates" :key="u.id">
+          <template v-for="u in filteredDelegates" :key="u.is_self ? 'self' : u.id">
+
             <!-- View row -->
-            <tr v-if="editingId !== u.id"
-              class="border-b border-gray-50 dark:border-[#2c2c2e] hover:bg-gray-50 dark:hover:bg-[#2c2c2e] transition-colors">
+            <tr v-if="editingId !== (u.is_self ? 'self' : u.id)"
+              class="border-b border-gray-50 dark:border-[#2c2c2e] hover:bg-gray-50 dark:hover:bg-[#2c2c2e] transition-colors"
+              :class="u.is_self ? 'bg-[#1D5F5E]/3' : ''">
               <td class="px-5 py-3">
                 <div class="flex items-center gap-2">
                   <span class="font-semibold text-gray-800 dark:text-white">{{ u.name }}</span>
-                  <span v-if="u.in_system"
+                  <span v-if="u.is_self"
+                    class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#1D5F5E]/10 text-[#1D5F5E]">
+                    You
+                  </span>
+                  <span v-else-if="u.in_system"
                     class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
                     In System
                   </span>
@@ -441,7 +464,45 @@ onUnmounted(() => {
               </td>
             </tr>
 
-            <!-- Edit row -->
+            <!-- Edit row (self — mobile editable, designation read-only from profile) -->
+            <tr v-else-if="u.is_self" class="border-b border-[#1D5F5E]/20 bg-[#1D5F5E]/5">
+              <td class="px-5 py-3">
+                <div class="flex items-center gap-2">
+                  <span class="font-semibold text-gray-700 dark:text-gray-200">{{ u.name }}</span>
+                  <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#1D5F5E]/10 text-[#1D5F5E]">You</span>
+                </div>
+              </td>
+              <td class="px-5 py-3 font-mono text-gray-400">{{ u.hrms_id || '—' }}</td>
+              <td class="px-5 py-3 text-gray-400 text-xs">{{ u.designation || '—' }}</td>
+              <td class="px-5 py-3">
+                <input v-model="editForm.mobile"
+                  class="w-full text-xs px-2 py-1 rounded-lg border border-[#1D5F5E]/30 bg-white dark:bg-[#2c2c2e] outline-none focus:border-[#1D5F5E]"
+                  placeholder="Mobile" />
+              </td>
+              <td class="px-5 py-3 font-mono text-gray-400">{{ u.telegram_user_id }}</td>
+              <td class="px-5 py-3 text-right">
+                <div class="flex items-center justify-end gap-1.5">
+                  <button @click="saveSelf" :disabled="saving"
+                    class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#1D5F5E] text-white text-xs font-semibold hover:bg-[#174E4D] disabled:opacity-50 transition-colors">
+                    <div v-if="saving" class="i-carbon-circle-dash animate-spin text-xs"></div>
+                    <div v-else class="i-carbon-checkmark text-xs"></div>
+                    Save
+                  </button>
+                  <button @click="cancelEdit"
+                    class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-gray-200 dark:border-[#3a3a3c] text-gray-500 text-xs hover:bg-gray-100 dark:hover:bg-[#3a3a3c] transition-colors">
+                    Cancel
+                  </button>
+                  <button @click="unlinkUser(u)" :disabled="unlinkingId === 'self'"
+                    class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-red-200 text-red-600 text-xs hover:bg-red-50 transition-colors disabled:opacity-50">
+                    <div v-if="unlinkingId === 'self'" class="i-carbon-circle-dash animate-spin text-xs"></div>
+                    <div v-else class="i-carbon-unlink text-xs"></div>
+                    Unlink
+                  </button>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Edit row (delegate) -->
             <tr v-else class="border-b border-[#1D5F5E]/20 bg-[#1D5F5E]/5">
               <td class="px-5 py-3">
                 <input v-model="editForm.name"
@@ -472,7 +533,7 @@ onUnmounted(() => {
                     class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-gray-200 dark:border-[#3a3a3c] text-gray-500 text-xs hover:bg-gray-100 dark:hover:bg-[#3a3a3c] transition-colors">
                     Cancel
                   </button>
-                  <button @click="unlinkDelegate(u)" :disabled="unlinkingId === u.id"
+                  <button @click="unlinkUser(u)" :disabled="unlinkingId === u.id"
                     class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-red-200 text-red-600 text-xs hover:bg-red-50 transition-colors disabled:opacity-50">
                     <div v-if="unlinkingId === u.id" class="i-carbon-circle-dash animate-spin text-xs"></div>
                     <div v-else class="i-carbon-unlink text-xs"></div>
@@ -481,13 +542,14 @@ onUnmounted(() => {
                 </div>
               </td>
             </tr>
+
           </template>
         </tbody>
       </table>
 
       <div class="px-5 py-3 border-t border-gray-100 dark:border-[#3a3a3c]">
         <p class="text-xs text-gray-400">
-          {{ delegates.length }} user{{ delegates.length !== 1 ? 's' : '' }} linked in your jurisdiction ·
+          {{ allLinked.length }} user{{ allLinked.length !== 1 ? 's' : '' }} linked in your jurisdiction ·
           Telegram ID is not editable
         </p>
       </div>
