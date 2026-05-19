@@ -180,35 +180,60 @@ class SiteRegisterView(APIView):
         threads_qs = (
             SiteRegisterThread.objects
             .filter(work__in=works)
-            .select_related('work_item', 'created_by')
-            .prefetch_related('messages__sender')
-            .order_by('-created_at')
+            .select_related('work', 'work_item', 'created_by', 'created_by__profile')
+            .prefetch_related('messages__sender__telegram_link', 'messages__sender__profile',
+                              'messages__attachments')
+            .order_by('created_at')
         )
         threads_by_work = defaultdict(list)
         for t in threads_qs:
-            msgs = [
+            def _msg_designation(m):
+                if not m.sender:
+                    return ''
+                if m.sender_role == 'site_supervisor':
+                    tg = getattr(m.sender, 'telegram_link', None)
+                    return (tg.onboard_designation if tg else '') or ''
+                # rly_official
+                p = getattr(m.sender, 'profile', None)
+                return p.designation if p else ''
+            all_msgs = [
                 {
-                    'id':          m.id,
-                    'sender_role': m.sender_role,
-                    'sender_name': (m.sender.first_name or m.sender.username) if m.sender else '—',
-                    'text':        m.message_text,
-                    'created_at':  m.created_at.isoformat(),
+                    'id':                m.id,
+                    'sender_role':       m.sender_role,
+                    'sender_name':       (m.sender.first_name or m.sender.username) if m.sender else '—',
+                    'sender_designation': _msg_designation(m),
+                    'text':              m.message_text,
+                    'created_at':        m.created_at.isoformat(),
+                    'attachments': [
+                        {
+                            'id':        a.id,
+                            'att_number': a.att_number,
+                            'file_type': a.file_type,
+                            'filename':  a.original_filename,
+                        }
+                        for a in m.attachments.all()
+                    ],
                 }
                 for m in t.messages.order_by('created_at')
             ]
+            ss_msgs = [m for m in all_msgs if m['sender_role'] == 'site_supervisor']
+            profile = getattr(t.created_by, 'profile', None) if t.created_by else None
             threads_by_work[t.work_id].append({
-                'id':               t.pk,
-                'sr_number':        f'SR-{t.pk:06d}',
-                'category':         t.category,
-                'category_label':   SR_CATEGORY_LABELS.get(t.category, t.category),
-                'initial_text':     t.initial_text,
-                'status':           t.status,
-                'initiated_by_role': t.initiated_by_role,
-                'created_by_name':  (t.created_by.first_name or t.created_by.username) if t.created_by else '—',
-                'created_at':       t.created_at.isoformat(),
-                'work_item_id':     t.work_item_id,
-                'work_item_ref':    f"{t.work_item.schedule}-{t.work_item.serial_number}" if t.work_item else None,
-                'messages':         msgs,
+                'id':                   t.pk,
+                'sr_number':            t.sr_number,
+                'category':             t.category,
+                'instruction_type':     'item' if t.work_item_id else 'general',
+                'initial_text':         t.initial_text,
+                'status':               t.status,
+                'initiated_by_role':    t.initiated_by_role,
+                'created_by_name':      (t.created_by.first_name or t.created_by.username) if t.created_by else '—',
+                'created_by_designation': profile.designation if profile else '',
+                'created_at':           t.created_at.isoformat(),
+                'work_item_id':         t.work_item_id,
+                'work_item_ref':        f"{t.work_item.schedule}-{(t.work_item.serial_number or '').strip()}" if t.work_item else None,
+                'first_response':       ss_msgs[0] if ss_msgs else None,
+                'response_count':       len(ss_msgs),
+                'messages':             all_msgs,
             })
 
         # Attach thread data to each work result

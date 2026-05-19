@@ -89,13 +89,38 @@ def send(token: str, chat_id: int, text: str, keyboard=None, remove_kb=False):
         logger.warning("sendMessage failed chat=%s: %s", chat_id, exc)
 
 
-def copy_message(token: str, to_chat_id: int, from_chat_id: int, message_id: int) -> int | None:
-    """Copy a message to the archive group. Returns new message_id or None on failure."""
+def send_inline(token: str, chat_id: int, text: str, buttons: list) -> int | None:
+    """Send message with inline keyboard. buttons = [[{"text":…,"callback_data":…}]]"""
+    kwargs = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "HTML",
+        "reply_markup": {"inline_keyboard": buttons},
+    }
     try:
-        data = _api(token, "copyMessage",
-                    chat_id=to_chat_id,
-                    from_chat_id=from_chat_id,
-                    message_id=message_id)
+        data = _api(token, "sendMessage", **kwargs)
+        return data.get("result", {}).get("message_id")
+    except Exception as exc:
+        logger.warning("sendMessage(inline) failed chat=%s: %s", chat_id, exc)
+        return None
+
+
+def answer_callback(token: str, callback_query_id: str, text: str = ""):
+    try:
+        _api(token, "answerCallbackQuery", callback_query_id=callback_query_id, text=text)
+    except Exception as exc:
+        logger.warning("answerCallbackQuery failed: %s", exc)
+
+
+def copy_message(token: str, to_chat_id: int, from_chat_id: int, message_id: int,
+                 caption: str | None = None) -> int | None:
+    """Copy a message to the archive group. Returns new message_id or None on failure."""
+    kwargs = dict(chat_id=to_chat_id, from_chat_id=from_chat_id, message_id=message_id)
+    if caption:
+        kwargs["caption"] = caption
+        kwargs["parse_mode"] = "HTML"
+    try:
+        data = _api(token, "copyMessage", **kwargs)
         return data["result"]["message_id"]
     except Exception as exc:
         logger.warning("copyMessage failed: %s", exc)
@@ -225,16 +250,49 @@ def _time_ago(dt) -> str:
 
 def _save_attachments(token: str, upload_chat_id: str,
                       message_obj: SiteRegisterMessage,
-                      attachments: list[dict]):
+                      attachments: list[dict],
+                      thread: SiteRegisterThread | None = None,
+                      sender_display: str = '',
+                      notify_chat_ids: list | None = None):
     if not upload_chat_id or not attachments:
         return
-    for att in attachments:
+    loa_number = thread.work.loa_number if thread else ''
+    sr_num     = _thread_sr_number(thread) if thread else ''
+    # Count existing attachments for this work to assign sequential serials
+    base_count = 0
+    if thread:
+        from works.models import Work as _Work
+        _Work.objects.select_for_update().get(pk=thread.work_id)
+        base_count = SiteRegisterAttachment.objects.filter(
+            message__thread__work_id=thread.work_id
+        ).count()
+    for i, att in enumerate(attachments):
+        att_serial = base_count + i + 1 if thread else None
+        att_num    = _att_number(loa_number, att_serial) if (thread and att_serial) else ''
+        caption    = None
+        if att_num:
+            caption = (
+                f"📎 <b>{att_num}</b>\n\n"
+                f"📋 SR: <b>{sr_num}</b>\n"
+                f"📄 LOA: {loa_number}\n"
+                f"👤 {sender_display}"
+            )
         archive_msg_id = copy_message(
             token,
             to_chat_id   = int(upload_chat_id),
             from_chat_id = att["from_chat_id"],
             message_id   = att["from_message_id"],
+            caption      = caption,
         )
+        # Forward file to recipients (other party in the conversation)
+        notify_caption = (f"📎 <b>{att_num}</b>  ·  SR <b>{sr_num}</b>\n👤 {sender_display}"
+                          if att_num else None)
+        for chat_id in (notify_chat_ids or []):
+            copy_message(token,
+                         to_chat_id   = chat_id,
+                         from_chat_id = att["from_chat_id"],
+                         message_id   = att["from_message_id"],
+                         caption      = notify_caption)
         SiteRegisterAttachment.objects.create(
             message                  = message_obj,
             tg_file_id               = att["tg_file_id"],
@@ -242,7 +300,41 @@ def _save_attachments(token: str, upload_chat_id: str,
             original_filename        = att.get("original_filename", ""),
             file_type                = att["file_type"],
             archive_group_message_id = archive_msg_id,
+            att_serial               = att_serial,
         )
+
+
+# ── SR / ATT number helpers ───────────────────────────────────────────────────
+
+def _loa_suffix(loa_number: str) -> str:
+    digits = re.sub(r'\D', '', loa_number or '')
+    return digits[-5:] if len(digits) >= 5 else digits.zfill(5)
+
+
+def _sr_number(loa_number: str, work_serial: int) -> str:
+    return f"{_loa_suffix(loa_number)}-{work_serial:04d}"
+
+
+def _att_number(loa_number: str, att_serial: int) -> str:
+    return f"ATT-{_loa_suffix(loa_number)}-{att_serial:04d}"
+
+
+def _thread_sr_number(t: SiteRegisterThread) -> str:
+    serial = t.work_serial if t.work_serial is not None else t.pk
+    return _sr_number(t.work.loa_number, serial)
+
+
+def _sender_display(user, role: str) -> str:
+    if role == 'site_supervisor':
+        tg = getattr(user, 'telegram_link', None)
+        name  = (tg.onboard_name if tg else '') or (user.first_name if user else '') or '?'
+        desig = (tg.onboard_designation if tg else '') if tg else ''
+    else:
+        name  = (user.first_name or user.username) if user else '?'
+        p     = getattr(user, 'profile', None) if user else None
+        desig = p.designation if p else ''
+    role_label = 'Rly Official' if role == 'rly_official' else 'Site Supervisor'
+    return f"{name} ({desig}) — {role_label}" if desig else f"{name} — {role_label}"
 
 
 # ── LOA / contractor helpers ──────────────────────────────────────────────────
@@ -520,7 +612,18 @@ def show_rly_confirm(token: str, session: BotSession):
 def do_create_thread(token: str, upload_chat_id: str, session: BotSession, user):
     ctx = session.context
 
+    # Collect SS chat IDs before the atomic block (read-only query)
+    ss_chat_ids = list(
+        WorkContractorTelegram.objects
+        .filter(work_id=ctx['work_id'], role='site_supervisor', is_active=True)
+        .select_related('telegram_link')
+        .values_list('telegram_link__telegram_chat_id', flat=True)
+    )
+
     with transaction.atomic():
+        from works.models import Work as _Work
+        _Work.objects.select_for_update().get(pk=ctx['work_id'])
+        work_serial = SiteRegisterThread.objects.filter(work_id=ctx['work_id']).count() + 1
         thread = SiteRegisterThread.objects.create(
             work_id           = ctx['work_id'],
             work_item_id      = ctx.get('work_item_id'),
@@ -529,6 +632,7 @@ def do_create_thread(token: str, upload_chat_id: str, session: BotSession, user)
             initial_text      = ctx.get('text', ''),
             status            = 'open',
             created_by        = user,
+            work_serial       = work_serial,
         )
         attachments = ctx.get("attachments", [])
         if attachments:
@@ -538,20 +642,24 @@ def do_create_thread(token: str, upload_chat_id: str, session: BotSession, user)
                 sender_role  = 'rly_official',
                 message_text = ctx.get('text', ''),
             )
-            _save_attachments(token, upload_chat_id, msg, attachments)
+            _save_attachments(token, upload_chat_id, msg, attachments,
+                              thread=thread,
+                              sender_display=_sender_display(user, 'rly_official'),
+                              notify_chat_ids=ss_chat_ids)
 
+    sr_num     = _sr_number(ctx['loa_number'], work_serial)
     instr_type = "Item-wise" if ctx.get('work_item_id') else "General"
     item_line  = f"\n📦 <b>Item:</b> {ctx['work_item_desc']}" if ctx.get('work_item_id') else ""
     att_note   = f"\n📎 {len(attachments)} attachment(s) included." if attachments else ""
     notify_text = (
-        f"📋 <b>New Rly Official Instruction — SR-{thread.pk:06d}</b>\n\n"
+        f"📋 <b>New Rly Official Instruction — {sr_num}</b>\n\n"
         f"<b>LOA:</b> {ctx['loa_number']}\n"
         f"<b>Tender No:</b> {ctx.get('tender_number', '—')}\n"
         f"<b>Type:</b> {instr_type}{item_line}\n\n"
         f"{ctx.get('text', '')}{att_note}\n\n"
-        f"— <i>{_display_name(user)}</i>\n\n"
-        "Reply via bot menu."
+        f"— <i>{_display_name(user)}</i>"
     )
+    reply_btn = [[{"text": f"↩️ Reply to {sr_num}", "callback_data": f"reply:{thread.pk}"}]]
 
     ss_links = (
         WorkContractorTelegram.objects
@@ -560,13 +668,13 @@ def do_create_thread(token: str, upload_chat_id: str, session: BotSession, user)
     )
     notified = 0
     for m in ss_links:
-        send(token, m.telegram_link.telegram_chat_id, notify_text)
+        send_inline(token, m.telegram_link.telegram_chat_id, notify_text, reply_btn)
         notified += 1
 
     send(token, session.telegram_chat_id,
-         f"✅ <b>SR-{thread.pk:06d} created.</b> Notified {notified} site supervisor(s).",
+         f"✅ <b>{sr_num} created.</b> Notified {notified} site supervisor(s).",
          remove_kb=True)
-    logger.info("SR-%06d created by %s, notified %d", thread.pk, user.username, notified)
+    logger.info("%s created by %s, notified %d", sr_num, user.username, notified)
     reset_session(session)
 
 
@@ -634,7 +742,7 @@ def ss_threads_page(user, page: int):
 
 def _thread_short(t: SiteRegisterThread) -> str:
     preview = t.initial_text[:60].replace('\n', ' ')
-    return (f"SR-{t.pk:06d} | {t.work.loa_number} | "
+    return (f"{_thread_sr_number(t)} | {t.work.loa_number} | "
             f"{CATEGORY_LABELS.get(t.category, t.category)} | {_time_ago(t.created_at)}\n{preview}…")
 
 
@@ -656,7 +764,7 @@ def _thread_full(t: SiteRegisterThread) -> str:
         replies = "\n\n<b>Recent replies:</b>\n" + "\n".join(parts)
 
     return (
-        f"<b>SR-{t.pk:06d}</b> — {CATEGORY_LABELS.get(t.category, t.category)}\n"
+        f"<b>{_thread_sr_number(t)}</b> — {CATEGORY_LABELS.get(t.category, t.category)}\n"
         f"<b>LOA:</b> {t.work.loa_number} | <b>Status:</b> {t.status.upper()}{item_line}\n"
         f"<b>Created:</b> {_time_ago(t.created_at)}\n\n{t.initial_text}{replies}"
     )
@@ -688,8 +796,9 @@ def show_ss_threads(token: str, session: BotSession, user, page: int = 0):
 def show_thread_actions(token: str, session: BotSession, thread: SiteRegisterThread):
     send(token, session.telegram_chat_id,
          _thread_full(thread) + "\n\nWhat would you like to do?",
-         keyboard=[["1. ✉️ Reply"], ["2. ✅ Mark Resolved"], ["3. ◀ Back"], ["❌ Cancel"]])
+         keyboard=[["1. ✉️ Reply"], ["2. ◀ Back"], ["❌ Cancel"]])
     session.context["thread_id"] = thread.pk
+    session.context["sr_number"] = _thread_sr_number(thread)
     session.state = "ss_thread_action"
     session.save(update_fields=["state", "context", "updated_at"])
 
@@ -704,9 +813,10 @@ def show_ss_reply_prompt(token: str, session: BotSession):
 
 
 def show_ss_confirm(token: str, session: BotSession):
-    ctx = session.context
+    ctx    = session.context
+    sr_num = ctx.get("sr_number", str(ctx["thread_id"]))
     send(token, session.telegram_chat_id,
-         f"<b>Reply to SR-{ctx['thread_id']:06d}:</b>\n\n"
+         f"<b>Reply to {sr_num}:</b>\n\n"
          f"{ctx.get('reply_text', '—')}"
          f"{_att_line(ctx)}\n\n"
          "Send this reply?",
@@ -743,6 +853,8 @@ def do_send_reply(token: str, upload_chat_id: str, session: BotSession, user):
         reset_session(session); return
 
     attachments = ctx.get("attachments", [])
+    # Resolve creator chat ID before atomic block
+    creator_chat_id = _creator_chat_id(thread.created_by)
     with transaction.atomic():
         msg = SiteRegisterMessage.objects.create(
             thread       = thread,
@@ -750,13 +862,17 @@ def do_send_reply(token: str, upload_chat_id: str, session: BotSession, user):
             sender_role  = 'site_supervisor',
             message_text = ctx.get('reply_text', ''),
         )
-        _save_attachments(token, upload_chat_id, msg, attachments)
+        _save_attachments(token, upload_chat_id, msg, attachments,
+                          thread=thread,
+                          sender_display=_sender_display(user, 'site_supervisor'),
+                          notify_chat_ids=[creator_chat_id] if creator_chat_id else [])
         thread.status = 'replied'
         thread.save(update_fields=['status'])
 
     att_note    = f"\n📎 {len(attachments)} attachment(s) included." if attachments else ""
+    sr_num      = ctx.get("sr_number", _thread_sr_number(thread))
     notify_text = (
-        f"💬 <b>Site Supervisor Reply — SR-{thread.pk:06d}</b>\n\n"
+        f"💬 <b>Site Supervisor Reply — {sr_num}</b>\n\n"
         f"<b>LOA:</b> {thread.work.loa_number}\n"
         f"<b>Type:</b> {CATEGORY_LABELS.get(thread.category, thread.category)}\n\n"
         f"{ctx.get('reply_text', '')}{att_note}\n\n"
@@ -769,8 +885,8 @@ def do_send_reply(token: str, upload_chat_id: str, session: BotSession, user):
         notified = 1
 
     send(token, session.telegram_chat_id,
-         f"✅ Reply sent. Notified {notified} Rly Official(s).", remove_kb=True)
-    logger.info("SR-%06d reply by %s, notified creator chat=%s", thread.pk, user.username, chat_id)
+         f"✅ Reply sent to {sr_num}. Notified {notified} Rly Official(s).", remove_kb=True)
+    logger.info("%s reply by %s, notified creator chat=%s", sr_num, user.username, chat_id)
     reset_session(session)
 
 
@@ -832,10 +948,9 @@ def handle_ss_select_thread(token: str, session: BotSession, user, text: str):
 def handle_ss_thread_action(token: str, session: BotSession, user, text: str):
     t = text.strip()
     if t.startswith("1"):   show_ss_reply_prompt(token, session)
-    elif t.startswith("2"): do_mark_resolved(token, session, user)
-    elif t.startswith("3"): show_ss_threads(token, session, user,
+    elif t.startswith("2"): show_ss_threads(token, session, user,
                                              page=session.context.get("thread_page", 0))
-    else: send(token, session.telegram_chat_id, "⚠️ Send 1, 2, or 3.")
+    else: send(token, session.telegram_chat_id, "⚠️ Send 1 to reply or 2 to go back.")
 
 
 def handle_ss_type_reply(token: str, session: BotSession,
@@ -1283,10 +1398,57 @@ def try_link_otp(token: str, chat_id: int, tg_user_id: int, code: str, tg_from: 
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# CALLBACK QUERY DISPATCHER (inline button taps)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def dispatch_callback(token: str, cq: dict):
+    cq_id      = cq["id"]
+    chat_id    = cq["message"]["chat"]["id"]
+    tg_user_id = cq["from"]["id"]
+    data       = cq.get("data", "")
+
+    answer_callback(token, cq_id)
+
+    user, role = resolve_user(tg_user_id)
+    if not user:
+        send(token, chat_id, "⚠️ Account not linked. Type /start for instructions.")
+        return
+
+    if data.startswith("reply:"):
+        try:
+            thread_pk = int(data.split(":", 1)[1])
+        except (ValueError, IndexError):
+            return
+        try:
+            thread = SiteRegisterThread.objects.select_related('work').get(pk=thread_pk)
+        except SiteRegisterThread.DoesNotExist:
+            send(token, chat_id, "⚠️ Entry not found.")
+            return
+
+        sr_num  = _thread_sr_number(thread)
+        session = get_session(chat_id)
+        session.state   = "ss_type_reply"
+        session.context = {"thread_id": thread_pk, "sr_number": sr_num, "attachments": []}
+        session.save(update_fields=["state", "context", "updated_at"])
+        send(token, chat_id,
+             f"↩️ <b>Reply to {sr_num}</b>\n\n"
+             "✏️ Type your reply (you can also send photos/documents).\n"
+             "Send <code>/done</code> after attachments to finish without text.",
+             remove_kb=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # MAIN DISPATCHER
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def dispatch(token: str, upload_chat_id: str, update: dict):
+    if "callback_query" in update:
+        try:
+            dispatch_callback(token, update["callback_query"])
+        except Exception as exc:
+            logger.exception("Error in dispatch_callback: %s", exc)
+        return
+
     message = update.get("message") or update.get("edited_message")
     if not message:
         return
@@ -1419,7 +1581,7 @@ class Command(BaseCommand):
                 data = _api(token, "getUpdates",
                     offset=offset,
                     timeout=POLL_TIMEOUT,
-                    allowed_updates=["message"],
+                    allowed_updates=["message", "callback_query"],
                 )
                 for update in data.get("result", []):
                     try:

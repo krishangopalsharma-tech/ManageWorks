@@ -1,4 +1,5 @@
 import random
+import re
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -92,10 +93,18 @@ class SiteRegisterThread(models.Model):
     status            = models.CharField(max_length=20, choices=STATUS_CHOICES, default='open')
     created_by        = models.ForeignKey(User, null=True, on_delete=models.SET_NULL, related_name='sr_threads_created')
     tg_order_message_id = models.BigIntegerField(null=True, blank=True)
+    work_serial       = models.PositiveIntegerField(null=True, blank=True)
     created_at        = models.DateTimeField(auto_now_add=True)
 
+    @property
+    def sr_number(self) -> str:
+        digits = re.sub(r'\D', '', self.work.loa_number or '')
+        suffix = digits[-5:] if len(digits) >= 5 else digits.zfill(5)
+        serial = self.work_serial if self.work_serial is not None else self.pk
+        return f"{suffix}-{serial:04d}"
+
     def __str__(self):
-        return f"SR-{self.pk:06d} [{self.work.loa_number}] {self.category}"
+        return f"{self.sr_number} [{self.work.loa_number}] {self.category}"
 
 
 class SiteRegisterMessage(models.Model):
@@ -130,7 +139,16 @@ class SiteRegisterAttachment(models.Model):
     original_filename     = models.CharField(max_length=500, blank=True)
     file_type             = models.CharField(max_length=20, choices=FILE_TYPE_CHOICES)
     archive_group_message_id = models.BigIntegerField(null=True, blank=True)
+    att_serial            = models.PositiveIntegerField(null=True, blank=True)
     uploaded_at           = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def att_number(self) -> str:
+        loa = self.message.thread.work.loa_number or ''
+        digits = re.sub(r'\D', '', loa)
+        suffix = digits[-5:] if len(digits) >= 5 else digits.zfill(5)
+        serial = self.att_serial if self.att_serial is not None else self.pk
+        return f"ATT-{suffix}-{serial:04d}"
 
     def __str__(self):
         return f"{self.file_type} for SR-{self.message.thread_id:06d}"
