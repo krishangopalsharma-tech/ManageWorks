@@ -631,10 +631,29 @@ def show_ss_confirm(token: str, session: BotSession):
     session.save(update_fields=["state", "updated_at"])
 
 
+def _creator_chat_id(creator_user) -> int | None:
+    """Return Telegram chat_id for thread.created_by, or None if not linked."""
+    if creator_user is None:
+        return None
+    try:
+        return TelegramUserLink.objects.get(user=creator_user, is_verified=True).telegram_chat_id
+    except TelegramUserLink.DoesNotExist:
+        pass
+    try:
+        from django.db.models import Q
+        return RlyTelegramLink.objects.get(
+            Q(system_user=creator_user) | Q(ghost_user=creator_user),
+            is_verified=True,
+        ).telegram_chat_id
+    except RlyTelegramLink.DoesNotExist:
+        pass
+    return None
+
+
 def do_send_reply(token: str, upload_chat_id: str, session: BotSession, user):
     ctx = session.context
     try:
-        thread = SiteRegisterThread.objects.select_related('work').get(pk=ctx['thread_id'])
+        thread = SiteRegisterThread.objects.select_related('work', 'created_by').get(pk=ctx['thread_id'])
     except SiteRegisterThread.DoesNotExist:
         send(token, session.telegram_chat_id, "⚠️ Entry not found.", remove_kb=True)
         reset_session(session); return
@@ -660,31 +679,21 @@ def do_send_reply(token: str, upload_chat_id: str, session: BotSession, user):
         f"— <i>{_display_name(user)}</i>"
     )
     notified = 0
-    notified_chat_ids = set()
-    # Self-linked rly officials via OTP (non-contractor TelegramUserLink users)
-    for lnk in TelegramUserLink.objects.filter(is_verified=True).exclude(
-            user__username__startswith='tg_').select_related('user'):
-        if lnk.telegram_chat_id not in notified_chat_ids:
-            send(token, lnk.telegram_chat_id, notify_text)
-            notified_chat_ids.add(lnk.telegram_chat_id)
-            notified += 1
-    # Delegate rly officials via RlyOfficialInvite
-    for rly_lnk in RlyTelegramLink.objects.filter(is_verified=True):
-        if rly_lnk.telegram_chat_id not in notified_chat_ids:
-            send(token, rly_lnk.telegram_chat_id, notify_text)
-            notified_chat_ids.add(rly_lnk.telegram_chat_id)
-            notified += 1
+    chat_id = _creator_chat_id(thread.created_by)
+    if chat_id:
+        send(token, chat_id, notify_text)
+        notified = 1
 
     send(token, session.telegram_chat_id,
          f"✅ Reply sent. Notified {notified} Rly Official(s).", remove_kb=True)
-    logger.info("SR-%06d reply by %s, notified %d rly officials", thread.pk, user.username, notified)
+    logger.info("SR-%06d reply by %s, notified creator chat=%s", thread.pk, user.username, chat_id)
     reset_session(session)
 
 
 def do_mark_resolved(token: str, session: BotSession, user):
     ctx = session.context
     try:
-        thread = SiteRegisterThread.objects.select_related('work').get(pk=ctx['thread_id'])
+        thread = SiteRegisterThread.objects.select_related('work', 'created_by').get(pk=ctx['thread_id'])
     except SiteRegisterThread.DoesNotExist:
         send(token, session.telegram_chat_id, "⚠️ Entry not found.", remove_kb=True)
         reset_session(session); return
@@ -703,20 +712,13 @@ def do_mark_resolved(token: str, session: BotSession, user):
         f"<b>Type:</b> {CATEGORY_LABELS.get(thread.category, thread.category)}\n\n"
         f"Resolved by <i>{_display_name(user)}</i>."
     )
-    notified_chat_ids = set()
-    for lnk in TelegramUserLink.objects.filter(is_verified=True).exclude(
-            user__username__startswith='tg_'):
-        if lnk.telegram_chat_id not in notified_chat_ids:
-            send(token, lnk.telegram_chat_id, notify)
-            notified_chat_ids.add(lnk.telegram_chat_id)
-    for rly_lnk in RlyTelegramLink.objects.filter(is_verified=True):
-        if rly_lnk.telegram_chat_id not in notified_chat_ids:
-            send(token, rly_lnk.telegram_chat_id, notify)
-            notified_chat_ids.add(rly_lnk.telegram_chat_id)
+    chat_id = _creator_chat_id(thread.created_by)
+    if chat_id:
+        send(token, chat_id, notify)
 
     send(token, session.telegram_chat_id,
          f"✅ SR-{thread.pk:06d} marked resolved.", remove_kb=True)
-    logger.info("SR-%06d resolved by %s", thread.pk, user.username)
+    logger.info("SR-%06d resolved by %s, notified creator chat=%s", thread.pk, user.username, chat_id)
     reset_session(session)
 
 
@@ -1130,14 +1132,17 @@ def try_link_otp(token: str, chat_id: int, tg_user_id: int, code: str, tg_from: 
             otp.save(update_fields=["used"])
 
         logger.info("Linked tg=%s → mw=%s", tg_user_id, otp.user.username)
-        # Start HRMS confirmation step
-        session = get_session(chat_id)
-        session.state   = 'rly_onboard_hrms'
-        session.context = {}
-        session.save(update_fields=['state', 'context', 'updated_at'])
+        # Show confirmation — OTP proves identity, no need to re-enter HRMS
+        linked_user = otp.user
+        profile     = getattr(linked_user, 'profile', None)
+        designation = profile.designation if profile else '—'
+        hrms_label  = linked_user.username if not linked_user.username.startswith(('tg_', 'rly_')) else '—'
         send(token, chat_id,
-             "✅ <b>Telegram linked!</b>\n\n"
-             "Please enter your <b>HRMS ID</b> to complete setup.")
+             f"✅ <b>Account linked!</b>\n\n"
+             f"Connected as <b>{_display_name(linked_user)}</b>.\n"
+             f"<b>HRMS ID:</b> {hrms_label}\n"
+             f"<b>Designation:</b> {designation}\n\n"
+             "You will receive Site Register notifications here.")
         return True
 
     except TelegramLinkOTP.DoesNotExist:
