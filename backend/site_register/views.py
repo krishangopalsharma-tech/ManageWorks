@@ -12,7 +12,7 @@ from rest_framework import status
 
 from site_gsheet_settings.models import SiteGSheet
 from works.models import Work
-from .models import TelegramLinkOTP, TelegramUserLink, WorkContractorTelegram
+from .models import TelegramLinkOTP, TelegramUserLink, WorkContractorTelegram, SupervisorInvite
 
 
 def _is_admin(user):
@@ -184,21 +184,33 @@ class TelegramOTPView(APIView):
             return {'linked': True, 'telegram_user_id': link.telegram_user_id}
         return {'linked': False}
 
+    def _otp_payload(self, otp):
+        if not otp or otp.used:
+            return None
+        if otp.expires_at and otp.is_expired:
+            return None
+        return {
+            'code':       otp.code,
+            'expires_at': otp.expires_at.isoformat() if otp.expires_at else None,
+        }
+
     def get(self, request):
         if not request.user.is_authenticated:
             return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
         link_status = self._link_status(request.user)
         otp = getattr(request.user, 'telegram_otp', None)
-        return Response({
-            **link_status,
-            'otp': otp.code if otp and not otp.used else None,
-        })
+        return Response({**link_status, 'otp': self._otp_payload(otp)})
 
     def post(self, request):
         if not request.user.is_authenticated:
             return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
         otp = TelegramLinkOTP.generate_for(request.user)
-        return Response({'otp': otp.code})
+        return Response({
+            'otp': {
+                'code':       otp.code,
+                'expires_at': otp.expires_at.isoformat(),
+            }
+        })
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -225,20 +237,17 @@ class LoaPartiesListView(APIView):
         if not _is_admin(request.user):
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
 
-        works = Work.objects.order_by('loa_number').values(
-            'id', 'loa_number', 'contractor_name', 'name_of_work'
-        )
+        works = Work.objects.order_by('contractor_name', 'loa_number')
         mappings = (
             WorkContractorTelegram.objects
             .filter(is_active=True)
             .select_related('telegram_link__user', 'telegram_link__user__profile')
         )
 
-        parties_by_work = {}
+        supervisors_by_work = {}
         for m in mappings:
-            parties_by_work.setdefault(m.work_id, []).append({
+            supervisors_by_work.setdefault(m.work_id, []).append({
                 'mapping_id':  m.id,
-                'role':        m.role,
                 'user_id':     m.telegram_link.user.id,
                 'hrms_id':     m.telegram_link.user.username,
                 'name':        m.telegram_link.user.first_name,
@@ -246,43 +255,76 @@ class LoaPartiesListView(APIView):
                                m.telegram_link.user.profile.designation or '',
             })
 
-        result = []
+        # Group LOAs by contractor
+        from collections import OrderedDict
+        contractors = OrderedDict()
         for w in works:
-            result.append({
-                **w,
-                'parties': parties_by_work.get(w['id'], []),
+            key = w.contractor_name or '—'
+            if key not in contractors:
+                contractors[key] = []
+            contractors[key].append({
+                'id':            w.id,
+                'loa_number':    w.loa_number or '—',
+                'name_of_work':  w.name_of_work or '',
+                'supervisors':   supervisors_by_work.get(w.id, []),
             })
+
+        result = [
+            {'contractor_name': name, 'loas': loas}
+            for name, loas in contractors.items()
+        ]
         return Response(result)
+
+
+def _serialize_link(lnk):
+    is_contractor = lnk.user.username.startswith('tg_')
+    profile = getattr(lnk.user, 'profile', None)
+    return {
+        'link_id':          lnk.id,
+        'user_id':          lnk.user.id,
+        'hrms_id':          lnk.user.username,
+        'name':             lnk.onboard_name or lnk.user.first_name or lnk.user.username,
+        'designation':      lnk.onboard_designation or (profile.designation if profile else ''),
+        'mobile':           lnk.onboard_mobile,
+        'role':             profile.role if profile else '',
+        'telegram_user_id': lnk.telegram_user_id,
+        'telegram_chat_id': lnk.telegram_chat_id,
+        'is_contractor':    is_contractor,
+        'onboard_complete': bool(lnk.onboard_name),
+    }
 
 
 class LinkedUsersView(APIView):
     """
-    GET /api/site-register/linked-users/
-    Returns all users who have a verified Telegram link (for party assignment dropdown).
+    GET  /api/site-register/linked-users/       — list all
+    PATCH /api/site-register/linked-users/<id>/ — edit name/designation/mobile
     """
-    def get(self, request):
+    def get(self, request, link_id=None):
         if not _is_admin(request.user):
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
-
         links = (
             TelegramUserLink.objects
             .filter(is_verified=True)
             .select_related('user', 'user__profile')
             .order_by('user__first_name')
         )
-        return Response([
-            {
-                'link_id':     lnk.id,
-                'user_id':     lnk.user.id,
-                'hrms_id':     lnk.user.username,
-                'name':        lnk.user.first_name,
-                'designation': getattr(lnk.user, 'profile', None) and
-                               lnk.user.profile.designation or '',
-                'role':        getattr(lnk.user, 'profile', None) and
-                               lnk.user.profile.role or '',
-            }
-            for lnk in links
-        ])
+        return Response([_serialize_link(lnk) for lnk in links])
+
+    def patch(self, request, link_id=None):
+        if not _is_admin(request.user):
+            return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            lnk = TelegramUserLink.objects.select_related('user', 'user__profile').get(pk=link_id)
+        except TelegramUserLink.DoesNotExist:
+            return Response({'error': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+        fields = []
+        for field in ('onboard_name', 'onboard_designation', 'onboard_mobile'):
+            if field in request.data:
+                setattr(lnk, field, request.data[field])
+                fields.append(field)
+        if fields:
+            lnk.save(update_fields=fields)
+        return Response(_serialize_link(lnk))
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -298,9 +340,7 @@ class LoaPartyView(APIView):
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
 
         link_id = request.data.get('link_id')
-        role    = request.data.get('role', '').strip()
-        if role not in ('sse', 'contractor'):
-            return Response({'error': 'role must be sse or contractor.'}, status=status.HTTP_400_BAD_REQUEST)
+        role    = 'site_supervisor'  # only role for party mappings now
 
         try:
             work = Work.objects.get(pk=work_id)
@@ -321,6 +361,28 @@ class LoaPartyView(APIView):
             mapping.is_active = True
             mapping.save(update_fields=['role', 'is_active'])
 
+        # Notify the supervisor on Telegram
+        try:
+            from telegram_settings.models import TelegramBotConfig
+            import requests as _requests
+            cfg = TelegramBotConfig.objects.first()
+            if cfg and cfg.bot_token and link.telegram_chat_id:
+                loa_label = work.loa_number or f'LOA #{work.pk}'
+                msg = (
+                    f"📋 <b>You have been assigned as Site Supervisor</b>\n\n"
+                    f"<b>LOA:</b> {loa_label}\n"
+                    f"<b>Work:</b> {work.name_of_work or '—'}\n"
+                    f"<b>Contractor:</b> {work.contractor_name or '—'}\n\n"
+                    "You will now receive site register notifications for this work."
+                )
+                _requests.post(
+                    f"https://api.telegram.org/bot{cfg.bot_token}/sendMessage",
+                    json={"chat_id": link.telegram_chat_id, "text": msg, "parse_mode": "HTML"},
+                    timeout=10,
+                )
+        except Exception:
+            pass  # never block the API response due to notification failure
+
         return Response({
             'mapping_id':  mapping.id,
             'role':        mapping.role,
@@ -340,3 +402,46 @@ class LoaPartyView(APIView):
             return Response({'error': 'Mapping not found.'}, status=status.HTTP_404_NOT_FOUND)
         mapping.delete()
         return Response({'message': 'Party removed.'})
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class SupervisorInviteView(APIView):
+    """
+    POST /api/site-register/supervisor-invite/
+    body: { loa_ids: [1, 2, 3] }  → generate invite code for those LOAs
+
+    GET /api/site-register/supervisor-invite/<code>/
+    → check if invite was used; returns linked user info if so
+    """
+    def post(self, request):
+        if not _is_admin(request.user):
+            return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
+        loa_ids = request.data.get('loa_ids', [])
+        if not loa_ids:
+            return Response({'error': 'loa_ids required.'}, status=status.HTTP_400_BAD_REQUEST)
+        invite = SupervisorInvite.generate(loa_ids=loa_ids, created_by=request.user)
+        return Response({
+            'code':       invite.code,
+            'expires_at': invite.expires_at.isoformat(),
+        })
+
+    def get(self, request, code):
+        if not _is_admin(request.user):
+            return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            invite = SupervisorInvite.objects.get(code=code)
+        except SupervisorInvite.DoesNotExist:
+            return Response({'error': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if invite.used and invite.used_by_link:
+            lnk = invite.used_by_link
+            return Response({
+                'used': True,
+                'linked_user': {
+                    'name':        lnk.user.first_name or lnk.user.username,
+                    'hrms_id':     lnk.user.username,
+                    'designation': getattr(lnk.user, 'profile', None) and
+                                   lnk.user.profile.designation or '',
+                },
+            })
+        return Response({'used': False})

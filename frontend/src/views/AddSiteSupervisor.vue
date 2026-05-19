@@ -1,11 +1,11 @@
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
 import QRCode from 'qrcode'
 
 const BOT_USERNAME = 'ADISiteregister_bot'
 const BOT_URL      = `https://t.me/${BOT_USERNAME}`
-const API          = '/api/site-register/telegram/'
 
 function getCsrf() {
   const m = document.cookie.match(/csrftoken=([^;]+)/)
@@ -13,16 +13,21 @@ function getCsrf() {
 }
 const h = () => ({ 'X-CSRFToken': getCsrf() })
 
-const linked      = ref(false)
-const otp         = ref(null)
-const loading     = ref(true)
-const generating  = ref(false)
-const unlinking   = ref(false)
-const copied      = ref(false)
-const toast       = ref({ show: false, msg: '', type: 'success' })
+const router = useRouter()
+const route  = useRoute()
+
+const contractor  = ref(history.state?.contractor || route.query.contractor || '')
+const allLoas     = ref(history.state?.loas || [])
+
+const selLoas     = ref(new Set(allLoas.value.map(l => l.id)))
+const invite      = ref(null)
 const qrDataUrl   = ref(null)
 const secondsLeft = ref(0)
-let   countdownTimer = null
+const generating  = ref(false)
+const linked      = ref(null)
+const toast       = ref({ show: false, msg: '', type: 'success' })
+let countdownTimer = null
+let pollTimer      = null
 
 // ── Telegram users list ───────────────────────────────────────────────────────
 const tgUsers         = ref([])
@@ -38,7 +43,7 @@ const filteredTgUsers = computed(() => {
   return tgUsers.value.filter(u =>
     (u.name || '').toLowerCase().includes(q) ||
     (u.telegram_user_id || '').toString().includes(q) ||
-    (u.hrms_id || '').toLowerCase().includes(q)
+    (u.designation || '').toLowerCase().includes(q)
   )
 })
 
@@ -82,7 +87,14 @@ async function saveEdit(u) {
   }
 }
 
-// ── OTP ───────────────────────────────────────────────────────────────────────
+// ── Invite ────────────────────────────────────────────────────────────────────
+const selectedCount = computed(() => selLoas.value.size)
+
+function toggleLoa(id) {
+  if (selLoas.value.has(id)) selLoas.value.delete(id)
+  else selLoas.value.add(id)
+}
+
 async function buildQr() {
   qrDataUrl.value = await QRCode.toDataURL(BOT_URL, {
     width: 180, margin: 2,
@@ -95,65 +107,57 @@ function startCountdown(expiresAt) {
   const tick = () => {
     const diff = Math.max(0, Math.round((new Date(expiresAt) - Date.now()) / 1000))
     secondsLeft.value = diff
-    if (diff === 0) { clearInterval(countdownTimer); generateOtp() }
+    if (diff === 0) {
+      clearInterval(countdownTimer)
+      clearInterval(pollTimer)
+      invite.value = null
+    }
   }
   tick()
   countdownTimer = setInterval(tick, 1000)
 }
 
-const countdownDisplay = computed(() => {
-  const s = secondsLeft.value
-  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
-})
-
-async function load() {
-  loading.value = true
-  try {
-    const { data } = await axios.get(`${API}otp/`)
-    linked.value = data.linked
-    otp.value    = data.otp || null
-    if (otp.value) startCountdown(otp.value.expires_at)
-    await buildQr()
-  } finally {
-    loading.value = false
-  }
+function startPolling(code) {
+  clearInterval(pollTimer)
+  pollTimer = setInterval(async () => {
+    try {
+      const { data } = await axios.get(`/api/site-register/supervisor-invite/${code}/`)
+      if (data.used) {
+        clearInterval(pollTimer)
+        clearInterval(countdownTimer)
+        linked.value = data.linked_user
+        showToast(`${data.linked_user.name || data.linked_user.hrms_id} linked as supervisor!`)
+        loadTgUsers()
+      }
+    } catch { /* ignore */ }
+  }, 3000)
 }
 
-async function generateOtp() {
+async function generateInvite() {
+  if (!selectedCount.value) { showToast('Select at least one LOA.', 'error'); return }
   generating.value = true
+  clearInterval(pollTimer); clearInterval(countdownTimer)
+  linked.value = null
   try {
-    const { data } = await axios.post(`${API}otp/`, {}, { headers: h() })
-    otp.value = data.otp
-    startCountdown(otp.value.expires_at)
-  } catch {
-    showToast('Failed to generate code.', 'error')
+    const { data } = await axios.post(
+      '/api/site-register/supervisor-invite/',
+      { loa_ids: [...selLoas.value] },
+      { headers: h() }
+    )
+    invite.value = data
+    startCountdown(data.expires_at)
+    startPolling(data.code)
+  } catch (e) {
+    showToast(e.response?.data?.error || 'Failed to generate invite.', 'error')
   } finally {
     generating.value = false
   }
 }
 
-async function unlink() {
-  if (!confirm('Unlink your Telegram account?')) return
-  unlinking.value = true
-  try {
-    await axios.delete(`${API}unlink/`, { headers: h() })
-    linked.value = false
-    otp.value    = null
-    clearInterval(countdownTimer)
-    showToast('Telegram account unlinked.')
-    loadTgUsers()
-  } catch {
-    showToast('Failed to unlink.', 'error')
-  } finally {
-    unlinking.value = false
-  }
-}
-
 async function copyCode() {
-  if (!otp.value) return
-  await navigator.clipboard.writeText(otp.value.code)
-  copied.value = true
-  setTimeout(() => { copied.value = false }, 2000)
+  if (!invite.value) return
+  await navigator.clipboard.writeText(invite.value.code)
+  showToast('Code copied!')
 }
 
 function showToast(msg, type = 'success') {
@@ -161,117 +165,134 @@ function showToast(msg, type = 'success') {
   setTimeout(() => { toast.value.show = false }, 3000)
 }
 
-onMounted(() => { load(); loadTgUsers() })
-onUnmounted(() => clearInterval(countdownTimer))
+onMounted(async () => {
+  await buildQr()
+  loadTgUsers()
+  if (allLoas.value.length) await generateInvite()
+})
+
+onUnmounted(() => {
+  clearInterval(countdownTimer)
+  clearInterval(pollTimer)
+})
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto px-6 py-6">
+  <div class="px-6 py-6 min-h-full">
 
-    <div class="mb-6">
-      <h1 class="text-xl font-bold text-gray-800 dark:text-white tracking-tight">Link Rly Official Telegram</h1>
-      <p class="text-sm text-gray-500 mt-0.5">Connect your Telegram to use the Site Register bot.</p>
+    <!-- Header -->
+    <div class="mb-5 flex items-center gap-3">
+      <button @click="router.back()"
+        class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-[#2c2c2e] transition-colors"
+        style="color: var(--color-text-tertiary);">
+        <div class="i-carbon-arrow-left text-lg"></div>
+      </button>
+      <div>
+        <h1 class="text-xl font-bold text-gray-800 dark:text-white tracking-tight">Add Site Supervisor</h1>
+        <p class="text-sm text-gray-500 mt-0.5">{{ contractor || 'Contractor' }}</p>
+      </div>
     </div>
 
-    <div v-if="loading" class="flex items-center gap-2 text-sm text-gray-400 mb-6">
-      <div class="i-carbon-circle-dash animate-spin text-lg"></div> Loading…
-    </div>
+    <!-- Top row: LOA checklist + QR/OTP side by side -->
+    <div class="flex gap-4 mb-6 items-start">
 
-    <!-- Top row: steps guide + QR/OTP side by side -->
-    <template v-else>
-      <div class="flex gap-4 mb-6 items-start">
-
-        <!-- Steps guide -->
-        <div class="flex-1 bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-100 dark:border-[#3a3a3c] shadow-sm divide-y divide-gray-100 dark:divide-[#3a3a3c]">
-          <div class="px-5 py-4 flex gap-4 items-start">
-            <span class="w-6 h-6 rounded-full bg-[#1D5F5E] text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">1</span>
-            <div>
-              <p class="text-sm font-semibold text-gray-800 dark:text-white">Generate your 6-digit code</p>
-              <p class="text-xs text-gray-400 mt-0.5">Click "Generate" on the right. Code expires in 1 minute and auto-refreshes.</p>
+      <!-- LOA checklist -->
+      <div class="flex-1 min-w-0 bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-100 dark:border-[#3a3a3c] shadow-sm p-5">
+        <h2 class="text-sm font-bold text-gray-700 dark:text-gray-200 mb-1">Apply to LOAs</h2>
+        <p class="text-xs text-gray-400 mb-3">Uncheck LOAs to exclude from this invite.</p>
+        <div class="flex flex-col gap-1.5">
+          <label v-for="loa in allLoas" :key="loa.id"
+            class="flex items-start gap-3 px-3 py-2 rounded-xl cursor-pointer hover:bg-gray-50 dark:hover:bg-[#2c2c2e] transition-colors">
+            <input type="checkbox" :checked="selLoas.has(loa.id)" @change="toggleLoa(loa.id)"
+              class="w-4 h-4 accent-[#1D5F5E] mt-0.5 shrink-0" />
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-semibold text-gray-800 dark:text-white">{{ loa.loa_number }}</p>
+              <p class="text-xs text-gray-400 truncate">{{ loa.name_of_work }}</p>
             </div>
-          </div>
-          <div class="px-5 py-4 flex gap-4 items-start">
-            <span class="w-6 h-6 rounded-full bg-[#1D5F5E] text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">2</span>
-            <div>
-              <p class="text-sm font-semibold text-gray-800 dark:text-white">Scan QR or open the bot</p>
-              <p class="text-xs text-gray-400 mt-0.5">Scan with Telegram camera, or search <span class="font-mono text-[#1D5F5E]">@ADISiteregister_bot</span>.</p>
-            </div>
-          </div>
-          <div class="px-5 py-4 flex gap-4 items-start">
-            <span class="w-6 h-6 rounded-full bg-[#1D5F5E] text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">3</span>
-            <div>
-              <p class="text-sm font-semibold text-gray-800 dark:text-white">Type the 6-digit code in the bot</p>
-              <p class="text-xs text-gray-400 mt-0.5">Just send the 6 digits — no /start needed.</p>
-            </div>
-          </div>
-          <div class="px-5 py-4 flex gap-4 items-start">
-            <span class="w-6 h-6 rounded-full bg-[#1D5F5E] text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">4</span>
-            <div>
-              <p class="text-sm font-semibold text-gray-800 dark:text-white">Confirm your HRMS ID</p>
-              <p class="text-xs text-gray-400 mt-0.5">Bot will ask for your HRMS ID and confirm your profile details.</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- QR + OTP panel -->
-        <div class="w-72 shrink-0 bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-100 dark:border-[#3a3a3c] shadow-sm p-5">
-
-          <!-- Already linked -->
-          <div v-if="linked" class="flex flex-col items-center gap-4">
-            <div class="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-              <div class="i-carbon-checkmark text-blue-600 text-xl"></div>
-            </div>
-            <div class="text-center">
-              <p class="text-sm font-bold text-gray-800 dark:text-white">Telegram Linked</p>
-              <p class="text-xs text-gray-400 mt-0.5">Your account is connected to the Site Register bot.</p>
-            </div>
-            <button @click="unlink" :disabled="unlinking"
-              class="flex items-center gap-2 px-4 py-2 rounded-xl border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 transition-colors disabled:opacity-50">
-              <div v-if="unlinking" class="i-carbon-circle-dash animate-spin text-xs"></div>
-              <div v-else class="i-carbon-unlink text-xs"></div>
-              {{ unlinking ? 'Unlinking…' : 'Unlink Telegram' }}
-            </button>
-          </div>
-
-          <!-- Not linked -->
-          <div v-else class="flex flex-col items-center gap-4">
-            <p class="text-xs font-bold text-gray-400 uppercase tracking-widest self-start">Your Link Code</p>
-
-            <!-- QR -->
-            <div class="p-2 bg-white rounded-xl shadow-sm border border-gray-100">
-              <img v-if="qrDataUrl" :src="qrDataUrl" alt="Scan to open bot" class="w-36 h-36" />
-            </div>
-
-            <!-- OTP display -->
-            <div v-if="otp" class="w-full">
-              <div class="flex items-center gap-2 px-3 py-3 bg-[#1D5F5E]/5 rounded-xl justify-center">
-                <code class="text-2xl font-mono font-bold text-[#1D5F5E] tracking-widest select-all">
-                  {{ otp.code }}
-                </code>
-                <button @click="copyCode"
-                  class="shrink-0 p-1.5 rounded-lg border border-gray-200 dark:border-[#3a3a3c] text-gray-500 hover:bg-gray-100 dark:hover:bg-[#2c2c2e] transition-colors">
-                  <div :class="copied ? 'i-carbon-checkmark text-green-600' : 'i-carbon-copy'" class="text-xs"></div>
-                </button>
-              </div>
-              <div class="flex items-center justify-center gap-1.5 mt-1.5">
-                <div class="i-carbon-timer text-xs" :class="secondsLeft <= 15 ? 'text-red-500' : 'text-gray-400'"></div>
-                <span class="text-xs font-mono font-semibold" :class="secondsLeft <= 15 ? 'text-red-500' : 'text-gray-500'">
-                  {{ countdownDisplay }} remaining
-                </span>
-              </div>
-              <p class="text-xs text-gray-400 text-center mt-1">Auto-refreshes on expiry. Single-use.</p>
-            </div>
-
-            <button @click="generateOtp" :disabled="generating"
-              class="flex items-center gap-2 px-5 py-2 rounded-xl bg-[#1D5F5E] hover:bg-[#174E4D] text-white text-xs font-semibold transition-colors disabled:opacity-50">
-              <div v-if="generating" class="i-carbon-circle-dash animate-spin text-xs"></div>
-              <div v-else class="i-carbon-renew text-xs"></div>
-              {{ otp ? 'Refresh Code' : 'Generate Link Code' }}
-            </button>
-          </div>
+          </label>
         </div>
       </div>
-    </template>
+
+      <!-- QR + OTP panel -->
+      <div class="w-72 shrink-0 bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-100 dark:border-[#3a3a3c] shadow-sm p-5">
+
+        <!-- Success -->
+        <div v-if="linked" class="flex flex-col items-center gap-3 py-4 text-center">
+          <div class="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
+            <div class="i-carbon-checkmark-filled text-green-600 text-2xl"></div>
+          </div>
+          <p class="text-sm font-bold text-green-700 dark:text-green-400">Supervisor Linked!</p>
+          <p class="text-xs text-gray-500">
+            {{ linked.name || linked.hrms_id }}
+            <span v-if="linked.designation"> · {{ linked.designation }}</span>
+          </p>
+          <div class="flex gap-2 w-full mt-2">
+            <button @click="linked = null; invite = null; generateInvite()"
+              class="flex-1 py-2 rounded-xl bg-[#1D5F5E] text-white text-xs font-semibold hover:bg-[#174E4D] transition-colors">
+              Add Another
+            </button>
+            <button @click="router.back()"
+              class="flex-1 py-2 rounded-xl border border-gray-200 dark:border-[#3a3a3c] text-xs font-semibold text-gray-600 dark:text-[#aeaeb2] hover:bg-gray-50 dark:hover:bg-[#2c2c2e] transition-colors">
+              Done
+            </button>
+          </div>
+        </div>
+
+        <!-- No invite yet -->
+        <div v-else-if="!invite" class="flex flex-col items-center gap-4 py-6">
+          <div class="p-3 bg-gray-50 dark:bg-[#2c2c2e] rounded-2xl">
+            <img v-if="qrDataUrl" :src="qrDataUrl" alt="Bot QR" class="w-36 h-36 opacity-40" />
+          </div>
+          <p class="text-xs text-gray-400 text-center">Generate an invite code to share with the supervisor.</p>
+          <button @click="generateInvite" :disabled="generating || !selectedCount"
+            class="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1D5F5E] hover:bg-[#174E4D] text-white text-xs font-semibold transition-colors disabled:opacity-50">
+            <div v-if="generating" class="i-carbon-circle-dash animate-spin text-xs"></div>
+            {{ generating ? 'Generating…' : 'Generate Invite Code' }}
+          </button>
+        </div>
+
+        <!-- Active invite -->
+        <div v-else class="flex flex-col items-center gap-4">
+          <p class="text-xs font-bold text-gray-500 uppercase tracking-widest">Share with Supervisor</p>
+
+          <!-- QR -->
+          <div class="p-2 bg-white rounded-xl shadow-sm border border-gray-100">
+            <img :src="qrDataUrl" alt="Bot QR" class="w-36 h-36" />
+          </div>
+
+          <!-- Steps note -->
+          <p class="text-xs text-gray-400 text-center">Scan QR or open <span class="font-mono text-[#1D5F5E]">@ADISiteregister_bot</span>, then type the code below.</p>
+
+          <!-- Code -->
+          <div class="w-full">
+            <div class="flex items-center gap-2 px-4 py-3 bg-gray-50 dark:bg-[#2c2c2e] rounded-xl justify-center">
+              <span class="text-2xl font-mono font-bold tracking-[0.25em] text-[#1D5F5E]">{{ invite.code }}</span>
+              <button @click="copyCode"
+                class="p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-[#3a3a3c] transition-colors"
+                style="color: var(--color-text-tertiary);">
+                <div class="i-carbon-copy text-sm"></div>
+              </button>
+            </div>
+            <div class="flex items-center justify-center gap-1.5 mt-1.5 text-xs"
+              :class="secondsLeft < 30 ? 'text-red-500' : 'text-gray-400'">
+              <div class="i-carbon-time text-xs"></div>
+              <span>Expires in {{ secondsLeft }}s</span>
+            </div>
+          </div>
+
+          <!-- Waiting -->
+          <div class="flex items-center gap-2 text-xs text-gray-400">
+            <div class="i-carbon-circle-dash animate-spin text-xs"></div>
+            Waiting for supervisor…
+          </div>
+
+          <button @click="generateInvite" :disabled="generating"
+            class="text-xs text-[#1D5F5E] hover:underline disabled:opacity-50">
+            Generate new code
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- Bottom: Linked Telegram Users list -->
     <div class="bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-100 dark:border-[#3a3a3c] shadow-sm overflow-hidden">
@@ -295,7 +316,7 @@ onUnmounted(() => clearInterval(countdownTimer))
           <tr class="border-b border-gray-100 dark:border-[#2c2c2e]">
             <th class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">Type</th>
             <th class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">Name</th>
-            <th class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">HRMS / Designation</th>
+            <th class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">Designation</th>
             <th class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">Mobile</th>
             <th class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">Telegram ID</th>
             <th class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">Chat ID</th>
@@ -304,6 +325,7 @@ onUnmounted(() => clearInterval(countdownTimer))
         </thead>
         <tbody>
           <template v-for="u in filteredTgUsers" :key="u.link_id">
+            <!-- View row -->
             <tr v-if="editingId !== u.link_id"
               class="border-b border-gray-50 dark:border-[#2c2c2e] hover:bg-gray-50 dark:hover:bg-[#2c2c2e] transition-colors">
               <td class="px-5 py-3">
@@ -316,10 +338,7 @@ onUnmounted(() => clearInterval(countdownTimer))
                 </span>
               </td>
               <td class="px-5 py-3 font-semibold text-gray-800 dark:text-white">{{ u.name }}</td>
-              <td class="px-5 py-3 text-gray-500">
-                <span v-if="!u.is_contractor" class="font-mono text-gray-600 dark:text-gray-300">{{ u.hrms_id }}</span>
-                <span v-if="u.designation"> · {{ u.designation }}</span>
-              </td>
+              <td class="px-5 py-3 text-gray-500">{{ u.designation || '—' }}</td>
               <td class="px-5 py-3 text-gray-500">{{ u.mobile || '—' }}</td>
               <td class="px-5 py-3 font-mono text-gray-500">{{ u.telegram_user_id }}</td>
               <td class="px-5 py-3 font-mono text-gray-400">{{ u.telegram_chat_id }}</td>
@@ -330,6 +349,7 @@ onUnmounted(() => clearInterval(countdownTimer))
                 </button>
               </td>
             </tr>
+            <!-- Edit row -->
             <tr v-else class="border-b border-[#1D5F5E]/20 bg-[#1D5F5E]/5">
               <td class="px-5 py-3">
                 <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium"
@@ -350,7 +370,7 @@ onUnmounted(() => clearInterval(countdownTimer))
                 <span v-else class="text-gray-400">—</span>
               </td>
               <td class="px-5 py-3 font-mono text-gray-400">{{ u.telegram_user_id }}</td>
-              <td class="px-5 py-3 font-mono text-gray-400">{{ u.telegram_chat_id }}<span class="text-gray-300 ml-1">(locked)</span></td>
+              <td class="px-5 py-3 font-mono text-gray-400 text-xs">{{ u.telegram_chat_id }}<span class="text-gray-300 ml-1">(locked)</span></td>
               <td class="px-5 py-3 text-right">
                 <div class="flex items-center justify-end gap-2">
                   <button @click="saveEdit(u)" :disabled="saving"
