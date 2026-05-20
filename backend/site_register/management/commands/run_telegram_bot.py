@@ -73,7 +73,7 @@ def _api(token: str, method: str, **kwargs) -> dict:
     return resp.json()
 
 
-def send(token: str, chat_id: int, text: str, keyboard=None, remove_kb=False):
+def send(token: str, chat_id: int, text: str, keyboard=None, remove_kb=False) -> int | None:
     kwargs = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
     if keyboard:
         kwargs["reply_markup"] = {
@@ -84,9 +84,11 @@ def send(token: str, chat_id: int, text: str, keyboard=None, remove_kb=False):
     elif remove_kb:
         kwargs["reply_markup"] = REMOVE_KEYBOARD
     try:
-        _api(token, "sendMessage", **kwargs)
+        data = _api(token, "sendMessage", **kwargs)
+        return data.get("result", {}).get("message_id")
     except Exception as exc:
         logger.warning("sendMessage failed chat=%s: %s", chat_id, exc)
+        return None
 
 
 def send_inline(token: str, chat_id: int, text: str, buttons: list) -> int | None:
@@ -103,6 +105,29 @@ def send_inline(token: str, chat_id: int, text: str, buttons: list) -> int | Non
     except Exception as exc:
         logger.warning("sendMessage(inline) failed chat=%s: %s", chat_id, exc)
         return None
+
+
+def delete_message(token: str, chat_id: int, msg_id: int):
+    try:
+        _api(token, "deleteMessage", chat_id=chat_id, message_id=msg_id)
+    except Exception as exc:
+        logger.debug("deleteMessage failed chat=%s msg=%s: %s", chat_id, msg_id, exc)
+
+
+def track_flow_msg(session: BotSession, msg_id: int | None):
+    if not msg_id:
+        return
+    session.context.setdefault("_flow_msgs", []).append(msg_id)
+
+
+def sendt(token: str, session: BotSession, text: str,
+          keyboard=None, remove_kb=False) -> int | None:
+    """Send ephemeral flow message — tracked for deletion on reset."""
+    msg_id = send(token, session.telegram_chat_id, text,
+                  keyboard=keyboard, remove_kb=remove_kb)
+    track_flow_msg(session, msg_id)
+    session.save(update_fields=["context", "updated_at"])
+    return msg_id
 
 
 def answer_callback(token: str, callback_query_id: str, text: str = ""):
@@ -184,7 +209,11 @@ def get_session(chat_id: int) -> BotSession:
     return session
 
 
-def reset_session(session: BotSession):
+def reset_session(session: BotSession, token: str | None = None):
+    if token:
+        chat_id = session.telegram_chat_id
+        for msg_id in session.context.get("_flow_msgs", []):
+            delete_message(token, chat_id, msg_id)
     session.state   = "idle"
     session.context = {}
     session.save(update_fields=["state", "context", "updated_at"])
@@ -252,8 +281,7 @@ def _save_attachments(token: str, upload_chat_id: str,
                       message_obj: SiteRegisterMessage,
                       attachments: list[dict],
                       thread: SiteRegisterThread | None = None,
-                      sender_display: str = '',
-                      notify_chat_ids: list | None = None):
+                      sender_display: str = ''):
     if not upload_chat_id or not attachments:
         return
     loa_number = thread.work.loa_number if thread else ''
@@ -284,15 +312,6 @@ def _save_attachments(token: str, upload_chat_id: str,
             message_id   = att["from_message_id"],
             caption      = caption,
         )
-        # Forward file to recipients (other party in the conversation)
-        notify_caption = (f"📎 <b>{att_num}</b>  ·  SR <b>{sr_num}</b>\n👤 {sender_display}"
-                          if att_num else None)
-        for chat_id in (notify_chat_ids or []):
-            copy_message(token,
-                         to_chat_id   = chat_id,
-                         from_chat_id = att["from_chat_id"],
-                         message_id   = att["from_message_id"],
-                         caption      = notify_caption)
         SiteRegisterAttachment.objects.create(
             message                  = message_obj,
             tg_file_id               = att["tg_file_id"],
@@ -370,12 +389,12 @@ def _display_name(user) -> str:
     return user.first_name or user.username
 
 
-def show_loa_search(token: str, session: BotSession):
+def show_loa_search(token: str, session: BotSession, trigger_msg_id: int | None = None):
     """Entry point for rly official — prompt to find LOA."""
     session.state   = "rly_loa_search"
-    session.context = {}
+    session.context = {"_flow_msgs": [trigger_msg_id] if trigger_msg_id else []}
     session.save(update_fields=["state", "context", "updated_at"])
-    send(token, session.telegram_chat_id,
+    sendt(token, session,
          "📋 <b>New Entry — Find LOA</b>\n\n"
          "Type one of:\n"
          "• <b>Last 5 digits</b> of LOA number (e.g. <code>12345</code>)\n"
@@ -395,7 +414,7 @@ def _show_loa_list(token: str, session: BotSession, works: list):
     session.context["loa_choices"] = [w.id for w in works]
     session.state = "rly_loa_list"
     session.save(update_fields=["state", "context", "updated_at"])
-    send(token, session.telegram_chat_id, "\n".join(lines),
+    sendt(token, session, "\n".join(lines),
          keyboard=number_keyboard(len(works), extras=["◀ Back", "❌ Cancel"]))
 
 
@@ -413,7 +432,7 @@ def _set_loa_and_confirm(token: str, session: BotSession, work):
     })
     session.state = "rly_loa_confirm"
     session.save(update_fields=["state", "context", "updated_at"])
-    send(token, session.telegram_chat_id,
+    sendt(token, session,
          f"📋 <b>LOA Details</b>\n\n"
          f"<b>LOA No:</b> {work.loa_number}\n"
          f"<b>Tender No:</b> {work.tender_number or '—'}\n"
@@ -430,7 +449,7 @@ def handle_rly_loa_search(token: str, session: BotSession, text: str):
     if t.isdigit():
         matches = list(Work.objects.filter(loa_number__endswith=t).order_by('loa_number'))
         if not matches:
-            send(token, session.telegram_chat_id,
+            sendt(token, session,
                  f"⚠️ No LOA ending in <code>{t}</code> found.\n"
                  "Try again or type contractor nickname.")
             return
@@ -446,14 +465,14 @@ def handle_rly_loa_search(token: str, session: BotSession, text: str):
         matched   = [w for w in all_works
                      if _contractor_nickname(w.contractor_name or '') == nickname]
         if not matched:
-            send(token, session.telegram_chat_id,
+            sendt(token, session,
                  f"⚠️ No contractor with nickname <code>{nickname}</code> found.\n"
                  "Try again with a different nickname or type last 5 digits of LOA.")
             return
         _show_loa_list(token, session, matched)
         return
 
-    send(token, session.telegram_chat_id,
+    sendt(token, session,
          "⚠️ Type <b>digits only</b> for LOA suffix or <b>letters only</b> for nickname.")
 
 
@@ -464,11 +483,11 @@ def handle_rly_loa_list(token: str, session: BotSession, text: str):
     try:
         idx = int(text.strip()) - 1
     except ValueError:
-        send(token, session.telegram_chat_id, "⚠️ Send the LOA number.")
+        sendt(token, session, "⚠️ Send the LOA number.")
         return
     choices = session.context.get("loa_choices", [])
     if not (0 <= idx < len(choices)):
-        send(token, session.telegram_chat_id, f"⚠️ Enter 1–{len(choices)}.")
+        sendt(token, session, f"⚠️ Enter 1–{len(choices)}.")
         return
     from works.models import Work
     work = Work.objects.get(pk=choices[idx])
@@ -482,14 +501,14 @@ def handle_rly_loa_confirm(token: str, session: BotSession, text: str):
     elif "NO" in t:
         show_loa_search(token, session)
     else:
-        send(token, session.telegram_chat_id, "⚠️ Reply Yes or No.")
+        sendt(token, session, "⚠️ Reply Yes or No.")
 
 
 def show_instruction_type(token: str, session: BotSession):
     ctx = session.context
     session.state = "rly_choose_type"
     session.save(update_fields=["state", "updated_at"])
-    send(token, session.telegram_chat_id,
+    sendt(token, session,
          f"<b>LOA:</b> {ctx['loa_number']}\n"
          f"<b>Contractor:</b> {ctx['contractor_name']}\n\n"
          "Select instruction type:",
@@ -501,7 +520,7 @@ def handle_rly_choose_type(token: str, session: BotSession, text: str):
     if t.startswith("1") or "item" in t.lower():
         session.state = "rly_item_input"
         session.save(update_fields=["state", "updated_at"])
-        send(token, session.telegram_chat_id,
+        sendt(token, session,
              "📦 <b>Item-wise Instruction</b>\n\n"
              "Type the item reference:\n"
              "• <code>A-12</code>  → Schedule A, Item 12\n"
@@ -514,13 +533,13 @@ def handle_rly_choose_type(token: str, session: BotSession, text: str):
         session.save(update_fields=["context", "updated_at"])
         show_text_prompt(token, session)
     else:
-        send(token, session.telegram_chat_id, "⚠️ Send 1 for Item-wise or 2 for General.")
+        sendt(token, session, "⚠️ Send 1 for Item-wise or 2 for General.")
 
 
 def handle_rly_item_input(token: str, session: BotSession, text: str):
     schedule, serial = _parse_item_ref(text)
     if not schedule:
-        send(token, session.telegram_chat_id,
+        sendt(token, session,
              "⚠️ Invalid format.\nUse <code>A-12</code> or <code>A1-14</code>.")
         return
     candidates = list(WorkItem.objects.filter(
@@ -533,7 +552,7 @@ def handle_rly_item_input(token: str, session: BotSession, text: str):
             item = it
             break
     if not item:
-        send(token, session.telegram_chat_id,
+        sendt(token, session,
              f"⚠️ Item <code>{text.strip()}</code> not found in this LOA.\nTry again.")
         return
 
@@ -549,7 +568,7 @@ def handle_rly_item_input(token: str, session: BotSession, text: str):
     })
     session.state = "rly_item_confirm"
     session.save(update_fields=["state", "context", "updated_at"])
-    send(token, session.telegram_chat_id,
+    sendt(token, session,
          f"📦 <b>Item Found:</b>\n\n"
          f"<b>Schedule:</b> {item.schedule}\n"
          f"<b>Item No:</b> {item.serial_number}\n"
@@ -565,18 +584,18 @@ def handle_rly_item_confirm(token: str, session: BotSession, text: str):
     elif "NO" in t:
         session.state = "rly_item_input"
         session.save(update_fields=["state", "updated_at"])
-        send(token, session.telegram_chat_id,
+        sendt(token, session,
              "Type the item reference again (e.g. <code>A-12</code>):",
              remove_kb=True)
     else:
-        send(token, session.telegram_chat_id, "⚠️ Reply Yes or No.")
+        sendt(token, session, "⚠️ Reply Yes or No.")
 
 
 def show_text_prompt(token: str, session: BotSession):
     ctx        = session.context
     instr_type = "Item-wise" if ctx.get("work_item_id") else "General"
     item_line  = f"\n<b>Item:</b> {ctx['work_item_desc']}" if ctx.get("work_item_id") else ""
-    send(token, session.telegram_chat_id,
+    sendt(token, session,
          f"<b>LOA:</b> {ctx['loa_number']}\n"
          f"<b>Type:</b> {instr_type} Instruction{item_line}\n\n"
          "✏️ <b>Type your instruction</b> (you can also send photos/documents).\n"
@@ -595,7 +614,7 @@ def show_rly_confirm(token: str, session: BotSession):
     ctx        = session.context
     instr_type = "Item-wise" if ctx.get("work_item_id") else "General"
     item_line  = f"\n<b>Item:</b> {ctx['work_item_desc']}" if ctx.get("work_item_id") else ""
-    send(token, session.telegram_chat_id,
+    sendt(token, session,
          "📋 <b>Review your instruction:</b>\n\n"
          f"<b>LOA:</b> {ctx['loa_number']}\n"
          f"<b>Tender No:</b> {ctx.get('tender_number', '—')}\n"
@@ -611,14 +630,6 @@ def show_rly_confirm(token: str, session: BotSession):
 
 def do_create_thread(token: str, upload_chat_id: str, session: BotSession, user):
     ctx = session.context
-
-    # Collect SS chat IDs before the atomic block (read-only query)
-    ss_chat_ids = list(
-        WorkContractorTelegram.objects
-        .filter(work_id=ctx['work_id'], role='site_supervisor', is_active=True)
-        .select_related('telegram_link')
-        .values_list('telegram_link__telegram_chat_id', flat=True)
-    )
 
     with transaction.atomic():
         from works.models import Work as _Work
@@ -644,8 +655,7 @@ def do_create_thread(token: str, upload_chat_id: str, session: BotSession, user)
             )
             _save_attachments(token, upload_chat_id, msg, attachments,
                               thread=thread,
-                              sender_display=_sender_display(user, 'rly_official'),
-                              notify_chat_ids=ss_chat_ids)
+                              sender_display=_sender_display(user, 'rly_official'))
 
     sr_num     = _sr_number(ctx['loa_number'], work_serial)
     instr_type = "Item-wise" if ctx.get('work_item_id') else "General"
@@ -671,11 +681,16 @@ def do_create_thread(token: str, upload_chat_id: str, session: BotSession, user)
         send_inline(token, m.telegram_link.telegram_chat_id, notify_text, reply_btn)
         notified += 1
 
+    item_confirm = f"\n\n<b>Item:</b> {ctx['work_item_desc']}" if ctx.get('work_item_id') else ""
+    msg_text = ctx.get('text', '—')
     send(token, session.telegram_chat_id,
-         f"✅ <b>{sr_num} created.</b> Notified {notified} site supervisor(s).",
+         f"✅ <b>SR No. : {sr_num}</b>   Notified {notified} site supervisor(s).\n\n"
+         f"<b>LOA:</b> {ctx['loa_number']}\n\n"
+         f"<b>Type:</b> {instr_type} Instruction{item_confirm}\n\n"
+         f"<b>Message:</b>\n{msg_text}",
          remove_kb=True)
     logger.info("%s created by %s, notified %d", sr_num, user.username, notified)
-    reset_session(session)
+    reset_session(session, token)
 
 
 def handle_rly_type_text(token: str, session: BotSession,
@@ -688,7 +703,7 @@ def handle_rly_type_text(token: str, session: BotSession,
         if caption:
             session.context["text"] = caption
         session.save(update_fields=["context", "updated_at"])
-        send(token, session.telegram_chat_id,
+        sendt(token, session,
              f"📎 Attachment {n} saved."
              + (f" Caption: <i>{caption[:60]}</i>" if caption else "")
              + "\n\nSend more files, type your instruction, or <code>/done</code> to continue.")
@@ -698,7 +713,7 @@ def handle_rly_type_text(token: str, session: BotSession,
         session.context["text"] = text
         session.save(update_fields=["context", "updated_at"])
     elif not session.context.get("text") and not session.context.get("attachments"):
-        send(token, session.telegram_chat_id,
+        sendt(token, session,
              "⚠️ Send your instruction text or at least one attachment first.")
         return
 
@@ -710,10 +725,10 @@ def handle_rly_confirm(token: str, upload_chat_id: str,
     if text.strip().startswith("1"):
         do_create_thread(token, upload_chat_id, session, user)
     elif text.strip().startswith("2"):
+        reset_session(session, token)
         send(token, session.telegram_chat_id, "❌ Entry cancelled.", remove_kb=True)
-        reset_session(session)
     else:
-        send(token, session.telegram_chat_id, "⚠️ Reply 1 to confirm or 2 to cancel.")
+        sendt(token, session, "⚠️ Reply 1 to confirm or 2 to cancel.")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -770,12 +785,13 @@ def _thread_full(t: SiteRegisterThread) -> str:
     )
 
 
-def show_ss_threads(token: str, session: BotSession, user, page: int = 0):
+def show_ss_threads(token: str, session: BotSession, user, page: int = 0,
+                    trigger_msg_id: int | None = None):
     threads, total, has_next = ss_threads_page(user, page)
     if not threads and page == 0:
         send(token, session.telegram_chat_id,
              "✅ No open entries for your LOAs.", remove_kb=True)
-        reset_session(session); return
+        reset_session(session, token); return
 
     lines = [f"<b>📬 Open Entries</b> ({total} total, page {page+1}):\n"]
     for i, t in enumerate(threads, 1):
@@ -786,25 +802,32 @@ def show_ss_threads(token: str, session: BotSession, user, page: int = 0):
     if page > 0: extras.append("◀ Prev")
     extras.append("❌ Cancel")
 
-    session.context = {"thread_page": page, "thread_choices": [t.pk for t in threads]}
-    session.state   = "ss_select_thread"
+    existing_flow_msgs = session.context.get("_flow_msgs", [])
+    session.context = {
+        "thread_page": page,
+        "thread_choices": [t.pk for t in threads],
+        "_flow_msgs": existing_flow_msgs,
+    }
+    if trigger_msg_id:
+        session.context["_flow_msgs"].append(trigger_msg_id)
+    session.state = "ss_select_thread"
     session.save(update_fields=["state", "context", "updated_at"])
-    send(token, session.telegram_chat_id, "\n".join(lines),
-         keyboard=number_keyboard(len(threads), extras=extras))
+    sendt(token, session, "\n".join(lines),
+          keyboard=number_keyboard(len(threads), extras=extras))
 
 
 def show_thread_actions(token: str, session: BotSession, thread: SiteRegisterThread):
-    send(token, session.telegram_chat_id,
-         _thread_full(thread) + "\n\nWhat would you like to do?",
-         keyboard=[["1. ✉️ Reply"], ["2. ◀ Back"], ["❌ Cancel"]])
     session.context["thread_id"] = thread.pk
     session.context["sr_number"] = _thread_sr_number(thread)
     session.state = "ss_thread_action"
     session.save(update_fields=["state", "context", "updated_at"])
+    sendt(token, session,
+         _thread_full(thread) + "\n\nWhat would you like to do?",
+         keyboard=[["1. ✉️ Reply"], ["2. ◀ Back"], ["❌ Cancel"]])
 
 
 def show_ss_reply_prompt(token: str, session: BotSession):
-    send(token, session.telegram_chat_id,
+    sendt(token, session,
          "✏️ <b>Type your reply</b> (you can also send photos/documents).\n"
          "Send <code>/done</code> after attachments to finish without text.",
          remove_kb=True)
@@ -815,7 +838,7 @@ def show_ss_reply_prompt(token: str, session: BotSession):
 def show_ss_confirm(token: str, session: BotSession):
     ctx    = session.context
     sr_num = ctx.get("sr_number", str(ctx["thread_id"]))
-    send(token, session.telegram_chat_id,
+    sendt(token, session,
          f"<b>Reply to {sr_num}:</b>\n\n"
          f"{ctx.get('reply_text', '—')}"
          f"{_att_line(ctx)}\n\n"
@@ -850,11 +873,9 @@ def do_send_reply(token: str, upload_chat_id: str, session: BotSession, user):
         thread = SiteRegisterThread.objects.select_related('work', 'created_by').get(pk=ctx['thread_id'])
     except SiteRegisterThread.DoesNotExist:
         send(token, session.telegram_chat_id, "⚠️ Entry not found.", remove_kb=True)
-        reset_session(session); return
+        reset_session(session, token); return
 
     attachments = ctx.get("attachments", [])
-    # Resolve creator chat ID before atomic block
-    creator_chat_id = _creator_chat_id(thread.created_by)
     with transaction.atomic():
         msg = SiteRegisterMessage.objects.create(
             thread       = thread,
@@ -864,8 +885,7 @@ def do_send_reply(token: str, upload_chat_id: str, session: BotSession, user):
         )
         _save_attachments(token, upload_chat_id, msg, attachments,
                           thread=thread,
-                          sender_display=_sender_display(user, 'site_supervisor'),
-                          notify_chat_ids=[creator_chat_id] if creator_chat_id else [])
+                          sender_display=_sender_display(user, 'site_supervisor'))
         thread.status = 'replied'
         thread.save(update_fields=['status'])
 
@@ -884,10 +904,17 @@ def do_send_reply(token: str, upload_chat_id: str, session: BotSession, user):
         send(token, chat_id, notify_text)
         notified = 1
 
+    reply_text = ctx.get('reply_text', '—')
     send(token, session.telegram_chat_id,
-         f"✅ Reply sent to {sr_num}. Notified {notified} Rly Official(s).", remove_kb=True)
+         f"✅ <b>Reply sent to</b>\n"
+         f"<b>SR No:</b> {sr_num}\n"
+         f"<b>Notified {notified} Rly Official(s)</b>\n\n"
+         f"<b>LOA:</b> {thread.work.loa_number}\n\n"
+         f"<b>Type:</b> {CATEGORY_LABELS.get(thread.category, thread.category)}\n\n"
+         f"<b>Reply:</b> {reply_text}",
+         remove_kb=True)
     logger.info("%s reply by %s, notified creator chat=%s", sr_num, user.username, chat_id)
-    reset_session(session)
+    reset_session(session, token)
 
 
 def do_mark_resolved(token: str, session: BotSession, user):
@@ -896,7 +923,7 @@ def do_mark_resolved(token: str, session: BotSession, user):
         thread = SiteRegisterThread.objects.select_related('work', 'created_by').get(pk=ctx['thread_id'])
     except SiteRegisterThread.DoesNotExist:
         send(token, session.telegram_chat_id, "⚠️ Entry not found.", remove_kb=True)
-        reset_session(session); return
+        reset_session(session, token); return
 
     with transaction.atomic():
         SiteRegisterMessage.objects.create(
@@ -919,7 +946,7 @@ def do_mark_resolved(token: str, session: BotSession, user):
     send(token, session.telegram_chat_id,
          f"✅ SR-{thread.pk:06d} marked resolved.", remove_kb=True)
     logger.info("SR-%06d resolved by %s, notified creator chat=%s", thread.pk, user.username, chat_id)
-    reset_session(session)
+    reset_session(session, token)
 
 
 # ── Site Supervisor state handlers ───────────────────────────────────────────
@@ -933,15 +960,15 @@ def handle_ss_select_thread(token: str, session: BotSession, user, text: str):
     try:
         idx = int(text.strip()) - 1
     except ValueError:
-        send(token, session.telegram_chat_id, "⚠️ Send entry number."); return
+        sendt(token, session, "⚠️ Send entry number."); return
     choices = ctx.get("thread_choices", [])
     if not (0 <= idx < len(choices)):
-        send(token, session.telegram_chat_id, f"⚠️ Enter 1–{len(choices)}."); return
+        sendt(token, session, f"⚠️ Enter 1–{len(choices)}."); return
     try:
         thread = SiteRegisterThread.objects.select_related('work', 'work_item').get(pk=choices[idx])
     except SiteRegisterThread.DoesNotExist:
         send(token, session.telegram_chat_id, "⚠️ Entry no longer available.", remove_kb=True)
-        reset_session(session); return
+        reset_session(session, token); return
     show_thread_actions(token, session, thread)
 
 
@@ -950,7 +977,7 @@ def handle_ss_thread_action(token: str, session: BotSession, user, text: str):
     if t.startswith("1"):   show_ss_reply_prompt(token, session)
     elif t.startswith("2"): show_ss_threads(token, session, user,
                                              page=session.context.get("thread_page", 0))
-    else: send(token, session.telegram_chat_id, "⚠️ Send 1 to reply or 2 to go back.")
+    else: sendt(token, session, "⚠️ Send 1 to reply or 2 to go back.")
 
 
 def handle_ss_type_reply(token: str, session: BotSession,
@@ -963,7 +990,7 @@ def handle_ss_type_reply(token: str, session: BotSession,
         if caption:
             session.context["reply_text"] = caption
         session.save(update_fields=["context", "updated_at"])
-        send(token, session.telegram_chat_id,
+        sendt(token, session,
              f"📎 Attachment {n} saved."
              + (f" Caption: <i>{caption[:60]}</i>" if caption else "")
              + "\n\nSend more files, type reply, or <code>/done</code> to continue.")
@@ -973,7 +1000,7 @@ def handle_ss_type_reply(token: str, session: BotSession,
         session.context["reply_text"] = text
         session.save(update_fields=["context", "updated_at"])
     elif not session.context.get("reply_text") and not session.context.get("attachments"):
-        send(token, session.telegram_chat_id,
+        sendt(token, session,
              "⚠️ Send reply text or at least one attachment first.")
         return
 
@@ -985,10 +1012,10 @@ def handle_ss_confirm_reply(token: str, upload_chat_id: str,
     if text.strip().startswith("1"):
         do_send_reply(token, upload_chat_id, session, user)
     elif text.strip().startswith("2"):
+        reset_session(session, token)
         send(token, session.telegram_chat_id, "❌ Reply cancelled.", remove_kb=True)
-        reset_session(session)
     else:
-        send(token, session.telegram_chat_id, "⚠️ Reply 1 to send or 2 to cancel.")
+        sendt(token, session, "⚠️ Reply 1 to send or 2 to cancel.")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1428,9 +1455,9 @@ def dispatch_callback(token: str, cq: dict):
         sr_num  = _thread_sr_number(thread)
         session = get_session(chat_id)
         session.state   = "ss_type_reply"
-        session.context = {"thread_id": thread_pk, "sr_number": sr_num, "attachments": []}
+        session.context = {"thread_id": thread_pk, "sr_number": sr_num, "attachments": [], "_flow_msgs": []}
         session.save(update_fields=["state", "context", "updated_at"])
-        send(token, chat_id,
+        sendt(token, session,
              f"↩️ <b>Reply to {sr_num}</b>\n\n"
              "✏️ Type your reply (you can also send photos/documents).\n"
              "Send <code>/done</code> after attachments to finish without text.",
@@ -1453,10 +1480,11 @@ def dispatch(token: str, upload_chat_id: str, update: dict):
     if not message:
         return
 
-    chat_id    = message["chat"]["id"]
-    tg_user_id = message["from"]["id"]
-    text       = (message.get("text") or message.get("caption") or "").strip()
-    attachment = extract_attachment(message)
+    chat_id     = message["chat"]["id"]
+    tg_user_id  = message["from"]["id"]
+    user_msg_id = message.get("message_id")
+    text        = (message.get("text") or message.get("caption") or "").strip()
+    attachment  = extract_attachment(message)
 
     if not text and not attachment:
         return
@@ -1487,7 +1515,8 @@ def dispatch(token: str, upload_chat_id: str, update: dict):
         if user:
             session = get_session(chat_id)
             if session.state != "idle":
-                reset_session(session)
+                track_flow_msg(session, user_msg_id)
+                reset_session(session, token)
                 send(token, chat_id, "❌ Cancelled.", remove_kb=True)
                 return
         send(token, chat_id, "Nothing to cancel.", remove_kb=True)
@@ -1500,6 +1529,11 @@ def dispatch(token: str, upload_chat_id: str, update: dict):
 
     session = get_session(chat_id)
 
+    # Track incoming user message for ephemeral deletion
+    if session.state != "idle" and user_msg_id:
+        track_flow_msg(session, user_msg_id)
+        session.save(update_fields=["context", "updated_at"])
+
     if text == "/done" and session.state in TEXT_INPUT_STATES:
         text = None
 
@@ -1509,9 +1543,9 @@ def dispatch(token: str, upload_chat_id: str, update: dict):
                  "⚠️ Start a new entry first — just send any message to begin.")
             return
         if role in ('rly_official', 'admin'):
-            show_loa_search(token, session)
+            show_loa_search(token, session, trigger_msg_id=user_msg_id)
         elif role == 'site_supervisor':
-            show_ss_threads(token, session, user, page=0)
+            show_ss_threads(token, session, user, page=0, trigger_msg_id=user_msg_id)
         else:
             send(token, chat_id,
                  "ℹ️ Your account is linked. You will receive notifications here.")
