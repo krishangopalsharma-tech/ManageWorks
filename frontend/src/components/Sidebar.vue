@@ -8,7 +8,8 @@ const router = useRouter()
 const route  = useRoute()
 const { state, logout } = useAuth()
 
-const isAdmin   = computed(() => state.user?.role === 'admin' || state.user?.is_staff)
+const isAdmin        = computed(() => state.user?.role === 'admin' || state.user?.is_staff)
+const canSeeRegister = computed(() => isAdmin.value || state.user?.role === 'consignee')
 const collapsed = ref(localStorage.getItem('sidebar-collapsed') === 'true')
 
 const toggleCollapsed = () => {
@@ -21,7 +22,7 @@ const menuItems = ref([
   { name: 'Work Details', icon: 'i-carbon-catalog',   path: '/work-details' },
   { name: 'Item Progress',icon: 'i-carbon-chart-bar', path: '/item-progress' },
   { name: 'Update Work',  icon: 'i-carbon-edit',      path: '/update-work' },
-  { name: 'Site Register', icon: 'i-carbon-map',       path: '/site-register' },
+  { name: 'Site Register', icon: 'i-carbon-map',       path: '/site-register', siteRegisterOnly: true },
   { name: 'MB Details',   icon: 'i-carbon-receipt',   path: '/mb-details' },
   {
     name: 'Document Generator',
@@ -102,6 +103,10 @@ const visibleSubItems = (item) => {
   return item.subItems.filter(s => !s.adminOnly || isAdmin.value)
 }
 
+const visibleMenuItems = computed(() =>
+  menuItems.value.filter(item => !item.siteRegisterOnly || canSeeRegister.value)
+)
+
 // Tooltip: full name when collapsed
 const itemTooltip = (item) => collapsed.value ? item.name : ''
 </script>
@@ -140,7 +145,7 @@ const itemTooltip = (item) => collapsed.value ? item.name : ''
       :class="collapsed ? 'px-2 gap-1' : 'px-4 gap-1'"
       style="scrollbar-width: thin;"
     >
-      <div v-for="item in menuItems" :key="item.name" class="flex flex-col">
+      <div v-for="item in visibleMenuItems" :key="item.name" class="flex flex-col">
 
         <!-- Main Item -->
         <div

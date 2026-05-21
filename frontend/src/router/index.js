@@ -31,7 +31,7 @@ const routes = [
   { path: '/add-new-work',             name: 'Add New Work',     component: AddNewWork },
   { path: '/update-work',              name: 'Update Work',      component: UpdateWork },
   { path: '/mb-details',               name: 'MB Details',       component: MBDetails },
-  { path: '/site-register',               name: 'Site Register',            component: SiteRegister },
+  { path: '/site-register',               name: 'Site Register',            component: SiteRegister, meta: { siteRegisterAccess: true } },
   { path: '/settings/user-management',    name: 'User Management',          component: UserManagement,          meta: { adminOnly: true } },
   { path: '/settings/site-gsheet',        name: 'Site GSheet',              component: SiteGSheetSettings,      meta: { adminOnly: true } },
   { path: '/settings/smtp',               name: 'SMTP Settings',            component: SmtpSettings,            meta: { adminOnly: true } },
@@ -72,6 +72,12 @@ router.beforeEach(async (to) => {
   if (to.meta.adminOnly) {
     const isAdmin = state.user?.role === 'admin' || state.user?.is_staff
     if (!isAdmin) return '/'
+  }
+
+  if (to.meta.siteRegisterAccess) {
+    const role    = state.user?.role
+    const isAdmin = role === 'admin' || state.user?.is_staff
+    if (!isAdmin && role !== 'consignee') return '/'
   }
 
   return true

@@ -6,6 +6,7 @@ Long-polls Telegram getUpdates and routes messages through conversation flows.
 States
 ------
 idle
+rly_main_menu           ← rly official: New Entry / Recent Entries
 rly_loa_search          ← type last-5 digits of LOA or contractor nickname
 rly_loa_list            ← select from matched LOA list
 rly_loa_confirm         ← show LOA details (tender + brief name), YES/NO
@@ -14,15 +15,30 @@ rly_item_input          ← type item ref e.g. A-12 or A1-14
 rly_item_confirm        ← show item description, YES/NO
 rly_type_text           ← type instruction text; also accepts photo/document; /done to finish
 rly_confirm             ← review + confirm send
+ss_main_menu            ← contractor: New Entry / Open Entries / Recent Entries
+ss_new_loa_search       ← contractor new entry: search LOA (own LOAs only)
+ss_new_loa_list         ← contractor: pick from list
+ss_new_loa_confirm      ← contractor: confirm LOA
+ss_new_choose_type      ← contractor: ITEM or GENERAL
+ss_new_item_input       ← contractor: type item ref
+ss_new_item_confirm     ← contractor: confirm item
+ss_new_type_text        ← contractor: type message + attachments; /done to finish
+ss_new_confirm          ← contractor: review + confirm send
 ss_select_thread
 ss_thread_action
 ss_type_reply           ← also accepts photo/document; /done to finish
 ss_confirm_reply
+view_recent_filter      ← both roles: This Week / This Month / Custom
+view_recent_from        ← custom: type from-date DD-MM-YYYY
+view_recent_to          ← custom: type to-date DD-MM-YYYY
+view_recent_list        ← paginated list of own entries
+view_recent_detail      ← single entry full view
 """
 
 import logging
 import re
 import time
+from datetime import datetime, timedelta
 
 import requests
 from django.core.management.base import BaseCommand
@@ -60,7 +76,7 @@ CATEGORY_LABELS = {
     'general_remark':      '💬 General Remark',
 }
 REMOVE_KEYBOARD   = {"remove_keyboard": True}
-TEXT_INPUT_STATES = {'rly_type_text', 'ss_type_reply'}
+TEXT_INPUT_STATES = {'rly_type_text', 'ss_type_reply', 'ss_new_type_text'}
 
 
 # ── Telegram API helpers ─────────────────────────────────────────────────────
@@ -105,6 +121,29 @@ def send_inline(token: str, chat_id: int, text: str, buttons: list) -> int | Non
     except Exception as exc:
         logger.warning("sendMessage(inline) failed chat=%s: %s", chat_id, exc)
         return None
+
+
+def send_file_to_chat(token: str, chat_id: int, att: dict, caption: str | None = None):
+    """Send a single attachment (photo or document) to a chat using its file_id."""
+    file_id = att["tg_file_id"]
+    kwargs  = {"chat_id": chat_id, "caption": caption, "parse_mode": "HTML"} if caption else {"chat_id": chat_id}
+    try:
+        if att["file_type"] == "photo":
+            _api(token, "sendPhoto", photo=file_id, **kwargs)
+        else:
+            _api(token, "sendDocument", document=file_id, **kwargs)
+    except Exception as exc:
+        logger.warning("send_file_to_chat failed chat=%s: %s", chat_id, exc)
+
+
+def forward_attachments(token: str, chat_id: int, attachments: list[dict],
+                        sr_num: str, sender_label: str):
+    """Forward all attachments from a flow to another user's chat."""
+    if not attachments:
+        return
+    for i, att in enumerate(attachments, 1):
+        caption = f"📎 <b>Attachment {i}/{len(attachments)}</b>\n📋 {sr_num} — {sender_label}"
+        send_file_to_chat(token, chat_id, att, caption=caption)
 
 
 def delete_message(token: str, chat_id: int, msg_id: int):
@@ -352,8 +391,7 @@ def _sender_display(user, role: str) -> str:
         name  = (user.first_name or user.username) if user else '?'
         p     = getattr(user, 'profile', None) if user else None
         desig = p.designation if p else ''
-    role_label = 'Rly Official' if role == 'rly_official' else 'Site Supervisor'
-    return f"{name} ({desig}) — {role_label}" if desig else f"{name} — {role_label}"
+    return f"{name} ({desig})" if desig else name
 
 
 # ── LOA / contractor helpers ──────────────────────────────────────────────────
@@ -389,10 +427,52 @@ def _display_name(user) -> str:
     return user.first_name or user.username
 
 
+def show_rly_main_menu(token: str, session: BotSession, trigger_msg_id: int | None = None):
+    session.state   = "rly_main_menu"
+    session.context = {"_flow_msgs": [trigger_msg_id] if trigger_msg_id else []}
+    session.save(update_fields=["state", "context", "updated_at"])
+    sendt(token, session,
+         "👋 <b>What would you like to do?</b>",
+         keyboard=[["1. 📝 New Entry"], ["2. 📋 Recent Entries"], ["❌ Cancel"]])
+
+
+def handle_rly_main_menu(token: str, session: BotSession, text: str):
+    t = text.strip()
+    if t.startswith("1"):
+        show_loa_search(token, session)
+    elif t.startswith("2"):
+        show_recent_filter(token, session)
+    else:
+        sendt(token, session, "⚠️ Send 1 for New Entry or 2 for Recent Entries.")
+
+
+def show_ss_main_menu(token: str, session: BotSession, trigger_msg_id: int | None = None):
+    session.state   = "ss_main_menu"
+    session.context = {"_flow_msgs": [trigger_msg_id] if trigger_msg_id else []}
+    session.save(update_fields=["state", "context", "updated_at"])
+    sendt(token, session,
+         "👋 <b>What would you like to do?</b>",
+         keyboard=[["1. 📝 New Entry"], ["2. 📬 Open Entries"], ["3. 📋 Recent Entries"], ["❌ Cancel"]])
+
+
+def handle_ss_main_menu(token: str, session: BotSession, user, text: str,
+                        trigger_msg_id: int | None = None):
+    t = text.strip()
+    if t.startswith("1"):
+        show_ss_loa_search(token, session)
+    elif t.startswith("2"):
+        show_ss_threads(token, session, user, page=0, trigger_msg_id=trigger_msg_id)
+    elif t.startswith("3"):
+        show_recent_filter(token, session)
+    else:
+        sendt(token, session, "⚠️ Send 1, 2, or 3.")
+
+
 def show_loa_search(token: str, session: BotSession, trigger_msg_id: int | None = None):
     """Entry point for rly official — prompt to find LOA."""
+    existing = session.context.get("_flow_msgs", [])
     session.state   = "rly_loa_search"
-    session.context = {"_flow_msgs": [trigger_msg_id] if trigger_msg_id else []}
+    session.context = {"_flow_msgs": existing + ([trigger_msg_id] if trigger_msg_id else [])}
     session.save(update_fields=["state", "context", "updated_at"])
     sendt(token, session,
          "📋 <b>New Entry — Find LOA</b>\n\n"
@@ -666,7 +746,7 @@ def do_create_thread(token: str, upload_chat_id: str, session: BotSession, user)
         f"<b>LOA:</b> {ctx['loa_number']}\n"
         f"<b>Tender No:</b> {ctx.get('tender_number', '—')}\n"
         f"<b>Type:</b> {instr_type}{item_line}\n\n"
-        f"{ctx.get('text', '')}{att_note}\n\n"
+        f"🔴 {ctx.get('text', '')}{att_note}\n\n"
         f"— <i>{_display_name(user)}</i>"
     )
     reply_btn = [[{"text": f"↩️ Reply to {sr_num}", "callback_data": f"reply:{thread.pk}"}]]
@@ -677,8 +757,10 @@ def do_create_thread(token: str, upload_chat_id: str, session: BotSession, user)
         .select_related('telegram_link')
     )
     notified = 0
+    sender_label = _display_name(user)
     for m in ss_links:
         send_inline(token, m.telegram_link.telegram_chat_id, notify_text, reply_btn)
+        forward_attachments(token, m.telegram_link.telegram_chat_id, attachments, sr_num, sender_label)
         notified += 1
 
     item_confirm = f"\n\n<b>Item:</b> {ctx['work_item_desc']}" if ctx.get('work_item_id') else ""
@@ -687,7 +769,7 @@ def do_create_thread(token: str, upload_chat_id: str, session: BotSession, user)
          f"✅ <b>SR No. : {sr_num}</b>   Notified {notified} site supervisor(s).\n\n"
          f"<b>LOA:</b> {ctx['loa_number']}\n\n"
          f"<b>Type:</b> {instr_type} Instruction{item_confirm}\n\n"
-         f"<b>Message:</b>\n{msg_text}",
+         f"<b>Message:</b>\n🔴 {msg_text}",
          remove_kb=True)
     logger.info("%s created by %s, notified %d", sr_num, user.username, notified)
     reset_session(session, token)
@@ -706,7 +788,8 @@ def handle_rly_type_text(token: str, session: BotSession,
         sendt(token, session,
              f"📎 Attachment {n} saved."
              + (f" Caption: <i>{caption[:60]}</i>" if caption else "")
-             + "\n\nSend more files, type your instruction, or <code>/done</code> to continue.")
+             + "\n\nSend more files or type your instruction. Tap Done to proceed.",
+             keyboard=[["✅ Done — Proceed"]])
         return
 
     if text:
@@ -729,6 +812,496 @@ def handle_rly_confirm(token: str, upload_chat_id: str,
         send(token, session.telegram_chat_id, "❌ Entry cancelled.", remove_kb=True)
     else:
         sendt(token, session, "⚠️ Reply 1 to confirm or 2 to cancel.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CONTRACTOR (SITE SUPERVISOR) — NEW ENTRY INITIATION FLOW
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _ss_work_ids(user) -> list:
+    return list(
+        WorkContractorTelegram.objects
+        .filter(telegram_link__user=user, role='site_supervisor', is_active=True)
+        .values_list('work_id', flat=True)
+    )
+
+
+def show_ss_loa_search(token: str, session: BotSession, trigger_msg_id: int | None = None):
+    existing = session.context.get("_flow_msgs", [])
+    session.state   = "ss_new_loa_search"
+    session.context = {"_flow_msgs": existing + ([trigger_msg_id] if trigger_msg_id else [])}
+    session.save(update_fields=["state", "context", "updated_at"])
+    sendt(token, session,
+         "📋 <b>New Entry — Find LOA</b>\n\n"
+         "Type one of:\n"
+         "• <b>Last 5 digits</b> of LOA number (e.g. <code>12345</code>)\n"
+         "• <b>Contractor nickname</b> — first letter of each word\n"
+         "  e.g. <code>MCPL</code> for MAHESHWARI COMPUTERS PVT. LTD\n\n"
+         "Send <b>❌ Cancel</b> to exit.",
+         remove_kb=True)
+
+
+def _ss_show_loa_list(token: str, session: BotSession, works: list):
+    lines = [f"<b>Select LOA</b> ({len(works)} found):\n"]
+    for i, w in enumerate(works, 1):
+        brief = _work_brief_name(w.name_of_work, 50)
+        lines.append(f"{i}. <b>{w.loa_number}</b> — {w.contractor_name or '—'}\n   {brief}\n")
+    session.context["ss_loa_choices"] = [w.id for w in works]
+    session.state = "ss_new_loa_list"
+    session.save(update_fields=["state", "context", "updated_at"])
+    sendt(token, session, "\n".join(lines),
+         keyboard=number_keyboard(len(works), extras=["◀ Back", "❌ Cancel"]))
+
+
+def _ss_set_loa_and_confirm(token: str, session: BotSession, work):
+    brief = _work_brief_name(work.name_of_work)
+    session.context.update({
+        "work_id":         work.id,
+        "loa_number":      work.loa_number,
+        "tender_number":   work.tender_number or '—',
+        "contractor_name": work.contractor_name or '—',
+        "work_brief_name": brief,
+    })
+    session.state = "ss_new_loa_confirm"
+    session.save(update_fields=["state", "context", "updated_at"])
+    sendt(token, session,
+         f"📋 <b>LOA Details</b>\n\n"
+         f"<b>LOA No:</b> {work.loa_number}\n"
+         f"<b>Tender No:</b> {work.tender_number or '—'}\n"
+         f"<b>Contractor:</b> {work.contractor_name or '—'}\n"
+         f"<b>Work:</b> {brief}\n\n"
+         "Is this the correct LOA?",
+         keyboard=[["✅ Yes"], ["❌ No — search again"]])
+
+
+def handle_ss_new_loa_search(token: str, session: BotSession, user, text: str):
+    from works.models import Work
+    work_ids = _ss_work_ids(user)
+    if not work_ids:
+        sendt(token, session, "⚠️ No LOAs assigned to you. Contact your admin.")
+        return
+    t = text.strip()
+    if t.isdigit():
+        matches = list(Work.objects.filter(id__in=work_ids, loa_number__endswith=t).order_by('loa_number'))
+        if not matches:
+            sendt(token, session,
+                 f"⚠️ No LOA ending in <code>{t}</code> found in your assigned LOAs.\nTry again.")
+            return
+        if len(matches) == 1:
+            _ss_set_loa_and_confirm(token, session, matches[0])
+            return
+        _ss_show_loa_list(token, session, matches)
+        return
+    if t.isalpha():
+        nickname  = t.upper()
+        all_works = list(Work.objects.filter(id__in=work_ids).order_by('contractor_name', 'loa_number'))
+        matched   = [w for w in all_works if _contractor_nickname(w.contractor_name or '') == nickname]
+        if not matched:
+            sendt(token, session,
+                 f"⚠️ No contractor with nickname <code>{nickname}</code> in your LOAs.\nTry digits or different nickname.")
+            return
+        _ss_show_loa_list(token, session, matched)
+        return
+    sendt(token, session, "⚠️ Type <b>digits only</b> for LOA suffix or <b>letters only</b> for nickname.")
+
+
+def handle_ss_new_loa_list(token: str, session: BotSession, user, text: str):
+    if text == "◀ Back":
+        show_ss_loa_search(token, session)
+        return
+    try:
+        idx = int(text.strip()) - 1
+    except ValueError:
+        sendt(token, session, "⚠️ Send the LOA number."); return
+    choices = session.context.get("ss_loa_choices", [])
+    if not (0 <= idx < len(choices)):
+        sendt(token, session, f"⚠️ Enter 1–{len(choices)}."); return
+    from works.models import Work
+    work = Work.objects.get(pk=choices[idx])
+    _ss_set_loa_and_confirm(token, session, work)
+
+
+def handle_ss_new_loa_confirm(token: str, session: BotSession, text: str):
+    t = text.strip().upper()
+    if "YES" in t or t == "✅ YES":
+        show_ss_choose_type(token, session)
+    elif "NO" in t:
+        show_ss_loa_search(token, session)
+    else:
+        sendt(token, session, "⚠️ Reply Yes or No.")
+
+
+def show_ss_choose_type(token: str, session: BotSession):
+    ctx = session.context
+    session.state = "ss_new_choose_type"
+    session.save(update_fields=["state", "updated_at"])
+    sendt(token, session,
+         f"<b>LOA:</b> {ctx['loa_number']}\n"
+         f"<b>Contractor:</b> {ctx['contractor_name']}\n\n"
+         "Select entry type:",
+         keyboard=[["1. 📦 Item-wise"], ["2. 📋 General"], ["❌ Cancel"]])
+
+
+def handle_ss_new_choose_type(token: str, session: BotSession, text: str):
+    t = text.strip()
+    if t.startswith("1") or "item" in t.lower():
+        session.state = "ss_new_item_input"
+        session.save(update_fields=["state", "updated_at"])
+        sendt(token, session,
+             "📦 <b>Item-wise Entry</b>\n\n"
+             "Type the item reference:\n"
+             "• <code>A-12</code>  → Schedule A, Item 12\n"
+             "• <code>A1-14</code> → Schedule A1, Item 14",
+             remove_kb=True)
+    elif t.startswith("2") or "general" in t.lower():
+        session.context["instruction_type"] = "general"
+        session.context.pop("work_item_id", None)
+        session.context.pop("work_item_desc", None)
+        session.save(update_fields=["context", "updated_at"])
+        show_ss_new_text_prompt(token, session)
+    else:
+        sendt(token, session, "⚠️ Send 1 for Item-wise or 2 for General.")
+
+
+def handle_ss_new_item_input(token: str, session: BotSession, text: str):
+    schedule, serial = _parse_item_ref(text)
+    if not schedule:
+        sendt(token, session, "⚠️ Invalid format.\nUse <code>A-12</code> or <code>A1-14</code>.")
+        return
+    candidates = list(WorkItem.objects.filter(
+        work_id=session.context["work_id"], schedule__iexact=schedule))
+    item = None
+    for it in candidates:
+        if (it.serial_number or '').strip() == serial:
+            item = it; break
+    if not item:
+        sendt(token, session,
+             f"⚠️ Item <code>{text.strip()}</code> not found in this LOA.\nTry again.")
+        return
+    desc       = (item.item_desc or '').strip()
+    brief_desc = desc[:120] + ('…' if len(desc) > 120 else '')
+    full_ref   = f"{item.schedule}-{item.serial_number}"
+    session.context.update({
+        "work_item_id":     item.id,
+        "work_item_ref":    full_ref,
+        "work_item_desc":   f"{full_ref} — {brief_desc}",
+        "instruction_type": "item",
+    })
+    session.state = "ss_new_item_confirm"
+    session.save(update_fields=["state", "context", "updated_at"])
+    sendt(token, session,
+         f"📦 <b>Item Found:</b>\n\n"
+         f"<b>Schedule:</b> {item.schedule}\n"
+         f"<b>Item No:</b> {item.serial_number}\n"
+         f"<b>Description:</b> {brief_desc}\n\n"
+         "Is this the correct item?",
+         keyboard=[["✅ Yes"], ["❌ No — re-enter"]])
+
+
+def handle_ss_new_item_confirm(token: str, session: BotSession, text: str):
+    t = text.strip().upper()
+    if "YES" in t:
+        show_ss_new_text_prompt(token, session)
+    elif "NO" in t:
+        session.state = "ss_new_item_input"
+        session.save(update_fields=["state", "updated_at"])
+        sendt(token, session, "Type the item reference again (e.g. <code>A-12</code>):", remove_kb=True)
+    else:
+        sendt(token, session, "⚠️ Reply Yes or No.")
+
+
+def show_ss_new_text_prompt(token: str, session: BotSession):
+    ctx        = session.context
+    entry_type = "Item-wise" if ctx.get("work_item_id") else "General"
+    item_line  = f"\n<b>Item:</b> {ctx['work_item_desc']}" if ctx.get("work_item_id") else ""
+    sendt(token, session,
+         f"<b>LOA:</b> {ctx['loa_number']}\n"
+         f"<b>Type:</b> {entry_type}{item_line}\n\n"
+         "✏️ <b>Type your message</b> (you can also send photos/documents).\n"
+         "Tap Done to proceed after attachments.",
+         remove_kb=True)
+    session.state = "ss_new_type_text"
+    session.save(update_fields=["state", "updated_at"])
+
+
+def handle_ss_new_type_text(token: str, session: BotSession,
+                             text: str | None, attachment: dict | None):
+    if attachment:
+        atts    = session.context.setdefault("attachments", [])
+        atts.append(attachment)
+        n       = len(atts)
+        caption = text or ""
+        if caption:
+            session.context["text"] = caption
+        session.save(update_fields=["context", "updated_at"])
+        sendt(token, session,
+             f"📎 Attachment {n} saved."
+             + (f" Caption: <i>{caption[:60]}</i>" if caption else "")
+             + "\n\nSend more files or type your message. Tap Done to proceed.",
+             keyboard=[["✅ Done — Proceed"]])
+        return
+    if text:
+        session.context["text"] = text
+        session.save(update_fields=["context", "updated_at"])
+    elif not session.context.get("text") and not session.context.get("attachments"):
+        sendt(token, session, "⚠️ Send your message or at least one attachment first.")
+        return
+    show_ss_new_confirm(token, session)
+
+
+def show_ss_new_confirm(token: str, session: BotSession):
+    ctx        = session.context
+    entry_type = "Item-wise" if ctx.get("work_item_id") else "General"
+    item_line  = f"\n<b>Item:</b> {ctx['work_item_desc']}" if ctx.get("work_item_id") else ""
+    sendt(token, session,
+         "📋 <b>Review your entry:</b>\n\n"
+         f"<b>LOA:</b> {ctx['loa_number']}\n"
+         f"<b>Tender No:</b> {ctx.get('tender_number', '—')}\n"
+         f"<b>Contractor:</b> {ctx['contractor_name']}\n"
+         f"<b>Type:</b> {entry_type}{item_line}\n"
+         f"<b>Message:</b>\n{ctx.get('text', '—')}"
+         f"{_att_line(ctx)}\n\n"
+         "Submit this entry?",
+         keyboard=[["1. ✅ Confirm"], ["2. ❌ Cancel"]])
+    session.state = "ss_new_confirm"
+    session.save(update_fields=["state", "updated_at"])
+
+
+def do_create_ss_thread(token: str, upload_chat_id: str, session: BotSession, user):
+    ctx = session.context
+
+    with transaction.atomic():
+        from works.models import Work as _Work
+        _Work.objects.select_for_update().get(pk=ctx['work_id'])
+        work_serial = SiteRegisterThread.objects.filter(work_id=ctx['work_id']).count() + 1
+        thread = SiteRegisterThread.objects.create(
+            work_id           = ctx['work_id'],
+            work_item_id      = ctx.get('work_item_id'),
+            initiated_by_role = 'site_supervisor',
+            category          = 'progress',
+            initial_text      = ctx.get('text', ''),
+            status            = 'open',
+            created_by        = user,
+            work_serial       = work_serial,
+        )
+        attachments = ctx.get("attachments", [])
+        if attachments:
+            msg = SiteRegisterMessage.objects.create(
+                thread       = thread,
+                sender       = user,
+                sender_role  = 'site_supervisor',
+                message_text = ctx.get('text', ''),
+            )
+            _save_attachments(token, upload_chat_id, msg, attachments,
+                              thread=thread,
+                              sender_display=_sender_display(user, 'site_supervisor'))
+
+    sr_num     = _sr_number(ctx['loa_number'], work_serial)
+    entry_type = "Item-wise" if ctx.get('work_item_id') else "General"
+    item_line  = f"\n📦 <b>Item:</b> {ctx['work_item_desc']}" if ctx.get('work_item_id') else ""
+    att_note   = f"\n📎 {len(attachments)} attachment(s) included." if attachments else ""
+    notify_text = (
+        f"📋 <b>New Contractor Entry — {sr_num}</b>\n\n"
+        f"<b>LOA:</b> {ctx['loa_number']}\n"
+        f"<b>Tender No:</b> {ctx.get('tender_number', '—')}\n"
+        f"<b>Type:</b> {entry_type}{item_line}\n\n"
+        f"🔴 {ctx.get('text', '')}{att_note}\n\n"
+        f"— <i>{_sender_display(user, 'site_supervisor')}</i>"
+    )
+    reply_btn = [[{"text": f"↩️ Reply to {sr_num}", "callback_data": f"reply:{thread.pk}"}]]
+
+    # Notify all active railway official Telegram users
+    notified = 0
+    sender_label = _display_name(user)
+    for rly_link in RlyTelegramLink.objects.filter(is_verified=True):
+        send_inline(token, rly_link.telegram_chat_id, notify_text, reply_btn)
+        forward_attachments(token, rly_link.telegram_chat_id, attachments, sr_num, sender_label)
+        notified += 1
+    for tg_link in (
+        TelegramUserLink.objects
+        .filter(is_verified=True)
+        .exclude(user__username__startswith='tg_')
+        .select_related('user', 'user__profile')
+    ):
+        role_check = resolve_user(tg_link.telegram_user_id)
+        if role_check[1] in ('rly_official', 'admin'):
+            send_inline(token, tg_link.telegram_chat_id, notify_text, reply_btn)
+            forward_attachments(token, tg_link.telegram_chat_id, attachments, sr_num, sender_label)
+            notified += 1
+
+    send(token, session.telegram_chat_id,
+         f"✅ <b>SR No.: {sr_num}</b>   Notified {notified} railway official(s).\n\n"
+         f"<b>LOA:</b> {ctx['loa_number']}\n\n"
+         f"<b>Type:</b> {entry_type}{item_line}\n\n"
+         f"<b>Message:</b>\n🔴 {ctx.get('text', '—')}",
+         remove_kb=True)
+    logger.info("%s created by SS %s, notified %d rly officials", sr_num, user.username, notified)
+    reset_session(session, token)
+
+
+def handle_ss_new_confirm(token: str, upload_chat_id: str,
+                          session: BotSession, user, text: str):
+    if text.strip().startswith("1"):
+        do_create_ss_thread(token, upload_chat_id, session, user)
+    elif text.strip().startswith("2"):
+        reset_session(session, token)
+        send(token, session.telegram_chat_id, "❌ Entry cancelled.", remove_kb=True)
+    else:
+        sendt(token, session, "⚠️ Reply 1 to confirm or 2 to cancel.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# RECENT ENTRIES FLOW (shared for both rly_official and site_supervisor)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def show_recent_filter(token: str, session: BotSession, trigger_msg_id: int | None = None):
+    existing = session.context.get("_flow_msgs", [])
+    session.state   = "view_recent_filter"
+    session.context = {"_flow_msgs": existing + ([trigger_msg_id] if trigger_msg_id else [])}
+    session.save(update_fields=["state", "context", "updated_at"])
+    sendt(token, session,
+         "📋 <b>Recent Entries</b>\n\nSelect date range:",
+         keyboard=[["1. 📅 This Week"], ["2. 🗓 This Month"], ["3. 📆 Custom Range"], ["❌ Cancel"]])
+
+
+def _recent_entries_qs(user, from_dt, to_dt):
+    return (
+        SiteRegisterThread.objects
+        .filter(created_by=user, created_at__gte=from_dt, created_at__lte=to_dt)
+        .select_related('work', 'work_item')
+        .order_by('-created_at')
+    )
+
+
+def show_recent_entries(token: str, session: BotSession, user, from_dt, to_dt, page: int = 0):
+    qs    = _recent_entries_qs(user, from_dt, to_dt)
+    total = qs.count()
+    if total == 0:
+        sendt(token, session,
+             "📋 No entries found for this period.", remove_kb=True)
+        reset_session(session, token)
+        return
+    start   = page * PAGE_SIZE
+    end     = start + PAGE_SIZE
+    threads = list(qs[start:end])
+    has_next = total > end
+
+    date_label = f"{from_dt.strftime('%d %b')} – {to_dt.strftime('%d %b %Y')}"
+    lines = [f"<b>📋 Your Entries</b> ({total} total, {date_label}, page {page+1}):\n"]
+    for i, t in enumerate(threads, 1):
+        lines.append(f"{i}. {_thread_short(t)}\n")
+
+    extras = []
+    if has_next: extras.append("Next ▶")
+    if page > 0: extras.append("◀ Prev")
+    extras.append("❌ Cancel")
+
+    session.context.update({
+        "recent_from":    from_dt.isoformat(),
+        "recent_to":      to_dt.isoformat(),
+        "recent_page":    page,
+        "recent_choices": [t.pk for t in threads],
+    })
+    session.state = "view_recent_list"
+    session.save(update_fields=["state", "context", "updated_at"])
+    sendt(token, session, "\n".join(lines),
+         keyboard=number_keyboard(len(threads), extras=extras))
+
+
+def handle_recent_filter(token: str, session: BotSession, user, text: str):
+    now = timezone.now()
+    t   = text.strip()
+
+    if t.startswith("1"):
+        from_dt = now - timedelta(days=7)
+        show_recent_entries(token, session, user, from_dt, now)
+    elif t.startswith("2"):
+        from_dt = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        show_recent_entries(token, session, user, from_dt, now)
+    elif t.startswith("3"):
+        session.state = "view_recent_from"
+        session.save(update_fields=["state", "updated_at"])
+        sendt(token, session,
+             "📅 Enter <b>From Date</b> (DD-MM-YYYY):", remove_kb=True)
+    else:
+        sendt(token, session, "⚠️ Send 1, 2, or 3.")
+
+
+def _parse_date(text: str):
+    """Parse DD-MM-YYYY → aware datetime at start of day, or None."""
+    for fmt in ("%d-%m-%Y", "%d/%m/%Y", "%d %m %Y"):
+        try:
+            dt = datetime.strptime(text.strip(), fmt)
+            return timezone.make_aware(dt.replace(hour=0, minute=0, second=0))
+        except ValueError:
+            continue
+    return None
+
+
+def handle_recent_date_from(token: str, session: BotSession, user, text: str):
+    dt = _parse_date(text)
+    if dt is None:
+        sendt(token, session, "⚠️ Invalid date. Use DD-MM-YYYY (e.g. <code>01-05-2026</code>).")
+        return
+    session.context["recent_from"] = dt.isoformat()
+    session.state = "view_recent_to"
+    session.save(update_fields=["state", "context", "updated_at"])
+    sendt(token, session,
+         f"📅 From: <b>{dt.strftime('%d %b %Y')}</b>\n\nEnter <b>To Date</b> (DD-MM-YYYY):",
+         remove_kb=True)
+
+
+def handle_recent_date_to(token: str, session: BotSession, user, text: str):
+    dt = _parse_date(text)
+    if dt is None:
+        sendt(token, session, "⚠️ Invalid date. Use DD-MM-YYYY (e.g. <code>21-05-2026</code>).")
+        return
+    to_dt   = dt.replace(hour=23, minute=59, second=59)
+    from_dt = datetime.fromisoformat(session.context["recent_from"])
+    if to_dt < from_dt:
+        sendt(token, session, "⚠️ To Date must be on or after From Date.")
+        return
+    show_recent_entries(token, session, user, from_dt, to_dt)
+
+
+def handle_recent_list(token: str, session: BotSession, user, text: str):
+    ctx = session.context
+    if text == "Next ▶":
+        from_dt = datetime.fromisoformat(ctx["recent_from"])
+        to_dt   = datetime.fromisoformat(ctx["recent_to"])
+        show_recent_entries(token, session, user, from_dt, to_dt, page=ctx.get("recent_page", 0) + 1)
+        return
+    if text == "◀ Prev":
+        from_dt = datetime.fromisoformat(ctx["recent_from"])
+        to_dt   = datetime.fromisoformat(ctx["recent_to"])
+        show_recent_entries(token, session, user, from_dt, to_dt, page=max(0, ctx.get("recent_page", 0) - 1))
+        return
+    try:
+        idx = int(text.strip()) - 1
+    except ValueError:
+        sendt(token, session, "⚠️ Send entry number."); return
+    choices = ctx.get("recent_choices", [])
+    if not (0 <= idx < len(choices)):
+        sendt(token, session, f"⚠️ Enter 1–{len(choices)}."); return
+    try:
+        thread = SiteRegisterThread.objects.select_related('work', 'work_item').get(pk=choices[idx])
+    except SiteRegisterThread.DoesNotExist:
+        sendt(token, session, "⚠️ Entry not found."); return
+    sendt(token, session, _thread_full(thread),
+         keyboard=[["◀ Back to list"], ["❌ Cancel"]])
+    session.context["recent_view_id"] = thread.pk
+    session.state = "view_recent_detail"
+    session.save(update_fields=["state", "context", "updated_at"])
+
+
+def handle_recent_detail(token: str, session: BotSession, user, text: str):
+    ctx = session.context
+    if text == "◀ Back to list":
+        from_dt = datetime.fromisoformat(ctx["recent_from"])
+        to_dt   = datetime.fromisoformat(ctx["recent_to"])
+        show_recent_entries(token, session, user, from_dt, to_dt, page=ctx.get("recent_page", 0))
+    else:
+        sendt(token, session, "⚠️ Tap Back to list or ❌ Cancel.")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -902,6 +1475,7 @@ def do_send_reply(token: str, upload_chat_id: str, session: BotSession, user):
     chat_id  = _creator_chat_id(thread.created_by)
     if chat_id:
         send(token, chat_id, notify_text)
+        forward_attachments(token, chat_id, attachments, sr_num, _display_name(user))
         notified = 1
 
     reply_text = ctx.get('reply_text', '—')
@@ -993,7 +1567,8 @@ def handle_ss_type_reply(token: str, session: BotSession,
         sendt(token, session,
              f"📎 Attachment {n} saved."
              + (f" Caption: <i>{caption[:60]}</i>" if caption else "")
-             + "\n\nSend more files, type reply, or <code>/done</code> to continue.")
+             + "\n\nSend more files or type your reply. Tap Done to proceed.",
+             keyboard=[["✅ Done — Proceed"]])
         return
 
     if text:
@@ -1534,7 +2109,7 @@ def dispatch(token: str, upload_chat_id: str, update: dict):
         track_flow_msg(session, user_msg_id)
         session.save(update_fields=["context", "updated_at"])
 
-    if text == "/done" and session.state in TEXT_INPUT_STATES:
+    if text in ("/done", "✅ Done — Proceed") and session.state in TEXT_INPUT_STATES:
         text = None
 
     if session.state == "idle":
@@ -1543,13 +2118,18 @@ def dispatch(token: str, upload_chat_id: str, update: dict):
                  "⚠️ Start a new entry first — just send any message to begin.")
             return
         if role in ('rly_official', 'admin'):
-            show_loa_search(token, session, trigger_msg_id=user_msg_id)
+            show_rly_main_menu(token, session, trigger_msg_id=user_msg_id)
         elif role == 'site_supervisor':
-            show_ss_threads(token, session, user, page=0, trigger_msg_id=user_msg_id)
+            show_ss_main_menu(token, session, trigger_msg_id=user_msg_id)
         else:
             send(token, chat_id,
                  "ℹ️ Your account is linked. You will receive notifications here.")
 
+    # ── Rly official main menu ────────────────────────────────────────────────
+    elif session.state == "rly_main_menu":
+        handle_rly_main_menu(token, session, text or "")
+
+    # ── Rly official new entry flow ───────────────────────────────────────────
     elif session.state == "rly_loa_search":
         handle_rly_loa_search(token, session, text or "")
     elif session.state == "rly_loa_list":
@@ -1567,6 +2147,29 @@ def dispatch(token: str, upload_chat_id: str, update: dict):
     elif session.state == "rly_confirm":
         handle_rly_confirm(token, upload_chat_id, session, user, text or "")
 
+    # ── Contractor main menu ──────────────────────────────────────────────────
+    elif session.state == "ss_main_menu":
+        handle_ss_main_menu(token, session, user, text or "", trigger_msg_id=user_msg_id)
+
+    # ── Contractor new entry flow ─────────────────────────────────────────────
+    elif session.state == "ss_new_loa_search":
+        handle_ss_new_loa_search(token, session, user, text or "")
+    elif session.state == "ss_new_loa_list":
+        handle_ss_new_loa_list(token, session, user, text or "")
+    elif session.state == "ss_new_loa_confirm":
+        handle_ss_new_loa_confirm(token, session, text or "")
+    elif session.state == "ss_new_choose_type":
+        handle_ss_new_choose_type(token, session, text or "")
+    elif session.state == "ss_new_item_input":
+        handle_ss_new_item_input(token, session, text or "")
+    elif session.state == "ss_new_item_confirm":
+        handle_ss_new_item_confirm(token, session, text or "")
+    elif session.state == "ss_new_type_text":
+        handle_ss_new_type_text(token, session, text, attachment)
+    elif session.state == "ss_new_confirm":
+        handle_ss_new_confirm(token, upload_chat_id, session, user, text or "")
+
+    # ── Contractor reply flow ─────────────────────────────────────────────────
     elif session.state == "ss_select_thread":
         handle_ss_select_thread(token, session, user, text or "")
     elif session.state == "ss_thread_action":
@@ -1575,6 +2178,18 @@ def dispatch(token: str, upload_chat_id: str, update: dict):
         handle_ss_type_reply(token, session, text, attachment)
     elif session.state == "ss_confirm_reply":
         handle_ss_confirm_reply(token, upload_chat_id, session, user, text or "")
+
+    # ── Recent entries flow (both roles) ──────────────────────────────────────
+    elif session.state == "view_recent_filter":
+        handle_recent_filter(token, session, user, text or "")
+    elif session.state == "view_recent_from":
+        handle_recent_date_from(token, session, user, text or "")
+    elif session.state == "view_recent_to":
+        handle_recent_date_to(token, session, user, text or "")
+    elif session.state == "view_recent_list":
+        handle_recent_list(token, session, user, text or "")
+    elif session.state == "view_recent_detail":
+        handle_recent_detail(token, session, user, text or "")
 
     else:
         logger.warning("Unknown state %s chat=%s, resetting", session.state, chat_id)

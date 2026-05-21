@@ -36,6 +36,15 @@ def _is_admin(user):
     return profile is not None and profile.role == 'admin'
 
 
+def _can_access_site_register(user):
+    if not user.is_authenticated:
+        return False
+    if user.is_staff:
+        return True
+    profile = getattr(user, 'profile', None)
+    return profile is not None and profile.role in ('admin', 'consignee')
+
+
 def _fetch_input_tab(sheet_id):
     url = (
         f"https://docs.google.com/spreadsheets/d/{sheet_id}"
@@ -104,6 +113,8 @@ class SiteRegisterView(APIView):
     def get(self, request):
         if not request.user.is_authenticated:
             raise PermissionDenied("Authentication required.")
+        if not _can_access_site_register(request.user):
+            raise PermissionDenied("Access restricted to consignees and admins.")
 
         # Admins see all works; consignees only see works assigned to them
         qs = Work.objects.prefetch_related("items", "mb_records").order_by("contractor_name")
