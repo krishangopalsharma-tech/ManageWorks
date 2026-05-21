@@ -10,6 +10,8 @@ const searchQuery   = ref('')
 
 const selectedWork   = ref(null)
 const selectedThread = ref(null)
+const activeTab      = ref('date')
+const selectedItem   = ref(null)
 
 // ── Load ──────────────────────────────────────────────────────────────────
 const load = async () => {
@@ -46,8 +48,29 @@ const workThreads = computed(() => {
   )
 })
 
+// Item-wise: all LOA items sorted by ref
+const sortedItems = computed(() => {
+  if (!selectedWork.value?.items) return []
+  return [...selectedWork.value.items].sort((a, b) => {
+    const ra = `${a.schedule}-${a.serial_no}`
+    const rb = `${b.schedule}-${b.serial_no}`
+    return ra.localeCompare(rb, undefined, { numeric: true })
+  })
+})
+
+const itemRef = (item) => `${item.schedule}-${item.serial_no}`
+
+const selectedItemThreads = computed(() => {
+  if (!selectedItem.value) return []
+  const ref = itemRef(selectedItem.value)
+  return workThreads.value.filter(t => t.work_item_ref === ref)
+})
+
+const entryCountForItem = (item) =>
+  workThreads.value.filter(t => t.work_item_ref === itemRef(item)).length
+
 // ── Navigation ────────────────────────────────────────────────────────────
-const selectWork  = (work)   => { selectedWork.value = work; selectedThread.value = null }
+const selectWork  = (work)   => { selectedWork.value = work; selectedThread.value = null; activeTab.value = 'date'; selectedItem.value = null }
 const backToList  = ()       => { selectedWork.value = null; selectedThread.value = null }
 const openThread  = (thread) => { selectedThread.value = thread }
 const closeThread = ()       => { selectedThread.value = null }
@@ -74,15 +97,15 @@ const fmtDatetime = (iso) => {
 }
 
 const statusClass = (s) => ({
-  open:     'bg-blue-50 text-blue-600',
-  replied:  'bg-amber-50 text-amber-600',
-  verified: 'bg-green-50 text-green-600',
-  closed:   'bg-gray-100 text-gray-500',
-}[s] || 'bg-gray-100 text-gray-500')
+  open:     'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400',
+  replied:  'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400',
+  verified: 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400',
+  closed:   'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400',
+}[s] || 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400')
 
 const roleClass = (r) => r === 'rly_official'
-  ? 'bg-blue-100 text-blue-700'
-  : 'bg-green-100 text-green-700'
+  ? 'bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400'
+  : 'bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400'
 
 const roleLabel = (r) => r === 'rly_official' ? 'Rly Official' : 'Site Supervisor'
 
@@ -203,7 +226,7 @@ const truncate = (str, n) => {
                   {{ selectedThread.sr_number }}
                 </span>
                 <span v-if="selectedThread.work_item_ref"
-                  class="text-[11px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full">
+                  class="text-[11px] font-semibold text-[#1D5F5E] bg-[#1D5F5E]/5 px-2 py-0.5 rounded-full">
                   {{ selectedThread.work_item_ref }}
                 </span>
                 <span v-else class="text-[11px] font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
@@ -229,21 +252,29 @@ const truncate = (str, n) => {
           <!-- Original instruction -->
           <div class="flex gap-3 mb-0">
             <div class="flex flex-col items-center">
-              <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                <span class="i-carbon-user-avatar text-blue-600 text-sm"></span>
+              <div :class="['w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0',
+                selectedThread.initiated_by_role === 'rly_official' ? 'bg-blue-100' : 'bg-green-100']">
+                <span :class="['i-carbon-user-avatar text-sm',
+                  selectedThread.initiated_by_role === 'rly_official' ? 'text-blue-600' : 'text-green-600']"></span>
               </div>
               <div class="w-0.5 bg-gray-200 flex-1 mt-1"></div>
             </div>
             <div class="flex-1 pb-5">
               <div class="flex items-center gap-2 mb-1.5">
-                <span class="text-xs font-bold text-blue-700">{{ selectedThread.created_by_name }}</span>
-                <span class="text-[11px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full">Rly Official</span>
-                <template v-if="selectedThread.created_by_designation">
-                  <span class="text-[11px] text-gray-400">{{ selectedThread.created_by_designation }}</span>
-                </template>
+                <span :class="['text-xs font-bold',
+                  selectedThread.initiated_by_role === 'rly_official' ? 'text-blue-700' : 'text-green-700']">
+                  {{ selectedThread.created_by_name }}
+                </span>
+                <span :class="['text-[11px] font-semibold px-1.5 py-0.5 rounded-full',
+                  selectedThread.initiated_by_role === 'rly_official' ? 'text-blue-600 bg-blue-50' : 'text-green-600 bg-green-50']">
+                  {{ selectedThread.created_by_designation || 'Desig: N/A' }}
+                </span>
                 <span class="text-[11px] text-gray-400">{{ fmtDatetime(selectedThread.created_at) }}</span>
               </div>
-              <div class="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
+              <div :class="['border rounded-xl px-4 py-3',
+                selectedThread.initiated_by_role === 'rly_official'
+                  ? 'bg-blue-50 border-blue-100'
+                  : 'bg-green-50 border-green-100']">
                 <p class="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{{ selectedThread.initial_text || '—' }}</p>
               </div>
             </div>
@@ -267,7 +298,7 @@ const truncate = (str, n) => {
                   {{ msg.sender_name }}
                 </span>
                 <span :class="['text-[11px] font-semibold px-1.5 py-0.5 rounded-full', roleClass(msg.sender_role)]">
-                  {{ msg.sender_designation || roleLabel(msg.sender_role) }}
+                  {{ msg.sender_designation || 'Desig: N/A' }}
                 </span>
                 <span class="text-[11px] text-gray-400">{{ fmtDatetime(msg.created_at) }}</span>
               </div>
@@ -339,96 +370,222 @@ const truncate = (str, n) => {
           </div>
         </div>
 
-        <!-- SR Register Table -->
-        <div v-if="workThreads.length === 0"
-          class="flex-1 flex flex-col items-center justify-center py-16 text-center">
-          <div class="i-carbon-document-unknown text-5xl text-gray-200 mb-4"></div>
-          <p class="text-sm font-semibold text-gray-400">No site register entries for this LOA yet.</p>
-          <p class="text-xs text-gray-300 mt-1">Use the Telegram bot to create entries.</p>
+        <!-- Tabs -->
+        <div class="flex-shrink-0 flex items-center gap-2 px-8 py-3 border-b border-gray-100">
+          <button @click="activeTab = 'date'"
+            :class="['flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg border transition-all',
+              activeTab === 'date'
+                ? 'bg-[#1D5F5E] text-white border-[#1D5F5E]'
+                : 'bg-white text-gray-500 border-gray-200 hover:border-[#1D5F5E] hover:text-[#1D5F5E]']">
+            <span class="i-carbon-calendar text-sm"></span>Date-wise
+          </button>
+          <button @click="activeTab = 'item'; selectedItem = null"
+            :class="['flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg border transition-all',
+              activeTab === 'item'
+                ? 'bg-[#1D5F5E] text-white border-[#1D5F5E]'
+                : 'bg-white text-gray-500 border-gray-200 hover:border-[#1D5F5E] hover:text-[#1D5F5E]']">
+            <span class="i-carbon-list-boxes text-sm"></span>Item-wise
+            <span v-if="sortedItems.length"
+              :class="['inline-flex items-center justify-center w-4 h-4 rounded-full text-[9px] font-bold',
+                activeTab === 'item' ? 'bg-white/20 text-white' : 'bg-[#1D5F5E]/10 text-[#1D5F5E]']">
+              {{ sortedItems.length }}
+            </span>
+          </button>
         </div>
 
-        <div v-else class="flex-1 overflow-auto">
-          <table class="w-full table-fixed border-collapse text-xs">
-            <thead class="bg-gray-50 sticky top-0 z-10">
-              <tr class="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100">
-                <th class="px-4 py-3 text-left w-[10%] whitespace-nowrap">SR No</th>
-                <th class="px-4 py-3 text-left w-[8%] whitespace-nowrap">Date</th>
-                <th class="px-4 py-3 text-center w-[10%] whitespace-nowrap">Category</th>
-                <th class="px-4 py-3 text-center w-[13%] whitespace-nowrap">Item No / General</th>
-                <th class="px-4 py-3 text-left w-[29%]">Railway Official</th>
-                <th class="px-4 py-3 text-left w-[30%]">Response</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="t in workThreads" :key="t.id"
-                class="border-b border-gray-100 hover:bg-[#1D5F5E]/5 cursor-pointer transition-colors group"
-                @click="openThread(t)">
+        <!-- ── DATE-WISE TAB ─────────────────────────────────────────── -->
+        <template v-if="activeTab === 'date'">
+          <div v-if="workThreads.length === 0"
+            class="flex-1 flex flex-col items-center justify-center py-16 text-center">
+            <div class="i-carbon-document-unknown text-5xl text-gray-200 mb-4"></div>
+            <p class="text-sm font-semibold text-gray-400">No site register entries for this LOA yet.</p>
+            <p class="text-xs text-gray-300 mt-1">Use the Telegram bot to create entries.</p>
+          </div>
 
-                <!-- SR No -->
-                <td class="px-4 py-3.5 align-top">
-                  <span class="font-bold text-[#1D5F5E] font-mono text-[11px]">{{ t.sr_number }}</span>
-                </td>
+          <div v-else class="flex-1 overflow-auto">
+            <table class="w-full table-fixed border-collapse text-xs">
+              <thead class="bg-gray-50 sticky top-0 z-10">
+                <tr class="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100">
+                  <th class="px-4 py-3 text-left w-[10%] whitespace-nowrap">SR No</th>
+                  <th class="px-4 py-3 text-left w-[8%] whitespace-nowrap">Date</th>
+                  <th class="px-4 py-3 text-center w-[10%] whitespace-nowrap">Category</th>
+                  <th class="px-4 py-3 text-center w-[13%] whitespace-nowrap">Item No / General</th>
+                  <th class="px-4 py-3 text-left w-[29%]">Entry</th>
+                  <th class="px-4 py-3 text-left w-[30%]">Response</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="t in workThreads" :key="t.id"
+                  class="border-b border-gray-100 hover:bg-[#1D5F5E]/5 cursor-pointer transition-colors group"
+                  @click="openThread(t)">
 
-                <!-- Date -->
-                <td class="px-4 py-3.5 align-top whitespace-nowrap text-gray-600">
-                  {{ fmtDate(t.created_at) }}
-                </td>
-
-                <!-- Category -->
-                <td class="px-4 py-3.5 align-top text-center">
-                  <span v-if="t.instruction_type === 'item'"
-                    class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-purple-700 whitespace-nowrap">
-                    Item
-                  </span>
-                  <span v-else
-                    class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-500 whitespace-nowrap">
-                    General
-                  </span>
-                </td>
-
-                <!-- Item No / General -->
-                <td class="px-4 py-3.5 align-top text-center">
-                  <span v-if="t.work_item_ref"
-                    class="font-mono font-semibold text-purple-700 text-[11px]">
-                    {{ t.work_item_ref }}
-                  </span>
-                  <span v-else class="text-gray-400">General</span>
-                </td>
-
-                <!-- Railway Official -->
-                <td class="px-4 py-3.5 align-top">
-                  <p class="text-gray-800 line-clamp-3 leading-snug">{{ t.initial_text }}</p>
-                  <p class="text-[10px] text-gray-400 mt-1">
-                    {{ t.created_by_name }}
-                    <template v-if="t.created_by_designation"> · {{ t.created_by_designation }}</template>
-                  </p>
-                </td>
-
-                <!-- Response -->
-                <td class="px-4 py-3.5 align-top">
-                  <template v-if="t.first_response">
-                    <p class="text-gray-700 line-clamp-3 leading-snug">
-                      {{ truncate(t.first_response.text, 120) }}
-                      <sup v-if="t.response_count > 1"
-                        class="ml-0.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-[#1D5F5E] text-white text-[9px] font-bold leading-none">
-                        {{ t.response_count }}
-                      </sup>
-                    </p>
-                    <p class="text-[10px] text-gray-400 mt-1">{{ t.first_response.sender_name }}</p>
-                    <div v-if="t.first_response.attachments && t.first_response.attachments.length"
-                      class="mt-1 flex flex-wrap gap-1">
-                      <span v-for="a in t.first_response.attachments" :key="a.id"
-                        class="text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded bg-green-50 border border-green-200 text-green-700">
-                        {{ a.att_number }}
-                      </span>
+                  <td class="px-4 py-3.5 align-top">
+                    <span class="font-bold text-[#1D5F5E] font-mono text-[11px]">{{ t.sr_number }}</span>
+                  </td>
+                  <td class="px-4 py-3.5 align-top whitespace-nowrap text-gray-600">
+                    {{ fmtDate(t.created_at) }}
+                  </td>
+                  <td class="px-4 py-3.5 align-top text-center">
+                    <span v-if="t.instruction_type === 'item'"
+                      class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 whitespace-nowrap">
+                      Item
+                    </span>
+                    <span v-else
+                      class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 whitespace-nowrap">
+                      General
+                    </span>
+                  </td>
+                  <td class="px-4 py-3.5 align-top text-center">
+                    <span v-if="t.work_item_ref" class="font-mono font-semibold text-[#1D5F5E] text-[11px]">
+                      {{ t.work_item_ref }}
+                    </span>
+                    <span v-else class="text-gray-400">General</span>
+                  </td>
+                  <td class="px-4 py-3.5 align-top text-left">
+                    <div class="text-gray-800 line-clamp-3 text-xs leading-normal">{{ t.initial_text }}</div>
+                    <div class="text-[10px] text-gray-400 mt-1">
+                      {{ t.created_by_name }}
+                      <template v-if="t.created_by_designation"> · {{ t.created_by_designation }}</template>
                     </div>
-                  </template>
-                  <span v-else class="text-gray-300 italic text-[11px]">Pending</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+                  </td>
+                  <td class="px-4 py-3.5 align-top text-left">
+                    <template v-if="t.first_response">
+                      <div class="text-gray-700 line-clamp-3 text-xs leading-normal">
+                        {{ truncate(t.first_response.text, 120) }}
+                        <sup v-if="t.response_count > 1"
+                          class="ml-0.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-[#1D5F5E] text-white text-[9px] font-bold leading-none">
+                          {{ t.response_count }}
+                        </sup>
+                      </div>
+                      <div class="text-[10px] text-gray-400 mt-1">{{ t.first_response.sender_name }}</div>
+                      <div v-if="t.first_response.attachments && t.first_response.attachments.length"
+                        class="mt-1 flex flex-wrap gap-1">
+                        <span v-for="a in t.first_response.attachments" :key="a.id"
+                          class="text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded bg-green-50 border border-green-200 text-green-700">
+                          {{ a.att_number }}
+                        </span>
+                      </div>
+                    </template>
+                    <span v-else class="text-gray-300 italic text-[11px]">Pending</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </template>
+
+        <!-- ── ITEM-WISE TAB ─────────────────────────────────────────── -->
+        <template v-else>
+
+          <!-- Level 1: All LOA items list -->
+          <template v-if="!selectedItem">
+            <div v-if="sortedItems.length === 0"
+              class="flex-1 flex flex-col items-center justify-center py-16 text-center">
+              <div class="i-carbon-list-boxes text-5xl text-gray-200 mb-4"></div>
+              <p class="text-sm font-semibold text-gray-400">No items found for this LOA.</p>
+            </div>
+            <div v-else class="flex-1 overflow-auto">
+              <table class="w-full table-fixed border-collapse text-xs">
+                <thead class="bg-gray-50 sticky top-0 z-10">
+                  <tr class="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100">
+                    <th class="px-4 py-3 text-left w-[10%] whitespace-nowrap">Item Ref</th>
+                    <th class="px-4 py-3 text-left w-[62%]">Description</th>
+                    <th class="px-4 py-3 text-right w-[10%] whitespace-nowrap">Qty</th>
+                    <th class="px-4 py-3 text-left w-[10%]">Unit</th>
+                    <th class="px-4 py-3 text-center w-[8%] whitespace-nowrap">Entries</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in sortedItems" :key="item.id"
+                    class="border-b border-gray-100 hover:bg-[#1D5F5E]/5 cursor-pointer transition-colors group"
+                    @click="selectedItem = item">
+                    <td class="px-4 py-3.5 align-top">
+                      <span class="font-mono font-bold text-[#1D5F5E] text-[11px]">{{ itemRef(item) }}</span>
+                    </td>
+                    <td class="px-4 py-3.5 align-top text-gray-700 leading-snug">{{ item.item_desc || '—' }}</td>
+                    <td class="px-4 py-3.5 align-top text-right text-gray-600 font-mono">{{ item.qty ?? '—' }}</td>
+                    <td class="px-4 py-3.5 align-top text-gray-500">{{ item.unit || '—' }}</td>
+                    <td class="px-4 py-3.5 align-top text-center">
+                      <span v-if="entryCountForItem(item) > 0"
+                        class="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-[#1D5F5E]/10 text-[#1D5F5E] text-[10px] font-bold">
+                        {{ entryCountForItem(item) }}
+                      </span>
+                      <span v-else class="text-gray-300 text-[11px]">—</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </template>
+
+          <!-- Level 2: Threads for selected item -->
+          <template v-else>
+            <!-- Item header + back -->
+            <div class="flex-shrink-0 flex items-center gap-3 px-6 py-3 bg-[#1D5F5E]/5 border-b border-[#1D5F5E]/15">
+              <button @click="selectedItem = null"
+                class="flex items-center gap-1 text-xs text-[#1D5F5E] hover:text-[#1D5F5E] font-semibold transition-colors">
+                <span class="i-carbon-arrow-left text-sm"></span> Back
+              </button>
+              <span class="text-[#1D5F5E]/30">|</span>
+              <span class="font-mono font-bold text-[#1D5F5E] text-xs">{{ itemRef(selectedItem) }}</span>
+              <span class="text-xs text-gray-500 truncate max-w-md">{{ selectedItem.item_desc }}</span>
+              <span class="ml-auto text-[10px] text-[#1D5F5E] font-semibold">
+                {{ selectedItemThreads.length }} {{ selectedItemThreads.length === 1 ? 'entry' : 'entries' }}
+              </span>
+            </div>
+
+            <div v-if="selectedItemThreads.length === 0"
+              class="flex-1 flex flex-col items-center justify-center py-16 text-center">
+              <div class="i-carbon-document-unknown text-5xl text-gray-200 mb-4"></div>
+              <p class="text-sm font-semibold text-gray-400">No entries for this item yet.</p>
+            </div>
+            <div v-else class="flex-1 overflow-auto">
+              <table class="w-full table-fixed border-collapse text-xs">
+                <thead class="bg-gray-50 sticky top-0 z-10">
+                  <tr class="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100">
+                    <th class="px-4 py-3 text-left w-[10%] whitespace-nowrap">SR No</th>
+                    <th class="px-4 py-3 text-left w-[9%] whitespace-nowrap">Date</th>
+                    <th class="px-4 py-3 text-left w-[40%]">Entry</th>
+                    <th class="px-4 py-3 text-left w-[41%]">Response</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="t in selectedItemThreads" :key="t.id"
+                    class="border-b border-gray-100 hover:bg-[#1D5F5E]/5/50 cursor-pointer transition-colors"
+                    @click="openThread(t)">
+                    <td class="px-4 py-3.5 align-top">
+                      <span class="font-bold text-[#1D5F5E] font-mono text-[11px]">{{ t.sr_number }}</span>
+                    </td>
+                    <td class="px-4 py-3.5 align-top whitespace-nowrap text-gray-600">
+                      {{ fmtDate(t.created_at) }}
+                    </td>
+                    <td class="px-4 py-3.5 align-top text-left">
+                      <div class="text-gray-800 line-clamp-3 text-xs leading-normal">{{ t.initial_text }}</div>
+                      <div class="text-[10px] text-gray-400 mt-1">
+                        {{ t.created_by_name }}
+                        <template v-if="t.created_by_designation"> · {{ t.created_by_designation }}</template>
+                      </div>
+                    </td>
+                    <td class="px-4 py-3.5 align-top text-left">
+                      <template v-if="t.first_response">
+                        <div class="text-gray-700 line-clamp-3 text-xs leading-normal">
+                          {{ truncate(t.first_response.text, 120) }}
+                          <sup v-if="t.response_count > 1"
+                            class="ml-0.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-[#1D5F5E] text-white text-[9px] font-bold leading-none">
+                            {{ t.response_count }}
+                          </sup>
+                        </div>
+                        <div class="text-[10px] text-gray-400 mt-1">{{ t.first_response.sender_name }}</div>
+                      </template>
+                      <span v-else class="text-gray-300 italic text-[11px]">Pending</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </template>
+
+        </template>
 
       </div>
     </template>

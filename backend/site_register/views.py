@@ -197,22 +197,31 @@ class SiteRegisterView(APIView):
             .order_by('created_at')
         )
         threads_by_work = defaultdict(list)
+        def _derive_msg_role(m):
+            """Re-derive role from user relationships; don't trust stored sender_role."""
+            if not m.sender:
+                return m.sender_role
+            tg = getattr(m.sender, 'telegram_link', None)
+            if tg is not None:
+                return 'site_supervisor'
+            return 'rly_official'
+
+        def _msg_designation(m, actual_role):
+            if not m.sender:
+                return ''
+            if actual_role == 'site_supervisor':
+                tg = getattr(m.sender, 'telegram_link', None)
+                return (tg.onboard_designation if tg else '') or ''
+            p = getattr(m.sender, 'profile', None)
+            return p.designation if p else ''
+
         for t in threads_qs:
-            def _msg_designation(m):
-                if not m.sender:
-                    return ''
-                if m.sender_role == 'site_supervisor':
-                    tg = getattr(m.sender, 'telegram_link', None)
-                    return (tg.onboard_designation if tg else '') or ''
-                # rly_official
-                p = getattr(m.sender, 'profile', None)
-                return p.designation if p else ''
             all_msgs = [
                 {
                     'id':                m.id,
-                    'sender_role':       m.sender_role,
+                    'sender_role':       _derive_msg_role(m),
                     'sender_name':       (m.sender.first_name or m.sender.username) if m.sender else '—',
-                    'sender_designation': _msg_designation(m),
+                    'sender_designation': _msg_designation(m, _derive_msg_role(m)),
                     'text':              m.message_text,
                     'created_at':        m.created_at.isoformat(),
                     'attachments': [
@@ -229,6 +238,11 @@ class SiteRegisterView(APIView):
             ]
             ss_msgs = [m for m in all_msgs if m['sender_role'] == 'site_supervisor']
             profile = getattr(t.created_by, 'profile', None) if t.created_by else None
+            if t.initiated_by_role == 'site_supervisor':
+                tg_init = getattr(t.created_by, 'telegram_link', None) if t.created_by else None
+                created_desig = (tg_init.onboard_designation if tg_init else '') or ''
+            else:
+                created_desig = (profile.designation if profile else '') or ''
             threads_by_work[t.work_id].append({
                 'id':                   t.pk,
                 'sr_number':            t.sr_number,
@@ -238,7 +252,7 @@ class SiteRegisterView(APIView):
                 'status':               t.status,
                 'initiated_by_role':    t.initiated_by_role,
                 'created_by_name':      (t.created_by.first_name or t.created_by.username) if t.created_by else '—',
-                'created_by_designation': profile.designation if profile else '',
+                'created_by_designation': created_desig,
                 'created_at':           t.created_at.isoformat(),
                 'work_item_id':         t.work_item_id,
                 'work_item_ref':        f"{t.work_item.schedule}-{(t.work_item.serial_number or '').strip()}" if t.work_item else None,

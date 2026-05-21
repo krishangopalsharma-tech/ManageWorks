@@ -337,7 +337,7 @@ onUnmounted(() => {
 
       <table v-else class="w-full text-xs">
         <thead>
-          <tr class="border-b border-gray-100 dark:border-[#2c2c2e]">
+          <tr class="bg-gray-50 dark:bg-[#2c2c2e] border-b border-gray-100 dark:border-[#2c2c2e]">
             <th class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">Name</th>
             <th class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">HRMS ID</th>
             <th class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">Designation</th>
