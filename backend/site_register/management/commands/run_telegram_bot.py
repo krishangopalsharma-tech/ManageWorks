@@ -13,6 +13,7 @@ rly_loa_confirm         ← show LOA details (tender + brief name), YES/NO
 rly_choose_type         ← ITEM or GENERAL instruction
 rly_item_input          ← type item ref e.g. A-12 or A1-14
 rly_item_confirm        ← show item description, YES/NO
+rly_location            ← type station/section name or skip
 rly_type_text           ← type instruction text; also accepts photo/document; /done to finish
 rly_confirm             ← review + confirm send
 ss_main_menu            ← contractor: New Entry / Open Entries / Recent Entries
@@ -22,6 +23,7 @@ ss_new_loa_confirm      ← contractor: confirm LOA
 ss_new_choose_type      ← contractor: ITEM or GENERAL
 ss_new_item_input       ← contractor: type item ref
 ss_new_item_confirm     ← contractor: confirm item
+ss_new_location         ← contractor: type station/section name or skip
 ss_new_type_text        ← contractor: type message + attachments; /done to finish
 ss_new_confirm          ← contractor: review + confirm send
 ss_select_thread
@@ -481,7 +483,7 @@ def show_loa_search(token: str, session: BotSession, trigger_msg_id: int | None 
          "• <b>Contractor nickname</b> — first letter of each word\n"
          "  e.g. <code>MCPL</code> for MAHESHWARI COMPUTERS PVT. LTD\n"
          "  e.g. <code>GAEC</code> for GENERAL AUTO ELECTRIC CORPORATION\n\n"
-         "Send <b>❌ Cancel</b> to exit.",
+         "Tap <b>❌ Cancel</b> to exit.",
          remove_kb=True)
 
 
@@ -611,7 +613,7 @@ def handle_rly_choose_type(token: str, session: BotSession, text: str):
         session.context.pop("work_item_id", None)
         session.context.pop("work_item_desc", None)
         session.save(update_fields=["context", "updated_at"])
-        show_text_prompt(token, session)
+        _show_location_prompt(token, session, 'rly_location')
     else:
         sendt(token, session, "⚠️ Send 1 for Item-wise or 2 for General.")
 
@@ -660,7 +662,7 @@ def handle_rly_item_input(token: str, session: BotSession, text: str):
 def handle_rly_item_confirm(token: str, session: BotSession, text: str):
     t = text.strip().upper()
     if "YES" in t:
-        show_text_prompt(token, session)
+        _show_location_prompt(token, session, 'rly_location')
     elif "NO" in t:
         session.state = "rly_item_input"
         session.save(update_fields=["state", "updated_at"])
@@ -671,6 +673,36 @@ def handle_rly_item_confirm(token: str, session: BotSession, text: str):
         sendt(token, session, "⚠️ Reply Yes or No.")
 
 
+def _show_location_prompt(token: str, session: BotSession, next_state: str):
+    session.state = next_state
+    session.save(update_fields=["state", "updated_at"])
+    ctx = session.context
+    type_line = ""
+    if ctx.get("work_item_id"):
+        type_line = f"\n<b>Item:</b> {ctx['work_item_desc']}"
+    sendt(token, session,
+         f"<b>LOA:</b> {ctx['loa_number']}{type_line}\n\n"
+         "📍 <b>Enter location</b>\n"
+         "<i>Station name or section where this applies</i>\n"
+         "<i>e.g. Vatva Station, Vatva–Maninagar Section</i>\n\n"
+         "Tap <b>⏭ Skip</b> to leave blank.",
+         keyboard=[["⏭ Skip"]])
+
+
+def handle_rly_location(token: str, session: BotSession, text: str):
+    location = '' if text.strip() in ('⏭ Skip', '/skip') else text.strip()
+    session.context['location'] = location
+    session.save(update_fields=["context", "updated_at"])
+    show_text_prompt(token, session)
+
+
+def handle_ss_location(token: str, session: BotSession, text: str):
+    location = '' if text.strip() in ('⏭ Skip', '/skip') else text.strip()
+    session.context['location'] = location
+    session.save(update_fields=["context", "updated_at"])
+    show_ss_new_text_prompt(token, session)
+
+
 def show_text_prompt(token: str, session: BotSession):
     ctx        = session.context
     instr_type = "Item-wise" if ctx.get("work_item_id") else "General"
@@ -679,8 +711,8 @@ def show_text_prompt(token: str, session: BotSession):
          f"<b>LOA:</b> {ctx['loa_number']}\n"
          f"<b>Type:</b> {instr_type} Instruction{item_line}\n\n"
          "✏️ <b>Type your instruction</b> (you can also send photos/documents).\n"
-         "Send <code>/done</code> after attachments to finish without text.",
-         remove_kb=True)
+         "Tap <b>Done</b> after attachments to finish without text.",
+         keyboard=[["✅ Done — Proceed"], ["❌ Cancel"]])
     session.state = "rly_type_text"
     session.save(update_fields=["state", "updated_at"])
 
@@ -694,12 +726,13 @@ def show_rly_confirm(token: str, session: BotSession):
     ctx        = session.context
     instr_type = "Item-wise" if ctx.get("work_item_id") else "General"
     item_line  = f"\n<b>Item:</b> {ctx['work_item_desc']}" if ctx.get("work_item_id") else ""
+    loc_line   = f"\n<b>Location:</b> {ctx['location']}" if ctx.get('location') else ""
     sendt(token, session,
          "📋 <b>Review your instruction:</b>\n\n"
          f"<b>LOA:</b> {ctx['loa_number']}\n"
          f"<b>Tender No:</b> {ctx.get('tender_number', '—')}\n"
          f"<b>Contractor:</b> {ctx['contractor_name']}\n"
-         f"<b>Type:</b> {instr_type} Instruction{item_line}\n"
+         f"<b>Type:</b> {instr_type} Instruction{item_line}{loc_line}\n"
          f"<b>Message:</b>\n{ctx.get('text', '—')}"
          f"{_att_line(ctx)}\n\n"
          "Send this to the site supervisor?",
@@ -724,6 +757,7 @@ def do_create_thread(token: str, upload_chat_id: str, session: BotSession, user)
             status            = 'open',
             created_by        = user,
             work_serial       = work_serial,
+            location          = ctx.get('location', ''),
         )
         attachments = ctx.get("attachments", [])
         if attachments:
@@ -740,12 +774,13 @@ def do_create_thread(token: str, upload_chat_id: str, session: BotSession, user)
     sr_num     = _sr_number(ctx['loa_number'], work_serial)
     instr_type = "Item-wise" if ctx.get('work_item_id') else "General"
     item_line  = f"\n📦 <b>Item:</b> {ctx['work_item_desc']}" if ctx.get('work_item_id') else ""
+    loc_line   = f"\n📍 <b>Location:</b> {ctx['location']}" if ctx.get('location') else ""
     att_note   = f"\n📎 {len(attachments)} attachment(s) included." if attachments else ""
     notify_text = (
         f"📋 <b>New Rly Official Instruction — {sr_num}</b>\n\n"
         f"<b>LOA:</b> {ctx['loa_number']}\n"
         f"<b>Tender No:</b> {ctx.get('tender_number', '—')}\n"
-        f"<b>Type:</b> {instr_type}{item_line}\n\n"
+        f"<b>Type:</b> {instr_type}{item_line}{loc_line}\n\n"
         f"🔴 {ctx.get('text', '')}{att_note}\n\n"
         f"— <i>{_display_name(user)}</i>"
     )
@@ -764,11 +799,12 @@ def do_create_thread(token: str, upload_chat_id: str, session: BotSession, user)
         notified += 1
 
     item_confirm = f"\n\n<b>Item:</b> {ctx['work_item_desc']}" if ctx.get('work_item_id') else ""
+    loc_confirm  = f"\n<b>Location:</b> {ctx['location']}" if ctx.get('location') else ""
     msg_text = ctx.get('text', '—')
     send(token, session.telegram_chat_id,
          f"✅ <b>SR No. : {sr_num}</b>   Notified {notified} site supervisor(s).\n\n"
          f"<b>LOA:</b> {ctx['loa_number']}\n\n"
-         f"<b>Type:</b> {instr_type} Instruction{item_confirm}\n\n"
+         f"<b>Type:</b> {instr_type} Instruction{item_confirm}{loc_confirm}\n\n"
          f"<b>Message:</b>\n🔴 {msg_text}",
          remove_kb=True)
     logger.info("%s created by %s, notified %d", sr_num, user.username, notified)
@@ -789,7 +825,7 @@ def handle_rly_type_text(token: str, session: BotSession,
              f"📎 Attachment {n} saved."
              + (f" Caption: <i>{caption[:60]}</i>" if caption else "")
              + "\n\nSend more files or type your instruction. Tap Done to proceed.",
-             keyboard=[["✅ Done — Proceed"]])
+             keyboard=[["✅ Done — Proceed"], ["❌ Cancel"]])
         return
 
     if text:
@@ -837,7 +873,7 @@ def show_ss_loa_search(token: str, session: BotSession, trigger_msg_id: int | No
          "• <b>Last 5 digits</b> of LOA number (e.g. <code>12345</code>)\n"
          "• <b>Contractor nickname</b> — first letter of each word\n"
          "  e.g. <code>MCPL</code> for MAHESHWARI COMPUTERS PVT. LTD\n\n"
-         "Send <b>❌ Cancel</b> to exit.",
+         "Tap <b>❌ Cancel</b> to exit.",
          remove_kb=True)
 
 
@@ -958,7 +994,7 @@ def handle_ss_new_choose_type(token: str, session: BotSession, text: str):
         session.context.pop("work_item_id", None)
         session.context.pop("work_item_desc", None)
         session.save(update_fields=["context", "updated_at"])
-        show_ss_new_text_prompt(token, session)
+        _show_location_prompt(token, session, 'ss_new_location')
     else:
         sendt(token, session, "⚠️ Send 1 for Item-wise or 2 for General.")
 
@@ -1001,7 +1037,7 @@ def handle_ss_new_item_input(token: str, session: BotSession, text: str):
 def handle_ss_new_item_confirm(token: str, session: BotSession, text: str):
     t = text.strip().upper()
     if "YES" in t:
-        show_ss_new_text_prompt(token, session)
+        _show_location_prompt(token, session, 'ss_new_location')
     elif "NO" in t:
         session.state = "ss_new_item_input"
         session.save(update_fields=["state", "updated_at"])
@@ -1038,7 +1074,7 @@ def handle_ss_new_type_text(token: str, session: BotSession,
              f"📎 Attachment {n} saved."
              + (f" Caption: <i>{caption[:60]}</i>" if caption else "")
              + "\n\nSend more files or type your message. Tap Done to proceed.",
-             keyboard=[["✅ Done — Proceed"]])
+             keyboard=[["✅ Done — Proceed"], ["❌ Cancel"]])
         return
     if text:
         session.context["text"] = text
@@ -1053,12 +1089,13 @@ def show_ss_new_confirm(token: str, session: BotSession):
     ctx        = session.context
     entry_type = "Item-wise" if ctx.get("work_item_id") else "General"
     item_line  = f"\n<b>Item:</b> {ctx['work_item_desc']}" if ctx.get("work_item_id") else ""
+    loc_line   = f"\n<b>Location:</b> {ctx['location']}" if ctx.get('location') else ""
     sendt(token, session,
          "📋 <b>Review your entry:</b>\n\n"
          f"<b>LOA:</b> {ctx['loa_number']}\n"
          f"<b>Tender No:</b> {ctx.get('tender_number', '—')}\n"
          f"<b>Contractor:</b> {ctx['contractor_name']}\n"
-         f"<b>Type:</b> {entry_type}{item_line}\n"
+         f"<b>Type:</b> {entry_type}{item_line}{loc_line}\n"
          f"<b>Message:</b>\n{ctx.get('text', '—')}"
          f"{_att_line(ctx)}\n\n"
          "Submit this entry?",
@@ -1083,6 +1120,7 @@ def do_create_ss_thread(token: str, upload_chat_id: str, session: BotSession, us
             status            = 'open',
             created_by        = user,
             work_serial       = work_serial,
+            location          = ctx.get('location', ''),
         )
         attachments = ctx.get("attachments", [])
         if attachments:
@@ -1099,12 +1137,13 @@ def do_create_ss_thread(token: str, upload_chat_id: str, session: BotSession, us
     sr_num     = _sr_number(ctx['loa_number'], work_serial)
     entry_type = "Item-wise" if ctx.get('work_item_id') else "General"
     item_line  = f"\n📦 <b>Item:</b> {ctx['work_item_desc']}" if ctx.get('work_item_id') else ""
+    loc_line   = f"\n📍 <b>Location:</b> {ctx['location']}" if ctx.get('location') else ""
     att_note   = f"\n📎 {len(attachments)} attachment(s) included." if attachments else ""
     notify_text = (
         f"📋 <b>New Contractor Entry — {sr_num}</b>\n\n"
         f"<b>LOA:</b> {ctx['loa_number']}\n"
         f"<b>Tender No:</b> {ctx.get('tender_number', '—')}\n"
-        f"<b>Type:</b> {entry_type}{item_line}\n\n"
+        f"<b>Type:</b> {entry_type}{item_line}{loc_line}\n\n"
         f"🔴 {ctx.get('text', '')}{att_note}\n\n"
         f"— <i>{_sender_display(user, 'site_supervisor')}</i>"
     )
@@ -1132,7 +1171,7 @@ def do_create_ss_thread(token: str, upload_chat_id: str, session: BotSession, us
     send(token, session.telegram_chat_id,
          f"✅ <b>SR No.: {sr_num}</b>   Notified {notified} railway official(s).\n\n"
          f"<b>LOA:</b> {ctx['loa_number']}\n\n"
-         f"<b>Type:</b> {entry_type}{item_line}\n\n"
+         f"<b>Type:</b> {entry_type}{item_line}{loc_line}\n\n"
          f"<b>Message:</b>\n🔴 {ctx.get('text', '—')}",
          remove_kb=True)
     logger.info("%s created by SS %s, notified %d rly officials", sr_num, user.username, notified)
@@ -1402,8 +1441,8 @@ def show_thread_actions(token: str, session: BotSession, thread: SiteRegisterThr
 def show_ss_reply_prompt(token: str, session: BotSession):
     sendt(token, session,
          "✏️ <b>Type your reply</b> (you can also send photos/documents).\n"
-         "Send <code>/done</code> after attachments to finish without text.",
-         remove_kb=True)
+         "Tap <b>Done</b> after attachments to finish without text.",
+         keyboard=[["✅ Done — Proceed"], ["❌ Cancel"]])
     session.state = "ss_type_reply"
     session.save(update_fields=["state", "updated_at"])
 
@@ -1568,7 +1607,7 @@ def handle_ss_type_reply(token: str, session: BotSession,
              f"📎 Attachment {n} saved."
              + (f" Caption: <i>{caption[:60]}</i>" if caption else "")
              + "\n\nSend more files or type your reply. Tap Done to proceed.",
-             keyboard=[["✅ Done — Proceed"]])
+             keyboard=[["✅ Done — Proceed"], ["❌ Cancel"]])
         return
 
     if text:
@@ -2035,8 +2074,8 @@ def dispatch_callback(token: str, cq: dict):
         sendt(token, session,
              f"↩️ <b>Reply to {sr_num}</b>\n\n"
              "✏️ Type your reply (you can also send photos/documents).\n"
-             "Send <code>/done</code> after attachments to finish without text.",
-             remove_kb=True)
+             "Tap <b>Done</b> after attachments to finish without text.",
+             keyboard=[["✅ Done — Proceed"], ["❌ Cancel"]])
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -2142,6 +2181,8 @@ def dispatch(token: str, upload_chat_id: str, update: dict):
         handle_rly_item_input(token, session, text or "")
     elif session.state == "rly_item_confirm":
         handle_rly_item_confirm(token, session, text or "")
+    elif session.state == "rly_location":
+        handle_rly_location(token, session, text or "")
     elif session.state == "rly_type_text":
         handle_rly_type_text(token, session, text, attachment)
     elif session.state == "rly_confirm":
@@ -2164,6 +2205,8 @@ def dispatch(token: str, upload_chat_id: str, update: dict):
         handle_ss_new_item_input(token, session, text or "")
     elif session.state == "ss_new_item_confirm":
         handle_ss_new_item_confirm(token, session, text or "")
+    elif session.state == "ss_new_location":
+        handle_ss_location(token, session, text or "")
     elif session.state == "ss_new_type_text":
         handle_ss_new_type_text(token, session, text, attachment)
     elif session.state == "ss_new_confirm":

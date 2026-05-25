@@ -94,6 +94,7 @@ class SiteRegisterThread(models.Model):
     created_by        = models.ForeignKey(User, null=True, on_delete=models.SET_NULL, related_name='sr_threads_created')
     tg_order_message_id = models.BigIntegerField(null=True, blank=True)
     work_serial       = models.PositiveIntegerField(null=True, blank=True)
+    location          = models.CharField(max_length=300, blank=True, default='')
     created_at        = models.DateTimeField(auto_now_add=True)
 
     @property

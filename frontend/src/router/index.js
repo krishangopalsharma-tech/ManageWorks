@@ -13,7 +13,6 @@ import ForgotPassword  from '../views/ForgotPassword.vue'
 import UserManagement          from '../views/UserManagement.vue'
 import InstallationCertificate from '../views/InstallationCertificate.vue'
 import SiteRegister       from '../views/SiteRegister.vue'
-import SiteGSheetSettings from '../views/SiteGSheetSettings.vue'
 import SmtpSettings        from '../views/SmtpSettings.vue'
 import TelegramSettings    from '../views/TelegramSettings.vue'
 import TelegramLink           from '../views/TelegramLink.vue'
@@ -33,7 +32,6 @@ const routes = [
   { path: '/mb-details',               name: 'MB Details',       component: MBDetails },
   { path: '/site-register',               name: 'Site Register',            component: SiteRegister, meta: { siteRegisterAccess: true } },
   { path: '/settings/user-management',    name: 'User Management',          component: UserManagement,          meta: { adminOnly: true } },
-  { path: '/settings/site-gsheet',        name: 'Site GSheet',              component: SiteGSheetSettings,      meta: { adminOnly: true } },
   { path: '/settings/smtp',               name: 'SMTP Settings',            component: SmtpSettings,            meta: { adminOnly: true } },
   { path: '/settings/telegram',           name: 'Telegram Settings',        component: TelegramSettings,        meta: { adminOnly: true } },
   { path: '/settings/telegram-link',          name: 'Link Rly Official Telegram', component: TelegramLink },

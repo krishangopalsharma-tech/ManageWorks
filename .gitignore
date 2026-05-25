@@ -20,6 +20,10 @@ db.sqlite3
 media/
 staticfiles/
 *.log
+.agents/
+.antigravitycli/
+.gemini/
+.antigravitycli/
 
 # Django migrations (keep these tracked)
 # !*/migrations/*.py

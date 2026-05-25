@@ -39,7 +39,6 @@ const menuItems = ref([
     expanded: false,
     subItems: [
       { name: 'User Management', path: '/settings/user-management', adminOnly: true },
-      { name: 'Site GSheet',     path: '/settings/site-gsheet',     adminOnly: true },
       { name: 'SMTP Settings',   path: '/settings/smtp',            adminOnly: true },
       { name: 'Telegram Bot',    path: '/settings/telegram',               adminOnly: true },
       { name: 'Site Supervisors', path: '/settings/site-register-parties', adminOnly: true },
