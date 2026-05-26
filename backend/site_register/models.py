@@ -261,3 +261,5 @@ class BotSession(models.Model):
 
     def __str__(self):
         return f"BotSession({self.telegram_chat_id}, {self.state})"
+
+

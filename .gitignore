@@ -24,6 +24,7 @@ staticfiles/
 .antigravitycli/
 .gemini/
 .antigravitycli/
+.claude/
 
 # Django migrations (keep these tracked)
 # !*/migrations/*.py

@@ -181,8 +181,21 @@ function getThreadsForRange(threads) {
 function allResponsesText(thread) {
   if (!thread.messages || !thread.messages.length) return 'Pending'
   return thread.messages.map((m, i) =>
-    `${i + 1}. ${m.sender_name}${m.sender_designation ? ' (' + m.sender_designation + ')' : ''}:\n${m.text || '—'}`
+    `${i + 1}. [${fmtDate(m.created_at)}] ${m.sender_name}${m.sender_designation ? ' (' + m.sender_designation + ')' : ''}:\n${m.text || '—'}`
   ).join('\n\n')
+}
+
+function replyDatesText(thread) {
+  if (!thread.messages || !thread.messages.length) return 'Pending'
+  if (thread.messages.length === 1) return fmtDate(thread.messages[0].created_at)
+  return thread.messages.map((m, i) => `${i + 1}. ${fmtDate(m.created_at)}`).join('\n')
+}
+
+function entryText(thread) {
+  const who = thread.created_by_name
+    ? `${thread.created_by_name}${thread.created_by_designation ? ' (' + thread.created_by_designation + ')' : ''}`
+    : '—'
+  return `By: ${who}\n${thread.initial_text || '—'}`
 }
 
 function buildPdfHeader(doc, work) {
@@ -222,13 +235,13 @@ async function exportPdf() {
     const startY = buildPdfHeader(doc, work)
     autoTable(doc, {
       startY,
-      head: [['SR No', 'Date', 'Category', 'Location', 'Entry', 'All Responses', 'Status']],
+      head: [['Date of Reply', 'Entry Date', 'Category', 'Location', 'Entry', 'All Responses', 'Status']],
       body: rangeThreads.map(t => [
-        t.sr_number || '—',
+        replyDatesText(t),
         fmtDate(t.created_at),
         t.instruction_type === 'item' ? `Item\n${t.work_item_ref || ''}` : 'General',
         t.location || '—',
-        t.initial_text || '—',
+        entryText(t),
         allResponsesText(t),
         (t.status || '').toUpperCase(),
       ]),
@@ -280,11 +293,11 @@ async function exportPdf() {
       const descHeight = descLines.length * 4
       autoTable(doc, {
         startY: currentY + Math.max(descHeight, 3) + 3,
-        head: [['SR No', 'Date', 'Entry', 'All Responses', 'Status']],
+        head: [['Date of Reply', 'Entry Date', 'Entry', 'All Responses', 'Status']],
         body: threads.map(t => [
-          t.sr_number || '—',
+          replyDatesText(t),
           fmtDate(t.created_at),
-          t.initial_text || '—',
+          entryText(t),
           allResponsesText(t),
           (t.status || '').toUpperCase(),
         ]),

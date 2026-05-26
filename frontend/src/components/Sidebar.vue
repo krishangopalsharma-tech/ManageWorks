@@ -1,12 +1,17 @@
 <script setup>
 import ManageWorksIcon from './ManageWorksIcon.vue'
-import { ref, watchEffect, computed } from 'vue'
+import { ref, watchEffect, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
+import { useNotifications } from '../composables/useNotifications'
 
 const router = useRouter()
 const route  = useRoute()
 const { state, logout } = useAuth()
+const { unreadCount, startPolling, stopPolling } = useNotifications()
+
+onMounted(() => startPolling(30000))
+onUnmounted(() => stopPolling())
 
 const isAdmin        = computed(() => state.user?.role === 'admin' || state.user?.is_staff)
 const canSeeRegister = computed(() => isAdmin.value || state.user?.role === 'consignee')
@@ -23,7 +28,8 @@ const menuItems = ref([
   { name: 'Item Progress',icon: 'i-carbon-chart-bar', path: '/item-progress' },
   { name: 'Update Work',  icon: 'i-carbon-edit',      path: '/update-work' },
   { name: 'Site Register', icon: 'i-carbon-map',       path: '/site-register', siteRegisterOnly: true },
-  { name: 'MB Details',   icon: 'i-carbon-receipt',   path: '/mb-details' },
+  { name: 'MB Details',       icon: 'i-carbon-receipt',       path: '/mb-details' },
+  { name: 'Notifications',   icon: 'i-carbon-notification', path: '/notifications' },
   {
     name: 'Document Generator',
     icon: 'i-carbon-document',
@@ -157,8 +163,21 @@ const itemTooltip = (item) => collapsed.value ? item.name : ''
           ]"
         >
           <div class="flex items-center" :class="collapsed ? 'justify-center' : 'gap-3'">
-            <div :class="item.icon" class="text-xl shrink-0"></div>
+            <!-- icon with dot badge when collapsed -->
+            <div class="relative shrink-0">
+              <div :class="item.icon" class="text-xl"></div>
+              <span
+                v-if="collapsed && item.path === '/notifications' && unreadCount > 0"
+                class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-500"
+              ></span>
+            </div>
             <span v-if="!collapsed" class="text-sm font-semibold tracking-wide whitespace-nowrap">{{ item.name }}</span>
+            <!-- count badge when expanded -->
+            <span
+              v-if="!collapsed && item.path === '/notifications' && unreadCount > 0"
+              class="ml-auto text-xs font-bold rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center leading-none"
+              :class="activeItem === item.name ? 'bg-white/30 text-white' : 'bg-red-500 text-white'"
+            >{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
           </div>
           <div
             v-if="!collapsed && item.subItems && visibleSubItems(item).length"

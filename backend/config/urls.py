@@ -18,6 +18,7 @@ urlpatterns = [
     path('api/mb-details/', include('mb_details.urls')),
     path('api/installation-cert/', include('installation_cert.urls')),
     path('api/site-register/',    include('site_register.urls')),
+    path('api/notifications/',    include('notifications.urls')),
     path('api/settings/site-gsheet/', include('site_gsheet_settings.urls')),
     path('api/settings/smtp/',        include('smtp_settings.urls')),
     path('api/settings/telegram/',    include('telegram_settings.urls')),

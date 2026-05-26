@@ -18,6 +18,7 @@ import TelegramSettings    from '../views/TelegramSettings.vue'
 import TelegramLink           from '../views/TelegramLink.vue'
 import SiteRegisterParties   from '../views/SiteRegisterParties.vue'
 import AddSiteSupervisor     from '../views/AddSiteSupervisor.vue'
+import Notifications         from '../views/Notifications.vue'
 
 const routes = [
   { path: '/login',            name: 'Login',           component: Login,          meta: { public: true } },
@@ -38,7 +39,8 @@ const routes = [
   { path: '/settings/site-register-parties', name: 'LOA Parties',                component: SiteRegisterParties, meta: { adminOnly: true } },
   { path: '/settings/add-supervisor',         name: 'Add Site Supervisor',        component: AddSiteSupervisor,   meta: { adminOnly: true } },
   { path: '/installation-certificate',   name: 'Installation Certificate', component: InstallationCertificate },
-  { path: '/:pathMatch(.*)*',          name: 'Placeholder',      component: Placeholder },
+  { path: '/notifications',            name: 'Notifications',            component: Notifications },
+  { path: '/:pathMatch(.*)*',          name: 'Placeholder',              component: Placeholder },
 ]
 
 const router = createRouter({
