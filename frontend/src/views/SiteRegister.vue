@@ -178,24 +178,54 @@ function getThreadsForRange(threads) {
   })
 }
 
-function allResponsesText(thread) {
-  if (!thread.messages || !thread.messages.length) return 'Pending'
-  return thread.messages.map((m, i) =>
-    `${i + 1}. [${fmtDate(m.created_at)}] ${m.sender_name}${m.sender_designation ? ' (' + m.sender_designation + ')' : ''}:\n${m.text || '—'}`
-  ).join('\n\n')
+// rly_official → light blue, site_supervisor → light green
+const ROLE_FILL = {
+  rly_official:    [239, 246, 255],
+  site_supervisor: [240, 253, 244],
 }
 
-function replyDatesText(thread) {
-  if (!thread.messages || !thread.messages.length) return 'Pending'
-  if (thread.messages.length === 1) return fmtDate(thread.messages[0].created_at)
-  return thread.messages.map((m, i) => `${i + 1}. ${fmtDate(m.created_at)}`).join('\n')
+// Sender name+designation cell (untitled column, Entry side)
+function senderCell(thread) {
+  const name  = thread.created_by_name || '—'
+  const desig = thread.created_by_designation || ''
+  return {
+    content: desig ? `${name}\n${desig}` : name,
+    styles: { fillColor: ROLE_FILL[thread.initiated_by_role] || [248, 250, 252], fontStyle: 'bold' },
+  }
 }
 
-function entryText(thread) {
-  const who = thread.created_by_name
-    ? `${thread.created_by_name}${thread.created_by_designation ? ' (' + thread.created_by_designation + ')' : ''}`
-    : '—'
-  return `By: ${who}\n${thread.initial_text || '—'}`
+// Entry message only (no name)
+function entryCell(thread) {
+  return {
+    content: thread.initial_text || '—',
+    styles: { fillColor: ROLE_FILL[thread.initiated_by_role] || [248, 250, 252] },
+  }
+}
+
+// All Responses: serial + date + name + designation + message — all in one column
+function responsesCell(thread) {
+  const msgs = (thread.status === 'open') ? [] : (thread.messages || [])
+  if (!msgs.length) {
+    return { content: 'Pending', styles: { textColor: [156, 163, 175] } }
+  }
+  const content = msgs.map((m, i) => {
+    const name  = m.sender_name || '—'
+    const desig = m.sender_designation || ''
+    const header = `${i + 1}. ${fmtDate(m.created_at)}  ${name}`
+    const line2  = desig ? `${desig}` : null
+    const msg    = m.text || '—'
+    return [header, line2, msg].filter(Boolean).join('\n')
+  }).join('\n\n')
+  const roles = [...new Set(msgs.map(m => m.sender_role).filter(Boolean))]
+  const fillColor = roles.length === 1 ? (ROLE_FILL[roles[0]] || [250, 250, 250]) : [250, 250, 250]
+  return { content, styles: { fillColor } }
+}
+
+// First reply date for "Date Response" column
+function firstReplyDate(thread) {
+  const msgs = (thread.status === 'open') ? [] : (thread.messages || [])
+  if (!msgs.length) return '—'
+  return fmtDate(msgs[0].created_at)
 }
 
 function buildPdfHeader(doc, work) {
@@ -235,26 +265,28 @@ async function exportPdf() {
     const startY = buildPdfHeader(doc, work)
     autoTable(doc, {
       startY,
-      head: [['Date of Reply', 'Entry Date', 'Category', 'Location', 'Entry', 'All Responses', 'Status']],
+      head: [['SR No.', 'Entry Date', 'Category', 'Location', '', 'Entry', 'All Responses', 'Status']],
       body: rangeThreads.map(t => [
-        replyDatesText(t),
+        t.sr_number || '—',
         fmtDate(t.created_at),
         t.instruction_type === 'item' ? `Item\n${t.work_item_ref || ''}` : 'General',
         t.location || '—',
-        entryText(t),
-        allResponsesText(t),
+        senderCell(t),
+        entryCell(t),
+        responsesCell(t),
         (t.status || '').toUpperCase(),
       ]),
-      styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak', valign: 'top' },
+      styles: { fontSize: 7, cellPadding: 2.5, overflow: 'linebreak', valign: 'top' },
       headStyles: { fillColor: [29, 95, 94], textColor: 255, fontStyle: 'bold', fontSize: 7 },
       columnStyles: {
         0: { cellWidth: 22 },
-        1: { cellWidth: 22 },
-        2: { cellWidth: 20 },
-        3: { cellWidth: 24 },
-        4: { cellWidth: 'auto' },
-        5: { cellWidth: 'auto' },
-        6: { cellWidth: 18 },
+        1: { cellWidth: 18 },
+        2: { cellWidth: 16 },
+        3: { cellWidth: 16 },
+        4: { cellWidth: 28 },
+        5: { cellWidth: 55 },
+        6: { cellWidth: 'auto' },
+        7: { cellWidth: 14, fontSize: 6, halign: 'center' },
       },
     })
     doc.save(`SR-DateWise-${loaSlug}-${dateSuffix}.pdf`)
@@ -293,22 +325,24 @@ async function exportPdf() {
       const descHeight = descLines.length * 4
       autoTable(doc, {
         startY: currentY + Math.max(descHeight, 3) + 3,
-        head: [['Date of Reply', 'Entry Date', 'Entry', 'All Responses', 'Status']],
+        head: [['SR No.', 'Entry Date', '', 'Entry', 'All Responses', 'Status']],
         body: threads.map(t => [
-          replyDatesText(t),
+          t.sr_number || '—',
           fmtDate(t.created_at),
-          entryText(t),
-          allResponsesText(t),
+          senderCell(t),
+          entryCell(t),
+          responsesCell(t),
           (t.status || '').toUpperCase(),
         ]),
-        styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak', valign: 'top' },
+        styles: { fontSize: 7, cellPadding: 2.5, overflow: 'linebreak', valign: 'top' },
         headStyles: { fillColor: [29, 95, 94], textColor: 255, fontStyle: 'bold', fontSize: 7 },
         columnStyles: {
           0: { cellWidth: 22 },
-          1: { cellWidth: 22 },
-          2: { cellWidth: 'auto' },
-          3: { cellWidth: 'auto' },
-          4: { cellWidth: 20 },
+          1: { cellWidth: 18 },
+          2: { cellWidth: 28 },
+          3: { cellWidth: 55 },
+          4: { cellWidth: 'auto' },
+          5: { cellWidth: 14, fontSize: 6, halign: 'center' },
         },
       })
 

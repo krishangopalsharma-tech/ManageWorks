@@ -78,7 +78,14 @@ def on_mb_record_created(sender, instance, created, **kwargs):
     from .models import Notification
     work = instance.work
     loa = work.loa_number or f'LOA #{work.pk}'
-    date_str = f' on {instance.measurement_date.strftime("%d %b %Y")}' if instance.measurement_date else ''
+    md = instance.measurement_date
+    if md and isinstance(md, str):
+        from datetime import date as _date
+        try:
+            md = _date.fromisoformat(md)
+        except ValueError:
+            md = None
+    date_str = f' on {md.strftime("%d %b %Y")}' if md else ''
     for user in _recipients(work):
         Notification.objects.create(
             user=user,
