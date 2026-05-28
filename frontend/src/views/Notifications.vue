@@ -1,12 +1,34 @@
 <script setup>
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useNotifications, notifConfig, NOTIF_CONFIG } from '../composables/useNotifications'
+import { useAuth } from '../composables/useAuth'
+import { useNotifications, notifConfig } from '../composables/useNotifications'
 
 const router = useRouter()
+const { state: authState } = useAuth()
 const { notifications, unreadCount, fetchNotifications, markRead, markAllRead } = useNotifications()
 
 onMounted(fetchNotifications)
+
+const isAdmin = computed(() => authState.user?.is_staff || authState.user?.role === 'admin')
+
+const TYPE_ORDER = ['new_sr', 'ss_entry', 'si_entry', 'ee_entry', 'financial', 'loa_unassigned']
+
+const columns = computed(() => {
+  const byType = {}
+  for (const n of notifications.value) {
+    if (!byType[n.notif_type]) byType[n.notif_type] = []
+    byType[n.notif_type].push(n)
+  }
+  return TYPE_ORDER
+    .filter(type => isAdmin.value || byType[type]?.length > 0)
+    .map(type => ({
+      type,
+      cfg: notifConfig(type),
+      items: byType[type] || [],
+      unread: (byType[type] || []).filter(n => !n.is_read).length,
+    }))
+})
 
 function relativeTime(isoString) {
   const diff = Date.now() - new Date(isoString).getTime()
@@ -20,45 +42,18 @@ function relativeTime(isoString) {
   return new Date(isoString).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 }
 
-function dateLabel(isoString) {
-  const d = new Date(isoString)
-  const today = new Date()
-  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1)
-  if (d.toDateString() === today.toDateString())     return 'Today'
-  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday'
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
-}
-
-const grouped = computed(() => {
-  const groups = []
-  let currentLabel = null
-  for (const n of notifications.value) {
-    const label = dateLabel(n.created_at)
-    if (label !== currentLabel) {
-      groups.push({ label, items: [] })
-      currentLabel = label
-    }
-    groups[groups.length - 1].items.push(n)
-  }
-  return groups
-})
-
 async function handleClick(n) {
   if (!n.is_read) await markRead(n.id)
-  if (n.thread_id) router.push('/site-register')
-}
-
-function navDest(type) {
-  if (type === 'new_sr') return '/site-register'
-  if (type === 'financial') return '/mb-details'
-  return '/item-progress'
+  if (n.notif_type === 'new_sr') router.push('/site-register')
+  else if (n.notif_type === 'financial') router.push('/mb-details')
+  else router.push('/item-progress')
 }
 </script>
 
 <template>
-  <div class="min-h-screen p-6" style="background: var(--color-background);">
+  <div class="min-h-screen p-4 md:p-6" style="background: var(--color-background);">
     <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex items-center justify-between mb-5">
       <div>
         <h1 class="text-2xl font-bold" style="color: var(--color-text-primary);">Notifications</h1>
         <p class="text-sm mt-0.5" style="color: var(--color-text-secondary);">
@@ -75,19 +70,6 @@ function navDest(type) {
       </button>
     </div>
 
-    <!-- Type legend -->
-    <div class="flex flex-wrap gap-2 mb-6">
-      <span
-        v-for="(cfg, key) in NOTIF_CONFIG"
-        :key="key"
-        class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border"
-        :style="{ background: cfg.bg, borderColor: cfg.border, color: cfg.text }"
-      >
-        <span class="w-2 h-2 rounded-full inline-block" :style="{ background: cfg.dot }"></span>
-        {{ cfg.label }}
-      </span>
-    </div>
-
     <!-- Empty state -->
     <div
       v-if="notifications.length === 0"
@@ -95,57 +77,87 @@ function navDest(type) {
     >
       <div class="i-carbon-notification-off text-5xl" style="color: var(--color-text-tertiary);"></div>
       <p class="text-base font-medium" style="color: var(--color-text-secondary);">No notifications yet</p>
-      <p class="text-sm" style="color: var(--color-text-tertiary);">You'll be notified when site register entries or updates are made.</p>
+      <p class="text-sm" style="color: var(--color-text-tertiary);">Updates to your assigned works will appear here.</p>
     </div>
 
-    <!-- Grouped list -->
-    <div v-else class="flex flex-col gap-6">
-      <div v-for="group in grouped" :key="group.label">
-        <!-- Date heading -->
-        <p class="text-xs font-semibold uppercase tracking-widest mb-2" style="color: var(--color-text-tertiary);">
-          {{ group.label }}
-        </p>
+    <!-- Multi-column grid -->
+    <div
+      v-else
+      class="grid gap-4"
+      style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); align-items: start;"
+    >
+      <div
+        v-for="col in columns"
+        :key="col.type"
+        class="rounded-2xl overflow-hidden border"
+        :style="{ borderColor: col.cfg.border, background: 'var(--color-surface)' }"
+      >
+        <!-- Column header -->
+        <div
+          class="flex items-center justify-between px-4 py-3 border-b"
+          :style="{ background: col.cfg.bg, borderColor: col.cfg.border }"
+        >
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full shrink-0" :style="{ background: col.cfg.dot }"></span>
+            <span class="text-sm font-bold" :style="{ color: col.cfg.text }">{{ col.cfg.label }}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span
+              v-if="col.unread > 0"
+              class="text-xs font-bold px-1.5 py-0.5 rounded-full"
+              :style="{ background: col.cfg.dot, color: '#fff' }"
+            >{{ col.unread }}</span>
+            <span
+              class="text-xs"
+              :style="{ color: col.cfg.text, opacity: '0.7' }"
+            >{{ col.items.length }} total</span>
+          </div>
+        </div>
 
-        <div class="flex flex-col gap-2">
+        <!-- No items for admin empty column -->
+        <div
+          v-if="col.items.length === 0"
+          class="px-4 py-6 text-center text-xs"
+          style="color: var(--color-text-tertiary);"
+        >
+          No entries
+        </div>
+
+        <!-- Cards -->
+        <div v-else class="flex flex-col">
           <div
-            v-for="n in group.items"
+            v-for="(n, idx) in col.items"
             :key="n.id"
             @click="handleClick(n)"
-            class="flex items-start gap-3 p-4 rounded-2xl border cursor-pointer transition-all hover:shadow-sm"
+            class="px-4 py-3 cursor-pointer transition-colors hover:opacity-90 relative"
             :style="{
-              background: n.is_read ? 'var(--color-surface)' : notifConfig(n.notif_type).bg,
-              borderColor: n.is_read ? 'var(--color-separator)' : notifConfig(n.notif_type).border,
-              opacity: n.is_read ? '0.75' : '1',
+              background: n.is_read ? 'var(--color-surface)' : col.cfg.bg,
+              opacity: n.is_read ? '0.7' : '1',
+              borderTop: idx > 0 ? '1px solid var(--color-separator)' : 'none',
             }"
           >
-            <!-- Color dot -->
-            <span
-              class="w-2.5 h-2.5 rounded-full mt-1.5 shrink-0"
-              :style="{ background: notifConfig(n.notif_type).dot }"
-            ></span>
+            <!-- Unread indicator bar -->
+            <div
+              v-if="!n.is_read"
+              class="absolute left-0 top-0 bottom-0 w-0.5 rounded-r"
+              :style="{ background: col.cfg.dot }"
+            ></div>
 
-            <!-- Content -->
-            <div class="flex-1 min-w-0">
-              <div class="flex items-start justify-between gap-2">
-                <div class="flex items-center gap-2 flex-wrap">
-                  <span
-                    class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border"
-                    :style="{
-                      background: notifConfig(n.notif_type).bg,
-                      borderColor: notifConfig(n.notif_type).border,
-                      color: notifConfig(n.notif_type).text,
-                    }"
-                  >{{ notifConfig(n.notif_type).label }}</span>
-                  <span v-if="n.sr_number" class="text-xs font-mono" style="color: var(--color-text-tertiary);">{{ n.sr_number }}</span>
-                  <span v-if="n.loa_number" class="text-xs" style="color: var(--color-text-tertiary);">{{ n.loa_number }}</span>
-                </div>
-                <div class="flex items-center gap-2 shrink-0">
-                  <span class="text-xs whitespace-nowrap" style="color: var(--color-text-tertiary);">{{ relativeTime(n.created_at) }}</span>
-                  <span v-if="!n.is_read" class="w-2 h-2 rounded-full bg-blue-500 shrink-0"></span>
-                </div>
-              </div>
-              <p class="text-sm font-semibold mt-1" style="color: var(--color-text-primary);">{{ n.title }}</p>
-              <p v-if="n.body" class="text-sm mt-0.5 truncate" style="color: var(--color-text-secondary);">{{ n.body }}</p>
+            <div class="flex items-start justify-between gap-2">
+              <p class="text-xs font-semibold leading-tight flex-1 min-w-0" style="color: var(--color-text-primary);">
+                {{ n.title }}
+              </p>
+              <span v-if="!n.is_read" class="w-1.5 h-1.5 rounded-full shrink-0 mt-0.5" :style="{ background: col.cfg.dot }"></span>
+            </div>
+
+            <p v-if="n.body" class="text-xs mt-0.5 line-clamp-2" style="color: var(--color-text-secondary);">
+              {{ n.body }}
+            </p>
+
+            <div class="flex items-center gap-2 mt-1.5 flex-wrap">
+              <span v-if="n.loa_number" class="text-xs font-mono" style="color: var(--color-text-tertiary);">{{ n.loa_number }}</span>
+              <span v-if="n.sr_number" class="text-xs" style="color: var(--color-text-tertiary);">· {{ n.sr_number }}</span>
+              <span class="text-xs ml-auto" style="color: var(--color-text-tertiary);">{{ relativeTime(n.created_at) }}</span>
             </div>
           </div>
         </div>

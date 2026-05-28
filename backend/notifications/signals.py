@@ -1,4 +1,4 @@
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 from django.contrib.auth.models import User
 
@@ -69,6 +69,40 @@ def on_work_item_entry_created(sender, instance, created, **kwargs):
             title=f'{_WI_LABEL[category]} — {loa}',
             body=f'{item_desc} · Qty: {instance.quantity}',
         )
+
+
+@receiver(pre_save, sender='works.Work')
+def on_work_pre_save(sender, instance, **kwargs):
+    if instance.pk:
+        try:
+            old = sender.objects.get(pk=instance.pk)
+            instance._old_hrms_id = old.hrms_id
+        except sender.DoesNotExist:
+            instance._old_hrms_id = None
+    else:
+        instance._old_hrms_id = None
+
+
+@receiver(post_save, sender='works.Work')
+def on_work_saved(sender, instance, created, **kwargs):
+    if created:
+        return
+    old_hrms = getattr(instance, '_old_hrms_id', None)
+    new_hrms = instance.hrms_id
+    if not old_hrms or old_hrms == new_hrms:
+        return
+    from .models import Notification
+    try:
+        old_user = User.objects.get(username=old_hrms)
+    except User.DoesNotExist:
+        return
+    loa = instance.loa_number or f'LOA #{instance.pk}'
+    Notification.objects.create(
+        user=old_user,
+        notif_type='loa_unassigned',
+        title=f'Work Unassigned — {loa}',
+        body='You have been removed from this work order by the administrator.',
+    )
 
 
 @receiver(post_save, sender='mb_details.MBRecord')

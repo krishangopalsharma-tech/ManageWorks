@@ -5,11 +5,12 @@ const unreadCount   = ref(0)
 let _pollInterval   = null
 
 export const NOTIF_CONFIG = {
-  new_sr:    { label: 'New SR Entry',          dot: '#0D9488', bg: '#F0FDFA', border: '#99F6E4', text: '#0F766E' },
-  ss_entry:  { label: 'SS Entry',              dot: '#16A34A', bg: '#F0FDF4', border: '#86EFAC', text: '#15803D' },
-  si_entry:  { label: 'SI Entry',              dot: '#D97706', bg: '#FFFBEB', border: '#FDE68A', text: '#B45309' },
-  ee_entry:  { label: 'EE Entry',              dot: '#7C3AED', bg: '#F5F3FF', border: '#C4B5FD', text: '#6D28D9' },
-  financial: { label: 'Financial Update',      dot: '#EA580C', bg: '#FFF7ED', border: '#FED7AA', text: '#C2410C' },
+  new_sr:         { label: 'Site Register',           dot: '#0D9488', bg: '#F0FDFA', border: '#99F6E4', text: '#0F766E' },
+  ss_entry:       { label: 'Supply',                  dot: '#16A34A', bg: '#F0FDF4', border: '#86EFAC', text: '#15803D' },
+  si_entry:       { label: 'Supply and Installation', dot: '#D97706', bg: '#FFFBEB', border: '#FDE68A', text: '#B45309' },
+  ee_entry:       { label: 'Execution',               dot: '#7C3AED', bg: '#F5F3FF', border: '#C4B5FD', text: '#6D28D9' },
+  financial:      { label: 'Financial',               dot: '#EA580C', bg: '#FFF7ED', border: '#FED7AA', text: '#C2410C' },
+  loa_unassigned: { label: 'LOA Unassigned',          dot: '#DC2626', bg: '#FEF2F2', border: '#FECACA', text: '#B91C1C' },
 }
 
 export function notifConfig(type) {

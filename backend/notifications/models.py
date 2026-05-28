@@ -5,11 +5,12 @@ from site_register.models import SiteRegisterThread
 
 class Notification(models.Model):
     TYPE_CHOICES = [
-        ('new_sr',   'New SR Entry'),
-        ('ss_entry', 'SS Entry'),
-        ('si_entry', 'SI Entry'),
-        ('ee_entry', 'EE Entry'),
-        ('financial','Financial Update'),
+        ('new_sr',         'Site Register'),
+        ('ss_entry',       'Supply'),
+        ('si_entry',       'Supply and Installation'),
+        ('ee_entry',       'Execution'),
+        ('financial',      'Financial'),
+        ('loa_unassigned', 'LOA Unassigned'),
     ]
     user       = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
     notif_type = models.CharField(max_length=20, choices=TYPE_CHOICES)
