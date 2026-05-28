@@ -44,7 +44,7 @@ class TelegramLinkOTP(models.Model):
 
     @property
     def is_expired(self):
-        return timezone.now() > self.expires_at
+        return self.expires_at is not None and timezone.now() > self.expires_at
 
     def __str__(self):
         return f"{self.user.username}: {self.code}"
@@ -93,9 +93,11 @@ class SiteRegisterThread(models.Model):
     status            = models.CharField(max_length=20, choices=STATUS_CHOICES, default='open')
     created_by        = models.ForeignKey(User, null=True, on_delete=models.SET_NULL, related_name='sr_threads_created')
     tg_order_message_id = models.BigIntegerField(null=True, blank=True)
-    work_serial       = models.PositiveIntegerField(null=True, blank=True)
-    location          = models.CharField(max_length=300, blank=True, default='')
-    created_at        = models.DateTimeField(auto_now_add=True)
+    work_serial                = models.PositiveIntegerField(null=True, blank=True)
+    location                   = models.CharField(max_length=300, blank=True, default='')
+    assigned_consignee_chat_id = models.BigIntegerField(null=True, blank=True)
+    assigned_consignee_name    = models.CharField(max_length=200, blank=True, default='')
+    created_at                 = models.DateTimeField(auto_now_add=True)
 
     @property
     def sr_number(self) -> str:
@@ -183,7 +185,7 @@ class SupervisorInvite(models.Model):
 
     @property
     def is_expired(self):
-        return timezone.now() > self.expires_at
+        return self.expires_at is not None and timezone.now() > self.expires_at
 
     def __str__(self):
         return f"Invite {self.code} by {self.created_by.username}"
@@ -246,7 +248,7 @@ class RlyOfficialInvite(models.Model):
 
     @property
     def is_expired(self):
-        return timezone.now() > self.expires_at
+        return self.expires_at is not None and timezone.now() > self.expires_at
 
     def __str__(self):
         return f"RlyInvite {self.code} by {self.created_by.username}"

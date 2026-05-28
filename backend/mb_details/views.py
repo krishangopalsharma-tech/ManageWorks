@@ -41,6 +41,8 @@ class WorkSearchView(APIView):
     """GET /api/mb-details/works/?q=loa"""
 
     def get(self, request):
+        if not request.user.is_authenticated:
+            return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
         q = request.query_params.get('q', '').strip()
         qs = Work.objects.all()
         if not _is_admin(request.user):
@@ -272,6 +274,8 @@ class MBSummaryView(APIView):
     """
 
     def get(self, request):
+        if not request.user.is_authenticated:
+            return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
         work_id = request.query_params.get('work_id')
 
         items_qs = WorkItem.objects.all()

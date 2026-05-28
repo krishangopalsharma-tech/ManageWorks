@@ -6,8 +6,6 @@ class UserProfile(models.Model):
     ROLE_CHOICES = [
         ('consignee', 'Consignee'),
         ('admin', 'Admin'),
-        ('sse', 'SSE'),
-        ('contractor', 'Contractor'),
     ]
 
     user           = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')

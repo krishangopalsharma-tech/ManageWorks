@@ -1,5 +1,6 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework import status
 from django.db.models import Q
 from works.models import Work, WorkItem
 from works.serializers import WorkItemSerializer
@@ -8,7 +9,9 @@ from works.serializers import WorkItemSerializer
 class WorkListView(APIView):
     """GET /api/item-progress/works/ — lightweight work list for the dropdown."""
 
-    def get(self, _request):
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
         works = Work.objects.values('id', 'loa_number', 'tender_number', 'contractor_name')
         return Response(list(works))
 
@@ -21,6 +24,8 @@ class ItemSearchView(APIView):
     """
 
     def get(self, request):
+        if not request.user.is_authenticated:
+            return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
         q = request.query_params.get('q', '').strip()
         if not q:
             return Response([])

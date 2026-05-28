@@ -24,12 +24,17 @@ ss_new_choose_type      ← contractor: ITEM or GENERAL
 ss_new_item_input       ← contractor: type item ref
 ss_new_item_confirm     ← contractor: confirm item
 ss_new_location         ← contractor: type station/section name or skip
+ss_new_recipients       ← contractor: consignee only OR add extra officials
+ss_new_add_rcpts        ← contractor: type numbers to select extra officials
 ss_new_type_text        ← contractor: type message + attachments; /done to finish
 ss_new_confirm          ← contractor: review + confirm send
 ss_select_thread
 ss_thread_action
 ss_type_reply           ← also accepts photo/document; /done to finish
 ss_confirm_reply
+rly_reassign_search     ← rly official: type name/HRMS/designation to find new consignee
+rly_reassign_list       ← select from multiple matches
+rly_reassign_confirm    ← confirm reassignment
 view_recent_filter      ← both roles: This Week / This Month / Custom
 view_recent_from        ← custom: type from-date DD-MM-YYYY
 view_recent_to          ← custom: type to-date DD-MM-YYYY
@@ -278,6 +283,15 @@ def resolve_user(tg_user_id: int):
         profile = getattr(user, 'profile', None)
 
         if user.username.startswith('tg_'):
+            # Ghost user — but may also have a RlyTelegramLink (rly official who was
+            # previously onboarded as a site_supervisor ghost). RlyTelegramLink wins.
+            try:
+                rly_link = RlyTelegramLink.objects.select_related(
+                    'system_user', 'ghost_user'
+                ).get(telegram_user_id=tg_user_id, is_verified=True)
+                return rly_link.effective_user, 'rly_official'
+            except RlyTelegramLink.DoesNotExist:
+                pass
             has_active = WorkContractorTelegram.objects.filter(
                 telegram_link=link, is_active=True).exists()
             role = 'site_supervisor' if has_active else 'observer'
@@ -394,6 +408,96 @@ def _sender_display(user, role: str) -> str:
         p     = getattr(user, 'profile', None) if user else None
         desig = p.designation if p else ''
     return f"{name} ({desig})" if desig else name
+
+
+# ── Consignee / admin lookup helpers ─────────────────────────────────────────
+
+def _find_consignee_for_work(work) -> tuple[int | None, str]:
+    """Find Telegram chat_id for the consignee assigned to this LOA.
+    Matches Work.hrms_id → User.username → TelegramUserLink or RlyTelegramLink.
+    Returns (chat_id, display_name).
+    """
+    hrms_id = (work.hrms_id or '').strip()
+    if hrms_id:
+        try:
+            tg = TelegramUserLink.objects.select_related('user').get(
+                user__username=hrms_id, is_verified=True
+            )
+            return tg.telegram_chat_id, tg.user.first_name or hrms_id
+        except TelegramUserLink.DoesNotExist:
+            pass
+        try:
+            rly = RlyTelegramLink.objects.get(hrms_id=hrms_id, is_verified=True)
+            return rly.telegram_chat_id, rly.display_name
+        except RlyTelegramLink.DoesNotExist:
+            pass
+    return None, work.consignee or hrms_id or 'Consignee'
+
+
+def _get_admin_telegram_users(exclude_chat_id: int | None = None) -> list[dict]:
+    """Admin/SSE users with verified Telegram, excluding the given chat_id."""
+    results = []
+    seen = {exclude_chat_id} if exclude_chat_id else set()
+    for tg_link in (
+        TelegramUserLink.objects
+        .filter(is_verified=True)
+        .exclude(user__username__startswith='tg_')
+        .select_related('user', 'user__profile')
+    ):
+        cid = tg_link.telegram_chat_id
+        if cid in seen:
+            continue
+        p = getattr(tg_link.user, 'profile', None)
+        if tg_link.user.is_staff or (p and p.role in ('admin', 'sse')):
+            seen.add(cid)
+            results.append({
+                'chat_id':     cid,
+                'name':        tg_link.user.first_name or tg_link.user.username,
+                'designation': p.designation if p else '',
+            })
+    return results
+
+
+def _search_rly_officials(query: str) -> list[dict]:
+    """Search railway officials by name, HRMS ID, or designation."""
+    q = query.strip().lower()
+    results = []
+    seen: set[int] = set()
+    for tg_link in (
+        TelegramUserLink.objects
+        .filter(is_verified=True)
+        .exclude(user__username__startswith='tg_')
+        .select_related('user', 'user__profile')
+    ):
+        p    = getattr(tg_link.user, 'profile', None)
+        name = (tg_link.user.first_name or '').lower()
+        hrms = (tg_link.user.username or '').lower()
+        desig = (p.designation if p else '').lower()
+        if q in name or q in hrms or q in desig:
+            cid = tg_link.telegram_chat_id
+            if cid not in seen:
+                seen.add(cid)
+                results.append({
+                    'chat_id':     cid,
+                    'name':        tg_link.user.first_name or tg_link.user.username,
+                    'designation': p.designation if p else '',
+                    'hrms_id':     tg_link.user.username,
+                })
+    for rly in RlyTelegramLink.objects.filter(is_verified=True):
+        name  = (rly.name or '').lower()
+        hrms  = (rly.hrms_id or '').lower()
+        desig = (rly.designation or '').lower()
+        if q in name or q in hrms or q in desig:
+            cid = rly.telegram_chat_id
+            if cid not in seen:
+                seen.add(cid)
+                results.append({
+                    'chat_id':     cid,
+                    'name':        rly.display_name,
+                    'designation': rly.designation,
+                    'hrms_id':     rly.hrms_id,
+                })
+    return results
 
 
 # ── LOA / contractor helpers ──────────────────────────────────────────────────
@@ -700,7 +804,7 @@ def handle_ss_location(token: str, session: BotSession, text: str):
     location = '' if text.strip() in ('⏭ Skip', '/skip') else text.strip()
     session.context['location'] = location
     session.save(update_fields=["context", "updated_at"])
-    show_ss_new_text_prompt(token, session)
+    show_ss_recipients(token, session)
 
 
 def show_text_prompt(token: str, session: BotSession):
@@ -1046,6 +1150,85 @@ def handle_ss_new_item_confirm(token: str, session: BotSession, text: str):
         sendt(token, session, "⚠️ Reply Yes or No.")
 
 
+def show_ss_recipients(token: str, session: BotSession):
+    """Show consignee info + option to add admin/SSE recipients."""
+    from works.models import Work as _Work
+    ctx  = session.context
+    work = _Work.objects.get(pk=ctx['work_id'])
+    consignee_chat_id, consignee_name = _find_consignee_for_work(work)
+    ctx['consignee_chat_id'] = consignee_chat_id
+    ctx['consignee_name']    = consignee_name
+    session.state = 'ss_new_recipients'
+    session.save(update_fields=['state', 'context', 'updated_at'])
+    if consignee_chat_id:
+        c_line = f"\n👤 <b>Consignee:</b> {consignee_name} ✅"
+    else:
+        label  = work.consignee or (work.hrms_id or '') or '?'
+        c_line = f"\n👤 <b>Consignee:</b> {label} ⚠️ (no Telegram linked)"
+    sendt(token, session,
+         f"📤 <b>Who should receive this SR?</b>{c_line}\n\n"
+         "1. ✅ Consignee only\n"
+         "2. ➕ Also notify additional officials",
+         keyboard=[["1. ✅ Consignee only"], ["2. ➕ Additional officials"], ["❌ Cancel"]])
+
+
+def handle_ss_recipients(token: str, session: BotSession, text: str):
+    t = text.strip()
+    if t.startswith("1") or "consignee" in t.lower():
+        show_ss_new_text_prompt(token, session)
+    elif t.startswith("2") or "additional" in t.lower():
+        _show_admin_user_list(token, session)
+    else:
+        sendt(token, session, "⚠️ Send 1 for consignee only or 2 to add more officials.")
+
+
+def _show_admin_user_list(token: str, session: BotSession):
+    ctx   = session.context
+    excl  = ctx.get('consignee_chat_id')
+    admins = _get_admin_telegram_users(exclude_chat_id=excl)
+    if not admins:
+        sendt(token, session,
+             "ℹ️ No additional officials with Telegram found.\nProceeding with consignee only.")
+        show_ss_new_text_prompt(token, session)
+        return
+    ctx['admin_choices'] = admins
+    session.state = 'ss_new_add_rcpts'
+    session.save(update_fields=['state', 'context', 'updated_at'])
+    lines = ["<b>Select additional officials</b> to notify:\n"
+             "(type numbers separated by commas, or <b>All</b>)\n"]
+    for i, a in enumerate(admins, 1):
+        desig = f" — {a['designation']}" if a['designation'] else ""
+        lines.append(f"{i}. {a['name']}{desig}")
+    sendt(token, session, "\n".join(lines), remove_kb=True)
+
+
+def handle_ss_add_rcpts(token: str, session: BotSession, text: str):
+    ctx    = session.context
+    admins = ctx.get('admin_choices', [])
+    t      = text.strip().lower()
+    selected: list[dict] = []
+    if t == 'all':
+        selected = admins
+    else:
+        for part in re.split(r'[,\s]+', t):
+            try:
+                idx = int(part.strip()) - 1
+                if 0 <= idx < len(admins):
+                    selected.append(admins[idx])
+            except ValueError:
+                pass
+        if not selected:
+            sendt(token, session,
+                 "⚠️ Type numbers separated by commas (e.g. 1,3) or <b>All</b>.")
+            return
+    ctx['additional_chat_ids'] = selected
+    ctx.pop('admin_choices', None)
+    session.save(update_fields=['context', 'updated_at'])
+    names = ', '.join(a['name'] for a in selected)
+    sendt(token, session, f"✅ Added: {names}", remove_kb=True)
+    show_ss_new_text_prompt(token, session)
+
+
 def show_ss_new_text_prompt(token: str, session: BotSession):
     ctx        = session.context
     entry_type = "Item-wise" if ctx.get("work_item_id") else "General"
@@ -1112,15 +1295,17 @@ def do_create_ss_thread(token: str, upload_chat_id: str, session: BotSession, us
         _Work.objects.select_for_update().get(pk=ctx['work_id'])
         work_serial = SiteRegisterThread.objects.filter(work_id=ctx['work_id']).count() + 1
         thread = SiteRegisterThread.objects.create(
-            work_id           = ctx['work_id'],
-            work_item_id      = ctx.get('work_item_id'),
-            initiated_by_role = 'site_supervisor',
-            category          = 'progress',
-            initial_text      = ctx.get('text', ''),
-            status            = 'open',
-            created_by        = user,
-            work_serial       = work_serial,
-            location          = ctx.get('location', ''),
+            work_id                    = ctx['work_id'],
+            work_item_id               = ctx.get('work_item_id'),
+            initiated_by_role          = 'site_supervisor',
+            category                   = 'progress',
+            initial_text               = ctx.get('text', ''),
+            status                     = 'open',
+            created_by                 = user,
+            work_serial                = work_serial,
+            location                   = ctx.get('location', ''),
+            assigned_consignee_chat_id = ctx.get('consignee_chat_id'),
+            assigned_consignee_name    = ctx.get('consignee_name', ''),
         )
         attachments = ctx.get("attachments", [])
         if attachments:
@@ -1147,34 +1332,47 @@ def do_create_ss_thread(token: str, upload_chat_id: str, session: BotSession, us
         f"🔴 {ctx.get('text', '')}{att_note}\n\n"
         f"— <i>{_sender_display(user, 'site_supervisor')}</i>"
     )
-    reply_btn = [[{"text": f"↩️ Reply to {sr_num}", "callback_data": f"reply:{thread.pk}"}]]
+    # Consignee gets reply + reassign buttons; additional officials get only reply
+    consignee_btn = [
+        [{"text": f"↩️ Reply to {sr_num}", "callback_data": f"reply:{thread.pk}"}],
+        [{"text": f"🔄 Reassign {sr_num}", "callback_data": f"reassign:{thread.pk}"}],
+    ]
+    extra_btn = [
+        [{"text": f"↩️ Reply to {sr_num}", "callback_data": f"reply:{thread.pk}"}],
+    ]
 
-    # Notify all active railway official Telegram users
-    notified = 0
-    sender_label = _display_name(user)
-    for rly_link in RlyTelegramLink.objects.filter(is_verified=True):
-        send_inline(token, rly_link.telegram_chat_id, notify_text, reply_btn)
-        forward_attachments(token, rly_link.telegram_chat_id, attachments, sr_num, sender_label)
+    sender_label       = _display_name(user)
+    notified           = 0
+    seen_chat_ids: set = set()
+
+    # Notify assigned consignee
+    consignee_chat_id = ctx.get('consignee_chat_id')
+    if consignee_chat_id:
+        send_inline(token, consignee_chat_id, notify_text, consignee_btn)
+        forward_attachments(token, consignee_chat_id, attachments, sr_num, sender_label)
+        seen_chat_ids.add(consignee_chat_id)
         notified += 1
-    for tg_link in (
-        TelegramUserLink.objects
-        .filter(is_verified=True)
-        .exclude(user__username__startswith='tg_')
-        .select_related('user', 'user__profile')
-    ):
-        role_check = resolve_user(tg_link.telegram_user_id)
-        if role_check[1] in ('rly_official', 'admin'):
-            send_inline(token, tg_link.telegram_chat_id, notify_text, reply_btn)
-            forward_attachments(token, tg_link.telegram_chat_id, attachments, sr_num, sender_label)
+
+    # Notify any additionally selected officials
+    for extra in ctx.get('additional_chat_ids', []):
+        cid = extra['chat_id']
+        if cid not in seen_chat_ids:
+            send_inline(token, cid, notify_text, extra_btn)
+            forward_attachments(token, cid, attachments, sr_num, sender_label)
+            seen_chat_ids.add(cid)
             notified += 1
 
+    no_tg_warn = (
+        "\n\n⚠️ Consignee has no Telegram linked — notify them manually."
+        if not consignee_chat_id else ""
+    )
     send(token, session.telegram_chat_id,
          f"✅ <b>SR No.: {sr_num}</b>   Notified {notified} railway official(s).\n\n"
          f"<b>LOA:</b> {ctx['loa_number']}\n\n"
          f"<b>Type:</b> {entry_type}{item_line}{loc_line}\n\n"
-         f"<b>Message:</b>\n🔴 {ctx.get('text', '—')}",
+         f"<b>Message:</b>\n🔴 {ctx.get('text', '—')}{no_tg_warn}",
          remove_kb=True)
-    logger.info("%s created by SS %s, notified %d rly officials", sr_num, user.username, notified)
+    logger.info("%s created by SS %s, notified %d recipients", sr_num, user.username, notified)
     reset_session(session, token)
 
 
@@ -2039,6 +2237,150 @@ def try_link_otp(token: str, chat_id: int, tg_user_id: int, code: str, tg_from: 
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# SR REASSIGNMENT FLOW (rly_official / admin only)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def show_rly_reassign_search(token: str, session: BotSession, thread: SiteRegisterThread):
+    sr_num  = _thread_sr_number(thread)
+    current = thread.assigned_consignee_name or 'Unknown'
+    session.state   = 'rly_reassign_search'
+    session.context = {
+        'thread_id':          thread.pk,
+        'sr_number':          sr_num,
+        'current_consignee':  current,
+        '_flow_msgs':         [],
+    }
+    session.save(update_fields=['state', 'context', 'updated_at'])
+    sendt(token, session,
+         f"🔄 <b>Reassign {sr_num}</b>\n"
+         f"<b>Current consignee:</b> {current}\n\n"
+         "Search for new consignee:\n"
+         "Type their <b>name</b>, <b>HRMS ID</b>, or <b>designation</b>.",
+         remove_kb=True)
+
+
+def handle_rly_reassign_search(token: str, session: BotSession, text: str):
+    results = _search_rly_officials(text)
+    if not results:
+        sendt(token, session,
+             "⚠️ No matching officials found.\n"
+             "Try name, HRMS ID, or designation (e.g. DSTE, SSE/Telecom).")
+        return
+    if len(results) == 1:
+        _show_reassign_confirm(token, session, results[0])
+        return
+    lines = [f"<b>Select official</b> ({len(results)} found):\n"]
+    for i, r in enumerate(results, 1):
+        desig = f" — {r['designation']}" if r['designation'] else ""
+        lines.append(f"{i}. {r['name']}{desig}")
+    session.context['reassign_choices'] = results
+    session.state = 'rly_reassign_list'
+    session.save(update_fields=['state', 'context', 'updated_at'])
+    sendt(token, session, "\n".join(lines),
+         keyboard=number_keyboard(len(results), extras=["◀ Back", "❌ Cancel"]))
+
+
+def handle_rly_reassign_list(token: str, session: BotSession, text: str):
+    if text == "◀ Back":
+        try:
+            thread = SiteRegisterThread.objects.select_related('work').get(
+                pk=session.context['thread_id'])
+            show_rly_reassign_search(token, session, thread)
+        except SiteRegisterThread.DoesNotExist:
+            send(token, session.telegram_chat_id, "⚠️ Entry not found.", remove_kb=True)
+            reset_session(session, token)
+        return
+    try:
+        idx = int(text.strip()) - 1
+    except ValueError:
+        sendt(token, session, "⚠️ Send the number."); return
+    choices = session.context.get('reassign_choices', [])
+    if not (0 <= idx < len(choices)):
+        sendt(token, session, f"⚠️ Enter 1–{len(choices)}."); return
+    _show_reassign_confirm(token, session, choices[idx])
+
+
+def _show_reassign_confirm(token: str, session: BotSession, official: dict):
+    sr_num  = session.context.get('sr_number', '?')
+    current = session.context.get('current_consignee', '?')
+    desig   = f" ({official['designation']})" if official['designation'] else ""
+    session.context['reassign_target'] = official
+    session.state = 'rly_reassign_confirm'
+    session.save(update_fields=['state', 'context', 'updated_at'])
+    sendt(token, session,
+         f"🔄 <b>Confirm Reassignment</b>\n\n"
+         f"<b>SR:</b> {sr_num}\n"
+         f"<b>From:</b> {current}\n"
+         f"<b>To:</b> {official['name']}{desig}\n\n"
+         "1. ✅ Confirm\n2. ❌ Cancel",
+         keyboard=[["1. ✅ Confirm"], ["2. ❌ Cancel"]])
+
+
+def do_reassign_sr(token: str, session: BotSession, user):
+    ctx    = session.context
+    target = ctx.get('reassign_target', {})
+    try:
+        thread = SiteRegisterThread.objects.select_related('work').get(pk=ctx['thread_id'])
+    except SiteRegisterThread.DoesNotExist:
+        send(token, session.telegram_chat_id, "⚠️ Entry not found.", remove_kb=True)
+        reset_session(session, token); return
+
+    old_name  = thread.assigned_consignee_name or 'Previous Consignee'
+    old_chat  = thread.assigned_consignee_chat_id
+    new_chat  = target['chat_id']
+    new_name  = target['name']
+    new_desig = target.get('designation', '')
+    sr_num    = ctx['sr_number']
+
+    thread.assigned_consignee_chat_id = new_chat
+    thread.assigned_consignee_name    = new_name
+    thread.save(update_fields=['assigned_consignee_chat_id', 'assigned_consignee_name'])
+
+    reassigned_by = _display_name(user)
+    desig_str     = f" ({new_desig})" if new_desig else ""
+    entry_type    = "Item-wise" if thread.work_item_id else "General"
+
+    # Notify new consignee
+    new_reply_btn = [
+        [{"text": f"↩️ Reply to {sr_num}", "callback_data": f"reply:{thread.pk}"}],
+        [{"text": f"🔄 Reassign {sr_num}", "callback_data": f"reassign:{thread.pk}"}],
+    ]
+    send_inline(token, new_chat,
+        f"🔄 <b>SR Assigned to You — {sr_num}</b>\n\n"
+        f"<b>LOA:</b> {thread.work.loa_number}\n"
+        f"<b>Type:</b> {entry_type}\n"
+        f"<b>Status:</b> {thread.status.upper()}\n\n"
+        f"{thread.initial_text}\n\n"
+        f"— Assigned by <i>{reassigned_by}</i>",
+        new_reply_btn)
+
+    # Notify old consignee if different
+    if old_chat and old_chat != new_chat:
+        send(token, old_chat,
+            f"ℹ️ <b>SR Reassigned — {sr_num}</b>\n\n"
+            f"<b>LOA:</b> {thread.work.loa_number}\n"
+            f"Now assigned to <b>{new_name}</b>{desig_str}.\n"
+            f"— Reassigned by <i>{reassigned_by}</i>")
+
+    send(token, session.telegram_chat_id,
+         f"✅ <b>{sr_num}</b> reassigned to {new_name}{desig_str}.",
+         remove_kb=True)
+    logger.info("%s reassigned from %s to %s by %s", sr_num, old_name, new_name, user.username)
+    reset_session(session, token)
+
+
+def handle_rly_reassign_confirm(token: str, session: BotSession, user, text: str):
+    t = text.strip()
+    if t.startswith("1"):
+        do_reassign_sr(token, session, user)
+    elif t.startswith("2"):
+        reset_session(session, token)
+        send(token, session.telegram_chat_id, "❌ Reassignment cancelled.", remove_kb=True)
+    else:
+        sendt(token, session, "⚠️ Reply 1 to confirm or 2 to cancel.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # CALLBACK QUERY DISPATCHER (inline button taps)
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -2076,6 +2418,22 @@ def dispatch_callback(token: str, cq: dict):
              "✏️ Type your reply (you can also send photos/documents).\n"
              "Tap <b>Done</b> after attachments to finish without text.",
              keyboard=[["✅ Done — Proceed"], ["❌ Cancel"]])
+
+    elif data.startswith("reassign:"):
+        if role not in ('rly_official', 'admin'):
+            send(token, chat_id, "⚠️ Only railway officials can reassign entries.")
+            return
+        try:
+            thread_pk = int(data.split(":", 1)[1])
+        except (ValueError, IndexError):
+            return
+        try:
+            thread = SiteRegisterThread.objects.select_related('work').get(pk=thread_pk)
+        except SiteRegisterThread.DoesNotExist:
+            send(token, chat_id, "⚠️ Entry not found.")
+            return
+        session = get_session(chat_id)
+        show_rly_reassign_search(token, session, thread)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -2207,6 +2565,10 @@ def dispatch(token: str, upload_chat_id: str, update: dict):
         handle_ss_new_item_confirm(token, session, text or "")
     elif session.state == "ss_new_location":
         handle_ss_location(token, session, text or "")
+    elif session.state == "ss_new_recipients":
+        handle_ss_recipients(token, session, text or "")
+    elif session.state == "ss_new_add_rcpts":
+        handle_ss_add_rcpts(token, session, text or "")
     elif session.state == "ss_new_type_text":
         handle_ss_new_type_text(token, session, text, attachment)
     elif session.state == "ss_new_confirm":
@@ -2221,6 +2583,14 @@ def dispatch(token: str, upload_chat_id: str, update: dict):
         handle_ss_type_reply(token, session, text, attachment)
     elif session.state == "ss_confirm_reply":
         handle_ss_confirm_reply(token, upload_chat_id, session, user, text or "")
+
+    # ── SR reassignment flow (rly_official / admin) ───────────────────────────
+    elif session.state == "rly_reassign_search":
+        handle_rly_reassign_search(token, session, text or "")
+    elif session.state == "rly_reassign_list":
+        handle_rly_reassign_list(token, session, text or "")
+    elif session.state == "rly_reassign_confirm":
+        handle_rly_reassign_confirm(token, session, user, text or "")
 
     # ── Recent entries flow (both roles) ──────────────────────────────────────
     elif session.state == "view_recent_filter":

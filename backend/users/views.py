@@ -126,11 +126,8 @@ class MeView(APIView):
 
 class PendingUsersView(APIView):
     def get(self, request):
-        if not request.user.is_authenticated or not request.user.is_staff:
-            # Also allow users with admin role
-            profile = getattr(request.user, 'profile', None)
-            if not request.user.is_authenticated or (profile and profile.role != 'admin'):
-                return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
+        if not _is_admin(request.user):
+            return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
 
         profiles = UserProfile.objects.filter(is_approved=False).select_related('user')
         return Response([
@@ -199,7 +196,7 @@ class UpdateRoleView(APIView):
         if not _is_admin(request.user):
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
         role = request.data.get('role', '').strip()
-        if role not in ('consignee', 'admin', 'sse', 'contractor'):
+        if role not in ('consignee', 'admin'):
             return Response({'error': 'Invalid role.'}, status=status.HTTP_400_BAD_REQUEST)
         try:
             profile = UserProfile.objects.get(user_id=user_id)

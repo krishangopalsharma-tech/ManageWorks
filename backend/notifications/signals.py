@@ -1,4 +1,5 @@
 from django.db.models.signals import post_save, pre_save
+from django.db.models import Q
 from django.dispatch import receiver
 from django.contrib.auth.models import User
 
@@ -25,7 +26,9 @@ _WI_LABEL = {
 
 
 def _recipients(work):
-    admins = list(User.objects.filter(is_staff=True))
+    admins = list(User.objects.filter(
+        Q(is_staff=True) | Q(profile__role='admin')
+    ).distinct())
     admin_ids = {u.pk for u in admins}
     consignees = []
     if work.hrms_id:

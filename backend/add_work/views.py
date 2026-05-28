@@ -76,6 +76,8 @@ def _parse_response(result):
 
 class UploadWorkView(APIView):
     def post(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
         file_obj = request.FILES.get('file')
         link = request.data.get('link')
 

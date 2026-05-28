@@ -4,12 +4,10 @@ import axios from 'axios'
 
 const API = '/api/auth'
 
-const ROLES = ['consignee', 'admin', 'sse', 'contractor']
+const ROLES = ['consignee', 'admin']
 const ROLE_STYLE = {
-  consignee:  'bg-amber-100 text-amber-700',
-  admin:      'bg-purple-100 text-purple-700',
-  sse:        'bg-blue-100 text-blue-700',
-  contractor: 'bg-green-100 text-green-700',
+  consignee: 'bg-amber-100 text-amber-700',
+  admin:     'bg-purple-100 text-purple-700',
 }
 
 // ── State ──────────────────────────────────────────────────────────────────

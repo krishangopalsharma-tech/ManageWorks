@@ -102,6 +102,7 @@ class WorkItemEntryView(APIView):
     """
 
     def get(self, request, item_id):
+        _check_authenticated(request.user)
         entries = (
             WorkItemEntry.objects
             .filter(work_item_id=item_id)
@@ -215,14 +216,13 @@ class WorkItemEntryUpdateView(APIView):
     def patch(self, request, entry_id):
         if not request.user.is_authenticated:
             raise PermissionDenied("Authentication required.")
-        _check_authenticated(request.user)
 
         try:
             entry = WorkItemEntry.objects.select_related('work_item__work').get(pk=entry_id)
         except WorkItemEntry.DoesNotExist:
             return Response({'error': 'Entry not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        if entry.submitted_by_id != request.user.id:
+        if entry.submitted_by_id != request.user.id and not _is_admin(request.user):
             raise PermissionDenied("Only the consignee who submitted this entry can edit it.")
 
         # Supply entries also require the user to still be the primary consignee of the work.

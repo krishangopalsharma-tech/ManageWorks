@@ -94,13 +94,12 @@ class SiteRegisterView(APIView):
         )
         threads_by_work = defaultdict(list)
         def _derive_msg_role(m):
-            """Re-derive role from user relationships; don't trust stored sender_role."""
-            if not m.sender:
+            if m.sender_role:
                 return m.sender_role
+            if not m.sender:
+                return 'rly_official'
             tg = getattr(m.sender, 'telegram_link', None)
-            if tg is not None:
-                return 'site_supervisor'
-            return 'rly_official'
+            return 'site_supervisor' if tg is not None else 'rly_official'
 
         def _msg_designation(m, actual_role):
             if not m.sender:

@@ -4,12 +4,15 @@ from django.utils import timezone
 from datetime import timedelta
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework import status
 from works.models import Work, WorkItem, WorkItemEntry
 from mb_details.models import MBItem, MBRecord
 
 
 class DashboardStatsView(APIView):
     def get(self, request):
+        if not request.user.is_authenticated:
+            return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
         loa_ids_param = request.query_params.get('loa_ids')
         loa_id = request.query_params.get('loa_id')
 
@@ -105,6 +108,8 @@ class ProgressTrendView(APIView):
     }
 
     def get(self, request):
+        if not request.user.is_authenticated:
+            return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
         period = request.query_params.get('period', 'monthly')
         loa_ids_param = request.query_params.get('loa_ids')
         loa_id = request.query_params.get('loa_id')
