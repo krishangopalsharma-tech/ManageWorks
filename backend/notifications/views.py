@@ -1,3 +1,7 @@
+from django.utils import timezone
+from django.db.models import Q
+from datetime import timedelta
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -28,9 +32,14 @@ class NotificationListView(APIView):
     def get(self, request):
         if not request.user.is_authenticated:
             return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
+        cutoff = timezone.now() - timedelta(hours=24)
         qs = (
             Notification.objects
             .filter(user=request.user)
+            .filter(
+                Q(is_read=False) |
+                Q(is_read=True, read_at__gte=cutoff)
+            )
             .select_related('thread', 'thread__work')
             .order_by('-created_at')[:60]
         )
@@ -40,7 +49,8 @@ class NotificationListView(APIView):
     def post(self, request):
         if not request.user.is_authenticated:
             return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
-        Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
+        now = timezone.now()
+        Notification.objects.filter(user=request.user, is_read=False).update(is_read=True, read_at=now)
         return Response({'ok': True})
 
 
@@ -49,5 +59,5 @@ class NotificationDetailView(APIView):
     def post(self, request, notif_id):
         if not request.user.is_authenticated:
             return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
-        Notification.objects.filter(pk=notif_id, user=request.user).update(is_read=True)
+        Notification.objects.filter(pk=notif_id, user=request.user, is_read=False).update(is_read=True, read_at=timezone.now())
         return Response({'ok': True})

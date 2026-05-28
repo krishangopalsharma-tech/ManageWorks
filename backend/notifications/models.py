@@ -18,6 +18,7 @@ class Notification(models.Model):
     body       = models.TextField(blank=True)
     thread     = models.ForeignKey(SiteRegisterThread, null=True, blank=True, on_delete=models.SET_NULL, related_name='notifications')
     is_read    = models.BooleanField(default=False)
+    read_at    = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
