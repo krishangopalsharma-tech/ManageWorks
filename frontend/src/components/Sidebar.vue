@@ -44,10 +44,11 @@ const menuItems = ref([
     icon: 'i-carbon-settings',
     expanded: false,
     subItems: [
+      { name: 'My Account',      path: '/settings/account' },
       { name: 'User Management', path: '/settings/user-management', adminOnly: true },
       { name: 'SMTP Settings',   path: '/settings/smtp',            adminOnly: true },
-      { name: 'Telegram Bot',    path: '/settings/telegram',               adminOnly: true },
-      { name: 'Site Supervisors', path: '/settings/site-register-parties', adminOnly: true },
+      { name: 'Telegram Bot',    path: '/settings/telegram',        adminOnly: true },
+      { name: 'Site Supervisors', path: '/settings/site-register-parties', consigneeOrAdmin: true },
       { name: 'Link Rly Official Telegram', path: '/settings/telegram-link' },
     ],
   },
@@ -103,9 +104,15 @@ async function handleLogout() {
   router.push('/login')
 }
 
+const isConsigneeOrAdmin = computed(() => isAdmin.value || state.user?.role === 'consignee')
+
 const visibleSubItems = (item) => {
   if (!item.subItems) return []
-  return item.subItems.filter(s => !s.adminOnly || isAdmin.value)
+  return item.subItems.filter(s => {
+    if (s.adminOnly) return isAdmin.value
+    if (s.consigneeOrAdmin) return isConsigneeOrAdmin.value
+    return true
+  })
 }
 
 const visibleMenuItems = computed(() =>

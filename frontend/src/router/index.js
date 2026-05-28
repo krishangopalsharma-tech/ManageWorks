@@ -19,6 +19,7 @@ import TelegramLink           from '../views/TelegramLink.vue'
 import SiteRegisterParties   from '../views/SiteRegisterParties.vue'
 import AddSiteSupervisor     from '../views/AddSiteSupervisor.vue'
 import Notifications         from '../views/Notifications.vue'
+import Account               from '../views/Account.vue'
 
 const routes = [
   { path: '/login',            name: 'Login',           component: Login,          meta: { public: true } },
@@ -35,9 +36,10 @@ const routes = [
   { path: '/settings/user-management',    name: 'User Management',          component: UserManagement,          meta: { adminOnly: true } },
   { path: '/settings/smtp',               name: 'SMTP Settings',            component: SmtpSettings,            meta: { adminOnly: true } },
   { path: '/settings/telegram',           name: 'Telegram Settings',        component: TelegramSettings,        meta: { adminOnly: true } },
+  { path: '/settings/account',                name: 'My Account',                 component: Account },
   { path: '/settings/telegram-link',          name: 'Link Rly Official Telegram', component: TelegramLink },
-  { path: '/settings/site-register-parties', name: 'LOA Parties',                component: SiteRegisterParties, meta: { adminOnly: true } },
-  { path: '/settings/add-supervisor',         name: 'Add Site Supervisor',        component: AddSiteSupervisor,   meta: { adminOnly: true } },
+  { path: '/settings/site-register-parties', name: 'LOA Parties',                component: SiteRegisterParties, meta: { siteRegisterAccess: true } },
+  { path: '/settings/add-supervisor',         name: 'Add Site Supervisor',        component: AddSiteSupervisor,   meta: { siteRegisterAccess: true } },
   { path: '/installation-certificate',   name: 'Installation Certificate', component: InstallationCertificate },
   { path: '/notifications',            name: 'Notifications',            component: Notifications },
   { path: '/:pathMatch(.*)*',          name: 'Placeholder',              component: Placeholder },

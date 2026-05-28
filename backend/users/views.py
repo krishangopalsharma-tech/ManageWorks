@@ -12,17 +12,29 @@ from email_service.mailer import send_password_email
 
 
 def _user_data(user):
+    from site_register.models import RlyTelegramLink
     profile = getattr(user, 'profile', None)
     tg_link = getattr(user, 'telegram_link', None)
+    tg_linked = bool(tg_link and tg_link.is_verified)
+    tg_chat_id = tg_link.telegram_chat_id if (tg_link and tg_linked) else None
+    if not tg_linked:
+        try:
+            rly = RlyTelegramLink.objects.get(system_user=user, is_verified=True)
+            tg_linked = True
+            tg_chat_id = rly.telegram_chat_id
+        except RlyTelegramLink.DoesNotExist:
+            pass
     return {
         'id':              user.id,
         'hrms_id':         user.username,
         'name':            user.first_name,
+        'email':           user.email,
         'designation':     profile.designation if profile else '',
         'pf_number':       profile.pf_number   if profile else '',
         'role':            profile.role         if profile else ('admin' if user.is_staff else 'consignee'),
         'is_approved':     profile.is_approved  if profile else user.is_staff,
-        'telegram_linked': bool(tg_link and tg_link.is_verified),
+        'telegram_linked': tg_linked,
+        'telegram_chat_id': tg_chat_id,
     }
 
 
@@ -261,6 +273,19 @@ class WorksListView(APIView):
             'id', 'loa_number', 'tender_number',
             'contractor_name', 'consignee', 'hrms_id', 'name_of_work',
         ).order_by('id')
+        return Response(list(works))
+
+
+class MyWorksView(APIView):
+    """GET /api/auth/my-works/ — LOAs assigned to the logged-in consignee."""
+
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
+        works = Work.objects.filter(hrms_id=request.user.username).values(
+            'id', 'loa_number', 'tender_number',
+            'contractor_name', 'name_of_work', 'date_of_completion',
+        ).order_by('loa_number')
         return Response(list(works))
 
 

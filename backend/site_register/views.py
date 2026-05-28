@@ -251,13 +251,21 @@ class TelegramUnlinkView(APIView):
 class LoaPartiesListView(APIView):
     """
     GET /api/site-register/parties/
-    Returns all works with their mapped telegram parties.
+    Admin: all works. Consignee: only their assigned LOAs.
     """
     def get(self, request):
-        if not _is_admin(request.user):
+        is_admin = _is_admin(request.user)
+        is_consignee = (
+            not is_admin and
+            request.user.is_authenticated and
+            getattr(getattr(request.user, 'profile', None), 'role', None) == 'consignee'
+        )
+        if not is_admin and not is_consignee:
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
 
         works = Work.objects.order_by('contractor_name', 'loa_number')
+        if is_consignee:
+            works = works.filter(hrms_id=request.user.username)
         mappings = (
             WorkContractorTelegram.objects
             .filter(is_active=True)
@@ -517,8 +525,8 @@ class SupervisorInviteView(APIView):
 
 # ── Rly Official Delegate Links ─────────────────────────────────────────────
 
-def _serialize_rly_link(lnk):
-    return {
+def _serialize_rly_link(lnk, include_added_by=False):
+    data = {
         'id':               lnk.id,
         'hrms_id':          lnk.hrms_id,
         'name':             lnk.display_name,
@@ -530,17 +538,30 @@ def _serialize_rly_link(lnk):
         'linked_at':        lnk.linked_at.strftime('%Y-%m-%d %H:%M') if lnk.linked_at else None,
         'in_system':        lnk.system_user_id is not None,
     }
+    if include_added_by:
+        added_by = lnk.added_by
+        data['added_by_hrms'] = added_by.username if added_by else ''
+        data['added_by_name'] = added_by.first_name or added_by.username if added_by else ''
+    return data
 
 
 class RlyLinkedUsersView(APIView):
     """
-    GET    /api/site-register/rly-linked-users/      — list delegates added by current user
+    GET    /api/site-register/rly-linked-users/      — list delegates
+                admin: all records; others: only added_by=self
     PATCH  /api/site-register/rly-linked-users/<id>/ — edit name/designation/mobile
     DELETE /api/site-register/rly-linked-users/<id>/ — unlink (hard delete)
     """
     def get(self, request):
         if not request.user.is_authenticated:
             return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
+        if _is_admin(request.user):
+            links = (
+                RlyTelegramLink.objects
+                .select_related('added_by')
+                .order_by('added_by__first_name', 'name', 'linked_at')
+            )
+            return Response([_serialize_rly_link(lnk, include_added_by=True) for lnk in links])
         links = (
             RlyTelegramLink.objects
             .filter(added_by=request.user)

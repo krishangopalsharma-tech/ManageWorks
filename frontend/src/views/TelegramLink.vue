@@ -2,6 +2,10 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import axios from 'axios'
 import QRCode from 'qrcode'
+import { useAuth } from '../composables/useAuth'
+
+const { state: authState } = useAuth()
+const isAdmin = computed(() => authState.user?.role === 'admin' || authState.user?.is_staff)
 
 const BOT_USERNAME = 'ADISiteregister_bot'
 const BOT_URL      = `https://t.me/${BOT_USERNAME}`
@@ -217,10 +221,13 @@ onUnmounted(() => {
 
     <div class="mb-6">
       <h1 class="text-xl font-bold text-gray-800 dark:text-white tracking-tight">Link Rly Official Telegram</h1>
-      <p class="text-sm text-gray-500 mt-0.5">Link your own account and manage your jurisdiction's Railway Official delegates.</p>
+      <p class="text-sm text-gray-500 mt-0.5">
+        <template v-if="isAdmin">Link your own Telegram and monitor all Railway Officials linked across all consignees.</template>
+        <template v-else>Link your own account and manage your jurisdiction's Railway Official delegates.</template>
+      </p>
     </div>
 
-    <!-- ── TOP: Steps + single QR/code panel ─────────────────────────────── -->
+    <!-- ── TOP: Steps + single QR/code panel ──────────── -->
     <div class="flex gap-4 mb-6 items-start">
 
       <!-- Steps guide -->
@@ -341,6 +348,7 @@ onUnmounted(() => {
             <th class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">Name</th>
             <th class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">HRMS ID</th>
             <th class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">Designation</th>
+            <th v-if="isAdmin" class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">Added By</th>
             <th class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">Mobile</th>
             <th class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">Telegram ID</th>
             <th class="px-5 py-2.5 text-right font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
@@ -363,13 +371,18 @@ onUnmounted(() => {
               </td>
               <td class="px-5 py-3 font-mono text-gray-600 dark:text-gray-300">{{ u.hrms_id || '—' }}</td>
               <td class="px-5 py-3 text-gray-500">{{ u.designation || '—' }}</td>
+              <td v-if="isAdmin" class="px-5 py-3 text-gray-500">
+                <span class="font-mono text-[#1D5F5E]">{{ u.added_by_hrms || '—' }}</span>
+                <span v-if="u.added_by_name" class="ml-1 text-gray-400">{{ u.added_by_name }}</span>
+              </td>
               <td class="px-5 py-3 text-gray-500">{{ u.mobile || '—' }}</td>
               <td class="px-5 py-3 font-mono text-gray-400">{{ u.telegram_user_id }}</td>
               <td class="px-5 py-3 text-right">
-                <button @click="startEdit(u)"
+                <button v-if="!isAdmin" @click="startEdit(u)"
                   class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-gray-200 dark:border-[#3a3a3c] text-gray-500 hover:text-[#1D5F5E] hover:border-[#1D5F5E] transition-colors">
                   <div class="i-carbon-edit text-xs"></div> Edit
                 </button>
+                <span v-else class="text-gray-300 text-xs">—</span>
               </td>
             </tr>
 
@@ -458,8 +471,9 @@ onUnmounted(() => {
 
       <div class="px-5 py-3 border-t border-gray-100 dark:border-[#3a3a3c]">
         <p class="text-xs text-gray-400">
-          {{ allLinked.length }} user{{ allLinked.length !== 1 ? 's' : '' }} linked in your jurisdiction ·
-          Telegram ID is not editable
+          {{ allLinked.length }} user{{ allLinked.length !== 1 ? 's' : '' }} linked
+          <template v-if="!isAdmin"> in your jurisdiction</template>
+          · Telegram ID is not editable
         </p>
       </div>
     </div>
