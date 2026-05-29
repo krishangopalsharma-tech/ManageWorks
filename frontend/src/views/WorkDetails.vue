@@ -45,6 +45,43 @@ const expandedId   = ref(null)
 const sortKey      = ref('')
 const sortDir      = ref('desc')
 const activeTab    = ref('analytics')
+const donutsVisible = ref(false)
+
+// ── Work card progress (lightweight, no analytics overhead) ───────────────
+function workCardPct(work) {
+  let schAC = 0, schAE = 0, schBC = 0, schBE = 0, total = 0
+  for (const item of (work.items || [])) {
+    const sch  = String(item.schedule || '').toUpperCase().trim()
+    const isA  = sch.startsWith('A')
+    const isB  = sch.startsWith('B')
+    const c    = item.total_amount || 0
+    const qty  = item.qty || 1
+    const done = isB ? (item.executed_quantity || 0) : (item.supplied_quantity || 0)
+    const e    = c * Math.min(done / qty, 1)
+    total += c
+    if (isA) { schAC += c; schAE += e }
+    if (isB) { schBC += c; schBE += e }
+  }
+  const mbTotal = (work.mb_billing || []).reduce((s, m) => s + (m.amount || 0), 0)
+  const clamp   = (v) => Math.min(Math.max(v, 0), 100)
+  return {
+    supply:    clamp(schAC > 0 ? schAE / schAC * 100 : 0),
+    execution: clamp(schBC > 0 ? schBE / schBC * 100 : 0),
+    overall:   clamp(total  > 0 ? (schAE + schBE) / total * 100 : 0),
+    financial: clamp(total  > 0 ? mbTotal / total * 100 : 0),
+  }
+}
+
+const workStats = computed(() => {
+  const m = {}
+  for (const w of allWorks.value) m[w.id] = workCardPct(w)
+  return m
+})
+
+function triggerDonutAnimation() {
+  donutsVisible.value = false
+  nextTick(() => setTimeout(() => { donutsVisible.value = true }, 40))
+}
 
 // ── Load ──────────────────────────────────────────────────────────────────
 const loadWorks = async () => {
@@ -52,6 +89,7 @@ const loadWorks = async () => {
   try {
     const res = await axios.get('/api/work-details/search/')
     allWorks.value = res.data
+    triggerDonutAnimation()
   } catch (e) {
     console.error(e)
   } finally {
@@ -59,6 +97,9 @@ const loadWorks = async () => {
   }
 }
 onMounted(loadWorks)
+
+// Re-animate when navigating back to list
+watch(selectedWork, (val) => { if (!val) triggerDonutAnimation() })
 
 // ── Filtering ─────────────────────────────────────────────────────────────
 const filteredWorks = computed(() => {
@@ -840,9 +881,10 @@ const generateWorkPDF = async () => {
           </p>
           <div class="grid grid-cols-1 gap-3">
             <button v-for="work in filteredWorks" :key="work.id" @click="selectWork(work)"
-              class="w-full text-left bg-white border border-gray-200 hover:border-[#1D5F5E] hover:bg-[#1D5F5E]/5 px-5 py-4 transition-all group rounded-xl">
-              <div class="flex items-center justify-between gap-3">
-                <div class="min-w-0">
+              class="w-full text-left bg-white border border-gray-200 hover:border-[#1D5F5E] hover:bg-[#1D5F5E]/5 px-5 py-3 transition-all group rounded-xl">
+              <div class="flex items-center gap-4">
+                <!-- Left: name + metadata -->
+                <div class="min-w-0 flex-1">
                   <p class="text-sm font-semibold text-gray-900 truncate">{{ work.contractor_name || '—' }}<span v-if="work.contractor_nickname" class="text-gray-400 font-normal"> ({{ work.contractor_nickname }})</span></p>
                   <div class="flex items-center gap-3 flex-wrap mt-1">
                     <span class="text-[11px] font-semibold text-[#1D5F5E] bg-[#1D5F5E]/10 px-2 py-0.5 rounded-full">{{ work.loa_number || '—' }}</span>
@@ -851,15 +893,30 @@ const generateWorkPDF = async () => {
                     <span class="text-[11px] text-gray-500">Completion: <span class="font-semibold text-gray-700">{{ fmtDate(work.date_of_completion) }}</span></span>
                   </div>
                 </div>
-                <div class="flex items-center gap-4 flex-shrink-0">
-                  <div class="text-right">
-                    <p class="text-sm font-bold text-gray-800">{{ work.items.length }}</p>
-                    <p class="text-[10px] text-gray-400">items</p>
+                <!-- Middle: 4 progress badges -->
+                <div class="flex gap-1.5 flex-shrink-0">
+                  <div v-for="d in [
+                    { label: 'SUPPLY',    pct: workStats[work.id]?.supply    ?? 0, bg: '#F0FDFA', border: '#99F6E4', text: '#0F766E' },
+                    { label: 'EXECUTION', pct: workStats[work.id]?.execution ?? 0, bg: '#EFF6FF', border: '#BFDBFE', text: '#1D4ED8' },
+                    { label: 'OVERALL',   pct: workStats[work.id]?.overall   ?? 0, bg: '#F5F3FF', border: '#C4B5FD', text: '#6D28D9' },
+                    { label: 'FINANCIAL', pct: workStats[work.id]?.financial ?? 0, bg: '#FFFBEB', border: '#FDE68A', text: '#B45309' },
+                  ]" :key="d.label"
+                    class="flex flex-col items-center px-2 py-1 rounded-md min-w-[48px]"
+                    :style="`background:${d.bg};border:1px solid ${d.border}`">
+                    <span class="text-[7px] font-semibold tracking-wider mb-0.5" :style="`color:${d.text};opacity:0.7`">{{ d.label }}</span>
+                    <span class="text-[11px] font-bold leading-none transition-all duration-[1500ms] ease-out"
+                      :style="`color:${d.text};opacity:${donutsVisible ? 1 : 0};transform:translateY(${donutsVisible ? 0 : 4}px)`">
+                      {{ d.pct.toFixed(1) }}%
+                    </span>
                   </div>
-                  <div class="text-right">
-                    <p class="text-sm font-bold text-gray-800">{{ work.items.reduce((s, i) => s + (i.entries || []).length, 0) }}</p>
-                    <p class="text-[10px] text-gray-400">entries</p>
-                  </div>
+                </div>
+                <!-- Right: counts + chevron -->
+                <div class="flex items-center gap-3 flex-shrink-0">
+                  <p class="text-xs text-gray-500 whitespace-nowrap">
+                    <span class="font-bold text-gray-800">{{ work.items.length }}</span> items
+                    <span class="text-gray-300 mx-1">·</span>
+                    <span class="font-bold text-gray-800">{{ work.items.reduce((s, i) => s + (i.entries || []).length, 0) }}</span> entries
+                  </p>
                   <div class="i-carbon-chevron-right text-gray-300 group-hover:text-[#1D5F5E] transition-colors text-lg"></div>
                 </div>
               </div>

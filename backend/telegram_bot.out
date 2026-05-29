@@ -998,3 +998,208 @@ Telegram API error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max 
 Telegram API error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8055776536:AAH9h86kHVw6bf7-GCWl7XcE-SaeuYzEhzU/getUpdates (Caused by NameResolutionError("HTTPSConnection(host='api.telegram.org', port=443): Failed to resolve 'api.telegram.org' ([Errno -3] Temporary failure in name resolution)")) — retrying in 5s
 Telegram API error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8055776536:AAH9h86kHVw6bf7-GCWl7XcE-SaeuYzEhzU/getUpdates (Caused by NameResolutionError("HTTPSConnection(host='api.telegram.org', port=443): Failed to resolve 'api.telegram.org' ([Errno -3] Temporary failure in name resolution)")) — retrying in 5s
 Telegram API error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8055776536:AAH9h86kHVw6bf7-GCWl7XcE-SaeuYzEhzU/getUpdates (Caused by NameResolutionError("HTTPSConnection(host='api.telegram.org', port=443): Failed to resolve 'api.telegram.org' ([Errno -3] Temporary failure in name resolution)")) — retrying in 5s
+Error dispatching update 75701041: SSL connection has been closed unexpectedly
+Traceback (most recent call last):
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.OperationalError: SSL connection has been closed unexpectedly
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/adi/ManageWorks/backend/site_register/management/commands/run_telegram_bot.py", line 2650, in handle
+    dispatch(token, upload_chat_id, update)
+  File "/home/adi/ManageWorks/backend/site_register/management/commands/run_telegram_bot.py", line 2468, in dispatch
+    if try_link_otp(token, chat_id, tg_user_id, text, tg_from=message.get("from")):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/site_register/management/commands/run_telegram_bot.py", line 2155, in try_link_otp
+    otp = TelegramLinkOTP.objects.select_for_update().get(code=code, used=False)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/query.py", line 635, in get
+    num = len(clone)
+          ^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/query.py", line 372, in __len__
+    self._fetch_all()
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/query.py", line 2000, in _fetch_all
+    self._result_cache = list(self._iterable_class(self))
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/query.py", line 95, in __iter__
+    results = compiler.execute_sql(
+              ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 1624, in execute_sql
+    cursor.execute(sql, params)
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/utils.py", line 94, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+django.db.utils.OperationalError: SSL connection has been closed unexpectedly
+
+Error dispatching update 75701062: column "read_at" of relation "notifications_notification" does not exist
+LINE 1: ...f_type", "title", "body", "thread_id", "is_read", "read_at",...
+                                                             ^
+Traceback (most recent call last):
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.UndefinedColumn: column "read_at" of relation "notifications_notification" does not exist
+LINE 1: ...f_type", "title", "body", "thread_id", "is_read", "read_at",...
+                                                             ^
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/adi/ManageWorks/backend/site_register/management/commands/run_telegram_bot.py", line 2650, in handle
+    dispatch(token, upload_chat_id, update)
+  File "/home/adi/ManageWorks/backend/site_register/management/commands/run_telegram_bot.py", line 2547, in dispatch
+    handle_rly_confirm(token, upload_chat_id, session, user, text or "")
+  File "/home/adi/ManageWorks/backend/site_register/management/commands/run_telegram_bot.py", line 949, in handle_rly_confirm
+    do_create_thread(token, upload_chat_id, session, user)
+  File "/home/adi/ManageWorks/backend/site_register/management/commands/run_telegram_bot.py", line 855, in do_create_thread
+    thread = SiteRegisterThread.objects.create(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/query.py", line 669, in create
+    obj.save(force_insert=True, using=self.db)
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/base.py", line 874, in save
+    self.save_base(
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/base.py", line 981, in save_base
+    post_save.send(
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/dispatch/dispatcher.py", line 209, in send
+    response = receiver(signal=self, sender=sender, **named)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/notifications/signals.py", line 47, in on_sr_thread_created
+    Notification.objects.create(
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/query.py", line 669, in create
+    obj.save(force_insert=True, using=self.db)
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/base.py", line 874, in save
+    self.save_base(
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/base.py", line 966, in save_base
+    updated = self._save_table(
+              ^^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/base.py", line 1169, in _save_table
+    results = self._do_insert(
+              ^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/base.py", line 1220, in _do_insert
+    return manager._insert(
+           ^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/query.py", line 1918, in _insert
+    return query.get_compiler(using=using).execute_sql(returning_fields)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 1925, in execute_sql
+    cursor.execute(sql, params)
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/utils.py", line 94, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+django.db.utils.ProgrammingError: column "read_at" of relation "notifications_notification" does not exist
+LINE 1: ...f_type", "title", "body", "thread_id", "is_read", "read_at",...
+                                                             ^
+
+Error dispatching update 75701063: column "read_at" of relation "notifications_notification" does not exist
+LINE 1: ...f_type", "title", "body", "thread_id", "is_read", "read_at",...
+                                                             ^
+Traceback (most recent call last):
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.UndefinedColumn: column "read_at" of relation "notifications_notification" does not exist
+LINE 1: ...f_type", "title", "body", "thread_id", "is_read", "read_at",...
+                                                             ^
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/adi/ManageWorks/backend/site_register/management/commands/run_telegram_bot.py", line 2650, in handle
+    dispatch(token, upload_chat_id, update)
+  File "/home/adi/ManageWorks/backend/site_register/management/commands/run_telegram_bot.py", line 2547, in dispatch
+    handle_rly_confirm(token, upload_chat_id, session, user, text or "")
+  File "/home/adi/ManageWorks/backend/site_register/management/commands/run_telegram_bot.py", line 949, in handle_rly_confirm
+    do_create_thread(token, upload_chat_id, session, user)
+  File "/home/adi/ManageWorks/backend/site_register/management/commands/run_telegram_bot.py", line 855, in do_create_thread
+    thread = SiteRegisterThread.objects.create(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/query.py", line 669, in create
+    obj.save(force_insert=True, using=self.db)
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/base.py", line 874, in save
+    self.save_base(
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/base.py", line 981, in save_base
+    post_save.send(
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/dispatch/dispatcher.py", line 209, in send
+    response = receiver(signal=self, sender=sender, **named)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/notifications/signals.py", line 47, in on_sr_thread_created
+    Notification.objects.create(
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/query.py", line 669, in create
+    obj.save(force_insert=True, using=self.db)
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/base.py", line 874, in save
+    self.save_base(
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/base.py", line 966, in save_base
+    updated = self._save_table(
+              ^^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/base.py", line 1169, in _save_table
+    results = self._do_insert(
+              ^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/base.py", line 1220, in _do_insert
+    return manager._insert(
+           ^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/query.py", line 1918, in _insert
+    return query.get_compiler(using=using).execute_sql(returning_fields)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 1925, in execute_sql
+    cursor.execute(sql, params)
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/utils.py", line 94, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/home/adi/ManageWorks/backend/venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+django.db.utils.ProgrammingError: column "read_at" of relation "notifications_notification" does not exist
+LINE 1: ...f_type", "title", "body", "thread_id", "is_read", "read_at",...
+                                                             ^
+
