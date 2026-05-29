@@ -8,6 +8,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework import status
 
 from works.models import Work
+from works.utils import contractor_nickname as _nickname
 from .models import (
     TelegramLinkOTP, TelegramUserLink, WorkContractorTelegram, SupervisorInvite,
     RlyTelegramLink, RlyOfficialInvite, SiteRegisterThread,
@@ -72,10 +73,11 @@ class SiteRegisterView(APIView):
         for work in works:
             loa = work.loa_number or ""
             result.append({
-                "work_id":            work.id,
-                "loa_number":         loa,
-                "contractor_name":    work.contractor_name or "",
-                "name_of_work":       work.name_of_work or "",
+                "work_id":             work.id,
+                "loa_number":          loa,
+                "contractor_name":     work.contractor_name or "",
+                "contractor_nickname": _nickname(work.contractor_name or ""),
+                "name_of_work":        work.name_of_work or "",
                 "tender_number":      work.tender_number or "",
                 "consignee":          work.consignee or "",
                 "date_of_completion": work.date_of_completion or "",

@@ -97,9 +97,10 @@ const filteredWorksDropdown = computed(() => {
   const q = workSearch.value.toLowerCase().trim()
   if (!q) return allWorks.value
   return allWorks.value.filter(w =>
-    (w.loa_number      && w.loa_number.toLowerCase().includes(q)) ||
-    (w.contractor_name && w.contractor_name.toLowerCase().includes(q)) ||
-    (w.tender_number   && w.tender_number.toLowerCase().includes(q))
+    (w.loa_number          && w.loa_number.toLowerCase().includes(q)) ||
+    (w.contractor_name     && w.contractor_name.toLowerCase().includes(q)) ||
+    (w.contractor_nickname && w.contractor_nickname.toLowerCase().includes(q)) ||
+    (w.tender_number       && w.tender_number.toLowerCase().includes(q))
   )
 })
 const allSelected = computed(() => selectedIds.value.length === allWorks.value.length)
@@ -417,7 +418,7 @@ const generateItemPDF = async (includeEntries = true) => {
                   class="mt-0.5 accent-[#1D5F5E] flex-shrink-0" @click.stop>
                 <div class="min-w-0">
                   <p class="text-xs font-semibold text-gray-800 truncate">{{ work.loa_number || '—' }}</p>
-                  <p class="text-[11px] text-gray-400 truncate">{{ work.contractor_name || '—' }}</p>
+                  <p class="text-[11px] text-gray-400 truncate">{{ work.contractor_name || '—' }}<span v-if="work.contractor_nickname" class="text-gray-300"> ({{ work.contractor_nickname }})</span></p>
                 </div>
               </label>
             </div>

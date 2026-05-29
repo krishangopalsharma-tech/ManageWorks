@@ -303,10 +303,11 @@ const filteredWorks = computed(() => {
   if (!searchQuery.value.trim()) return allWorks.value
   const q = searchQuery.value.toLowerCase()
   return allWorks.value.filter(w =>
-    (w.loa_number      && w.loa_number.toLowerCase().includes(q)) ||
-    (w.contractor_name && w.contractor_name.toLowerCase().includes(q)) ||
-    (w.tender_number   && w.tender_number.toLowerCase().includes(q)) ||
-    (w.consignee       && w.consignee.toLowerCase().includes(q))
+    (w.loa_number          && w.loa_number.toLowerCase().includes(q)) ||
+    (w.contractor_name     && w.contractor_name.toLowerCase().includes(q)) ||
+    (w.contractor_nickname && w.contractor_nickname.toLowerCase().includes(q)) ||
+    (w.tender_number       && w.tender_number.toLowerCase().includes(q)) ||
+    (w.consignee           && w.consignee.toLowerCase().includes(q))
   )
 })
 
@@ -627,7 +628,7 @@ const deleteWork = async () => {
               @click="selectWork(work)">
               <div class="flex items-center justify-between gap-3">
                 <div class="min-w-0 flex-1">
-                  <p class="text-sm font-semibold text-gray-900 truncate">{{ work.contractor_name || '—' }}</p>
+                  <p class="text-sm font-semibold text-gray-900 truncate">{{ work.contractor_name || '—' }}<span v-if="work.contractor_nickname" class="text-gray-400 font-normal"> ({{ work.contractor_nickname }})</span></p>
                   <div class="flex items-center gap-3 flex-wrap mt-1">
                     <span class="text-[11px] font-semibold text-[#1D5F5E] bg-[#1D5F5E]/10 px-2 py-0.5 rounded-full">{{ work.loa_number || '—' }}</span>
                     <span class="text-[11px] text-gray-500">Tender: <span class="font-semibold text-gray-700">{{ work.tender_number || '—' }}</span></span>
@@ -668,7 +669,7 @@ const deleteWork = async () => {
                 <div class="i-carbon-arrow-left text-base"></div>
               </button>
               <div class="min-w-0">
-                <h2 class="text-xl font-bold text-gray-900 truncate">{{ selectedWork.contractor_name }}</h2>
+                <h2 class="text-xl font-bold text-gray-900 truncate">{{ selectedWork.contractor_name }}<span v-if="selectedWork.contractor_nickname" class="text-gray-400 font-normal text-base"> ({{ selectedWork.contractor_nickname }})</span></h2>
                 <p v-if="selectedWork.name_of_work" class="text-xs text-gray-600 mt-0.5 leading-snug max-w-2xl">{{ selectedWork.name_of_work }}</p>
                 <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-2">
                   <span class="flex items-center gap-1.5 text-xs text-gray-500">

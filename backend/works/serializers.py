@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Work, WorkItem, WorkItemEntry, WorkExtension
+from .utils import contractor_nickname as _nickname
 from django.contrib.auth.models import User
 
 class UserSerializer(serializers.ModelSerializer):
@@ -58,10 +59,14 @@ class WorkSerializer(serializers.ModelSerializer):
     items = WorkItemSerializer(many=True, read_only=True)
     extensions = WorkExtensionSerializer(many=True, read_only=True)
     mb_billing = serializers.SerializerMethodField()
+    contractor_nickname = serializers.SerializerMethodField()
 
     class Meta:
         model = Work
         fields = '__all__'
+
+    def get_contractor_nickname(self, obj):
+        return _nickname(obj.contractor_name or '')
 
     def get_mb_billing(self, obj):
         return [

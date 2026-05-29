@@ -7,6 +7,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import MultiPartParser, FormParser
 
 from works.models import Work, WorkItem
+from works.utils import contractor_nickname as _nickname
 from .models import MBRecord, MBItem
 from .serializers import MBRecordSerializer
 from .parsers import parse_rm_pdf
@@ -47,23 +48,29 @@ class WorkSearchView(APIView):
         qs = Work.objects.all()
         if not _is_admin(request.user):
             qs = qs.filter(hrms_id=request.user.username)
+        all_works = list(qs)
         if q:
-            qs = qs.filter(
-                Q(loa_number__icontains=q) |
-                Q(tender_number__icontains=q) |
-                Q(contractor_name__icontains=q) |
-                Q(consignee__icontains=q)
-            )
+            ql = q.lower()
+            qu = q.upper()
+            all_works = [
+                w for w in all_works
+                if ql in (w.loa_number or '').lower()
+                or ql in (w.tender_number or '').lower()
+                or ql in (w.contractor_name or '').lower()
+                or ql in (w.consignee or '').lower()
+                or qu in _nickname(w.contractor_name or '')
+            ]
         data = [
             {
                 'id': w.id,
                 'loa_number': w.loa_number or '',
                 'tender_number': w.tender_number or '',
                 'contractor_name': w.contractor_name or '',
+                'contractor_nickname': _nickname(w.contractor_name or ''),
                 'consignee': w.consignee or '',
                 'name_of_work': w.name_of_work or '',
             }
-            for w in qs[:50]
+            for w in all_works[:50]
         ]
         return Response(data)
 

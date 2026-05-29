@@ -4,6 +4,7 @@ from rest_framework import status
 from django.db.models import Q
 from works.models import Work, WorkItem
 from works.serializers import WorkItemSerializer
+from works.utils import contractor_nickname as _nickname
 
 
 class WorkListView(APIView):
@@ -13,7 +14,8 @@ class WorkListView(APIView):
         if not request.user.is_authenticated:
             return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
         works = Work.objects.values('id', 'loa_number', 'tender_number', 'contractor_name')
-        return Response(list(works))
+        data = [dict(w, contractor_nickname=_nickname(w['contractor_name'] or '')) for w in works]
+        return Response(data)
 
 
 class ItemSearchView(APIView):
@@ -49,9 +51,10 @@ class ItemSearchView(APIView):
         data = []
         for item in queryset:
             serialized = WorkItemSerializer(item).data
-            serialized['loa_number']      = item.work.loa_number or '—'
-            serialized['contractor_name'] = item.work.contractor_name or '—'
-            serialized['tender_number']   = item.work.tender_number or '—'
+            serialized['loa_number']         = item.work.loa_number or '—'
+            serialized['contractor_name']    = item.work.contractor_name or '—'
+            serialized['contractor_nickname'] = _nickname(item.work.contractor_name or '')
+            serialized['tender_number']      = item.work.tender_number or '—'
             data.append(serialized)
 
         return Response(data)

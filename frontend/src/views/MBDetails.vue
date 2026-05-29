@@ -456,7 +456,7 @@ onMounted(() => {
                 class="w-full text-left bg-white border border-gray-200 hover:border-[#1D5F5E] hover:bg-[#1D5F5E]/5 px-4 py-3 transition-all group rounded-xl">
                 <div class="flex items-center justify-between gap-3">
                   <div class="min-w-0">
-                    <p class="text-sm font-semibold text-gray-900 truncate">{{ w.contractor_name || '—' }}</p>
+                    <p class="text-sm font-semibold text-gray-900 truncate">{{ w.contractor_name || '—' }}<span v-if="w.contractor_nickname" class="text-gray-400 font-normal"> ({{ w.contractor_nickname }})</span></p>
                     <div class="flex items-center gap-3 flex-wrap mt-1">
                       <span class="text-[11px] font-semibold text-[#1D5F5E] bg-[#1D5F5E]/10 px-2 py-0.5 rounded-full">{{ w.loa_number || '—' }}</span>
                       <span class="text-[11px] text-gray-500">Tender: <span class="font-semibold text-gray-700">{{ w.tender_number || '—' }}</span></span>

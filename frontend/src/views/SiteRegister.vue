@@ -30,10 +30,11 @@ const filteredWorks = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   if (!q) return allWorks.value
   return allWorks.value.filter(w =>
-    (w.loa_number      && w.loa_number.toLowerCase().includes(q)) ||
-    (w.contractor_name && w.contractor_name.toLowerCase().includes(q)) ||
-    (w.tender_number   && w.tender_number.toLowerCase().includes(q)) ||
-    (w.consignee       && w.consignee.toLowerCase().includes(q))
+    (w.loa_number          && w.loa_number.toLowerCase().includes(q)) ||
+    (w.contractor_name     && w.contractor_name.toLowerCase().includes(q)) ||
+    (w.contractor_nickname && w.contractor_nickname.toLowerCase().includes(q)) ||
+    (w.tender_number       && w.tender_number.toLowerCase().includes(q)) ||
+    (w.consignee           && w.consignee.toLowerCase().includes(q))
   )
 })
 
@@ -407,7 +408,7 @@ async function exportPdf() {
               @click="selectWork(work)">
               <div class="flex items-center justify-between gap-3">
                 <div class="min-w-0 flex-1">
-                  <p class="text-sm font-semibold text-gray-900 truncate">{{ work.contractor_name || '—' }}</p>
+                  <p class="text-sm font-semibold text-gray-900 truncate">{{ work.contractor_name || '—' }}<span v-if="work.contractor_nickname" class="text-gray-400 font-normal"> ({{ work.contractor_nickname }})</span></p>
                   <div class="flex items-center gap-3 flex-wrap mt-1">
                     <span class="text-[11px] font-semibold text-[#1D5F5E] bg-[#1D5F5E]/10 px-2 py-0.5 rounded-full">
                       {{ work.loa_number || '—' }}
@@ -575,7 +576,7 @@ async function exportPdf() {
               <div class="i-carbon-arrow-left text-base"></div>
             </button>
             <div class="min-w-0 flex-1">
-              <h2 class="text-xl font-bold text-gray-900 truncate">{{ selectedWork.contractor_name }}</h2>
+              <h2 class="text-xl font-bold text-gray-900 truncate">{{ selectedWork.contractor_name }}<span v-if="selectedWork.contractor_nickname" class="text-gray-400 font-normal text-base"> ({{ selectedWork.contractor_nickname }})</span></h2>
               <p v-if="selectedWork.name_of_work" class="text-xs text-gray-600 mt-0.5 leading-snug max-w-2xl">
                 {{ selectedWork.name_of_work }}
               </p>
