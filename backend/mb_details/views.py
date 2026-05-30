@@ -374,8 +374,7 @@ class PDFImportView(APIView):
         index = {}
         for wi in all_items:
             sch = (wi.schedule or '').strip().upper()
-            sch_letter = sch[0] if sch else ''
-            key = (sch_letter, norm(wi.serial_number))
+            key = (sch, norm(wi.serial_number))
             index[key] = wi
 
         prior_qty_map = {}
@@ -426,7 +425,7 @@ class PDFImportView(APIView):
 
                 # Check received status before payment
                 if cur_pct > 0:
-                    is_sch_a = sch_letter == 'A'
+                    is_sch_a = sch_letter.startswith('A')
                     if is_sch_a:
                         received_qty = wi.supplied_quantity or 0
                         if received_qty <= 0:

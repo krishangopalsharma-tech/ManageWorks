@@ -153,7 +153,7 @@ const findBestMatch = (pdfSerial, pdfDesc) => {
   let candidates = items.filter(item => {
     const { schedule: iSch, itemNum: iNum } = parseItemSerial(item.serial_number)
     const dbSch = iSch || (item.schedule || '').trim().toUpperCase()
-    return schedule && itemNum && dbSch === schedule && iNum === itemNum
+    return schedule && itemNum && (dbSch === schedule || dbSch.startsWith(schedule)) && iNum === itemNum
   })
 
   // Stage 2: item number only across all schedules

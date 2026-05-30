@@ -131,7 +131,7 @@ _ITEM_NO_RE = re.compile(r'Item No\.\s*:\s*(\d+)', re.IGNORECASE)
 
 
 def _split_into_schedule_blocks(text):
-    matches = list(re.finditer(r'\bSCHEDULE\s+([AB])\b', text))
+    matches = list(re.finditer(r'\bSCHEDULE\s+([AB]\d*)\b', text))
     if not matches:
         return []
 

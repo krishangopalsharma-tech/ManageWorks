@@ -1203,3 +1203,4 @@ django.db.utils.ProgrammingError: column "read_at" of relation "notifications_no
 LINE 1: ...f_type", "title", "body", "thread_id", "is_read", "read_at",...
                                                              ^
 
+Telegram API error: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8055776536:AAH9h86kHVw6bf7-GCWl7XcE-SaeuYzEhzU/getUpdates (Caused by NameResolutionError("HTTPSConnection(host='api.telegram.org', port=443): Failed to resolve 'api.telegram.org' ([Errno -3] Temporary failure in name resolution)")) — retrying in 5s
