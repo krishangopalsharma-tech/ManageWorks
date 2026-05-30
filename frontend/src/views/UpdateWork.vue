@@ -111,10 +111,10 @@ const normalizeItemNum = (s) => {
   return isNaN(n) ? s : String(n)
 }
 
-// Parse "A-32-" or "A-01-" → { schedule: "A", itemNum: "32" / "1" }
+// Parse "A1-08-" or "A-32-" → { schedule: "A1"/"A", itemNum: "8"/"32" }
 const parsePdfSerial = (raw) => {
   const s = (raw || '').trim().replace(/[\s\-/]+$/, '').toUpperCase()
-  const m = s.match(/^([A-Z]+)-(\d+)$/)
+  const m = s.match(/^([A-Z]\d*)-(\d+)$/)
   if (m) return { schedule: m[1], itemNum: normalizeItemNum(m[2]) }
   return { schedule: null, itemNum: normalizeItemNum(s) }
 }
