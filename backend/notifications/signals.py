@@ -19,9 +19,9 @@ _WI_NOTIF_TYPE = {
 }
 
 _WI_LABEL = {
-    'supply':              'SS Entry (Supply)',
-    'supply_installation': 'SI Entry (Supply & Installation)',
-    'execution':           'EE Entry (Execution)',
+    'supply':              'Supply',
+    'supply_installation': 'Supply & Installation',
+    'execution':           'Execution',
 }
 
 
@@ -43,12 +43,17 @@ def on_sr_thread_created(sender, instance, created, **kwargs):
     from .models import Notification
     cat_label = _SR_CATEGORY_LABELS.get(instance.category, instance.category)
     loa = instance.work.loa_number or f'LOA #{instance.work_id}'
+    creator = instance.created_by
+    if creator:
+        creator_name = creator.first_name or creator.username
+    else:
+        creator_name = loa
     for user in _recipients(instance.work):
         Notification.objects.create(
             user=user,
             notif_type='new_sr',
-            title=f'New SR Entry — {instance.sr_number}',
-            body=f'{cat_label} · {loa}',
+            title=instance.sr_number,
+            body=f'{creator_name} · {cat_label}',
             thread=instance,
         )
 
@@ -69,7 +74,7 @@ def on_work_item_entry_created(sender, instance, created, **kwargs):
         Notification.objects.create(
             user=user,
             notif_type=notif_type,
-            title=f'{_WI_LABEL[category]} — {loa}',
+            title=f'{loa} · {_WI_LABEL[category]}',
             body=f'{item_desc} · Qty: {instance.quantity}',
         )
 
