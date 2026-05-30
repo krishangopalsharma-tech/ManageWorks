@@ -460,7 +460,7 @@ onMounted(() => {
                     <div class="flex items-center gap-3 flex-wrap mt-1">
                       <span class="text-[11px] font-semibold text-[#1D5F5E] bg-[#1D5F5E]/10 px-2 py-0.5 rounded-full">{{ w.loa_number || '—' }}</span>
                       <span class="text-[11px] text-gray-500">Tender: <span class="font-semibold text-gray-700">{{ w.tender_number || '—' }}</span></span>
-                      <span class="text-[11px] text-gray-500">Consignee: <span class="font-semibold text-gray-700">{{ w.consignee || '—' }}</span></span>
+                      <span class="text-[11px] text-gray-500">Consignee: <span class="font-semibold text-gray-700">{{ w.consignee_display || w.consignee || '—' }}</span></span>
                     </div>
                   </div>
                   <div class="flex items-center gap-2 flex-shrink-0">

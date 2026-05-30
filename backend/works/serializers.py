@@ -60,6 +60,7 @@ class WorkSerializer(serializers.ModelSerializer):
     extensions = WorkExtensionSerializer(many=True, read_only=True)
     mb_billing = serializers.SerializerMethodField()
     contractor_nickname = serializers.SerializerMethodField()
+    consignee_display = serializers.SerializerMethodField()
 
     class Meta:
         model = Work
@@ -67,6 +68,20 @@ class WorkSerializer(serializers.ModelSerializer):
 
     def get_contractor_nickname(self, obj):
         return _nickname(obj.contractor_name or '')
+
+    def get_consignee_display(self, obj):
+        if obj.hrms_id:
+            try:
+                user = User.objects.get(username=obj.hrms_id)
+                name = user.first_name or obj.hrms_id
+                designation = getattr(user, 'profile', None)
+                designation = designation.designation if designation else None
+                if name and designation:
+                    return f"{name} ({designation})"
+                return name or designation or obj.consignee or ''
+            except User.DoesNotExist:
+                pass
+        return obj.consignee or ''
 
     def get_mb_billing(self, obj):
         return [

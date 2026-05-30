@@ -586,7 +586,7 @@ const generateWorkPDF = async () => {
 
     // Metadata row
     const metaFields = [
-      ['Consignee', w.consignee || '—'],
+      ['Consignee', w.consignee_display || w.consignee || '—'],
       ['HRMS ID', w.hrms_id || '—'],
       ['Completion', fmtDate(w.date_of_completion)],
       ['Agreement', w.contract_agreement || '—'],
@@ -889,22 +889,22 @@ const generateWorkPDF = async () => {
                   <div class="flex items-center gap-3 flex-wrap mt-1">
                     <span class="text-[11px] font-semibold text-[#1D5F5E] bg-[#1D5F5E]/10 px-2 py-0.5 rounded-full">{{ work.loa_number || '—' }}</span>
                     <span class="text-[11px] text-gray-500">Tender: <span class="font-semibold text-gray-700">{{ work.tender_number || '—' }}</span></span>
-                    <span class="text-[11px] text-gray-500">Consignee: <span class="font-semibold text-gray-700">{{ work.consignee || '—' }}</span></span>
+                    <span class="text-[11px] text-gray-500">Consignee: <span class="font-semibold text-gray-700">{{ work.consignee_display || work.consignee || '—' }}</span></span>
                     <span class="text-[11px] text-gray-500">Completion: <span class="font-semibold text-gray-700">{{ fmtDate(work.date_of_completion) }}</span></span>
                   </div>
                 </div>
                 <!-- Middle: 4 progress badges -->
-                <div class="flex gap-1.5 flex-shrink-0">
+                <div class="flex gap-2 flex-shrink-0">
                   <div v-for="d in [
                     { label: 'SUPPLY',    pct: workStats[work.id]?.supply    ?? 0, bg: '#F0FDFA', border: '#99F6E4', text: '#0F766E' },
                     { label: 'EXECUTION', pct: workStats[work.id]?.execution ?? 0, bg: '#EFF6FF', border: '#BFDBFE', text: '#1D4ED8' },
                     { label: 'OVERALL',   pct: workStats[work.id]?.overall   ?? 0, bg: '#F5F3FF', border: '#C4B5FD', text: '#6D28D9' },
                     { label: 'FINANCIAL', pct: workStats[work.id]?.financial ?? 0, bg: '#FFFBEB', border: '#FDE68A', text: '#B45309' },
                   ]" :key="d.label"
-                    class="flex flex-col items-center px-2 py-1 rounded-md min-w-[48px]"
+                    class="flex flex-col items-center px-3 py-1.5 rounded-md min-w-[60px]"
                     :style="`background:${d.bg};border:1px solid ${d.border}`">
-                    <span class="text-[7px] font-semibold tracking-wider mb-0.5" :style="`color:${d.text};opacity:0.7`">{{ d.label }}</span>
-                    <span class="text-[11px] font-bold leading-none transition-all duration-[1500ms] ease-out"
+                    <span class="text-[9px] font-semibold tracking-wider mb-0.5" :style="`color:${d.text};opacity:0.7`">{{ d.label }}</span>
+                    <span class="text-[13px] font-bold leading-none transition-all duration-[1500ms] ease-out"
                       :style="`color:${d.text};opacity:${donutsVisible ? 1 : 0};transform:translateY(${donutsVisible ? 0 : 4}px)`">
                       {{ d.pct.toFixed(1) }}%
                     </span>
@@ -946,7 +946,7 @@ const generateWorkPDF = async () => {
                 <span class="text-gray-200">·</span>
                 <span><span class="text-gray-400 font-medium">Tender</span> <span class="font-semibold text-gray-800">{{ selectedWork.tender_number || '—' }}</span></span>
                 <span class="text-gray-200">·</span>
-                <span><span class="text-gray-400 font-medium">Consignee</span> <span class="font-semibold text-gray-800">{{ selectedWork.consignee || '—' }}</span></span>
+                <span><span class="text-gray-400 font-medium">Consignee</span> <span class="font-semibold text-gray-800">{{ selectedWork.consignee_display || selectedWork.consignee || '—' }}</span></span>
                 <span class="text-gray-200">·</span>
                 <span><span class="text-gray-400 font-medium">Completion</span> <span class="font-semibold text-gray-800">{{ fmtDate(selectedWork.date_of_completion) }}</span></span>
               </div>

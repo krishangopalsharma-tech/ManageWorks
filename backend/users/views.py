@@ -309,7 +309,8 @@ class AssignWorkView(APIView):
         if hrms_id:
             try:
                 new_user = User.objects.get(username=hrms_id)
-                work.consignee = new_user.first_name or new_user.username
+                profile = getattr(new_user, 'profile', None)
+                work.consignee = (profile.designation if profile and profile.designation else None) or new_user.first_name or new_user.username
             except User.DoesNotExist:
                 pass
         else:

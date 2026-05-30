@@ -632,7 +632,7 @@ const deleteWork = async () => {
                   <div class="flex items-center gap-3 flex-wrap mt-1">
                     <span class="text-[11px] font-semibold text-[#1D5F5E] bg-[#1D5F5E]/10 px-2 py-0.5 rounded-full">{{ work.loa_number || '—' }}</span>
                     <span class="text-[11px] text-gray-500">Tender: <span class="font-semibold text-gray-700">{{ work.tender_number || '—' }}</span></span>
-                    <span class="text-[11px] text-gray-500">Consignee: <span class="font-semibold text-gray-700">{{ work.consignee || '—' }}</span></span>
+                    <span class="text-[11px] text-gray-500">Consignee: <span class="font-semibold text-gray-700">{{ work.consignee_display || work.consignee || '—' }}</span></span>
                     <span class="text-[11px] text-gray-500">Completion: <span class="font-semibold text-gray-700">{{ fmtDate(work.date_of_completion) }}</span></span>
                   </div>
                 </div>
@@ -684,7 +684,7 @@ const deleteWork = async () => {
                   <span class="text-gray-200">·</span>
                   <span class="flex items-center gap-1.5 text-xs text-gray-500">
                     <span class="font-medium text-gray-400">Consignee</span>
-                    <span class="font-semibold text-gray-800">{{ selectedWork.consignee || '—' }}</span>
+                    <span class="font-semibold text-gray-800">{{ selectedWork.consignee_display || selectedWork.consignee || '—' }}</span>
                   </span>
                   <span class="text-gray-200">·</span>
                   <span class="flex items-center gap-1.5 text-xs text-gray-500">
