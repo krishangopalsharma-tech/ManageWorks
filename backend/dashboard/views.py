@@ -6,6 +6,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from works.models import Work, WorkItem, WorkItemEntry
+from works.utils import contractor_nickname as _nickname
 from mb_details.models import MBItem, MBRecord
 
 
@@ -75,10 +76,11 @@ class DashboardStatsView(APIView):
 
         loa_list = [
             {
-                'id':               w.id,
-                'label':            f"{w.tender_number or 'Unknown Tender'} | {w.loa_number or 'Unknown LOA'} | {w.contractor_name or 'Unknown'}",
-                'supply_update':    w.id in recent_supply_ids,
-                'execution_update': w.id in recent_exec_ids,
+                'id':                  w.id,
+                'label':               f"{w.tender_number or 'Unknown Tender'} | {w.loa_number or 'Unknown LOA'} | {w.contractor_name or 'Unknown'}",
+                'contractor_nickname': _nickname(w.contractor_name or ''),
+                'supply_update':       w.id in recent_supply_ids,
+                'execution_update':    w.id in recent_exec_ids,
             }
             for w in Work.objects.all()
         ]

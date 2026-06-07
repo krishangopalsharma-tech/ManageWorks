@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import axios from 'axios'
 import { Chart as ChartJS, Title, Tooltip, Legend, ArcElement, CategoryScale, LinearScale, BarElement } from 'chart.js'
 import { Doughnut, Bar } from 'vue-chartjs'
@@ -26,9 +26,14 @@ function hasUnseenUpdate(loa) {
   return (loa.supply_update || loa.execution_update) && !seenLoas.value.has(loa.id)
 }
 
-const filteredLoas = computed(() =>
-  loas.value.filter(l => l.label.toLowerCase().includes(searchQuery.value.toLowerCase()))
-)
+const filteredLoas = computed(() => {
+  const q = searchQuery.value.toLowerCase()
+  if (!q) return loas.value
+  return loas.value.filter(l =>
+    l.label.toLowerCase().includes(q) ||
+    (l.contractor_nickname && l.contractor_nickname.toLowerCase().includes(q))
+  )
+})
 
 const isAllSelected = computed(() => selectedLoas.value.length === 0)
 
@@ -186,14 +191,47 @@ const fetchTrend = async () => {
 
 watch(selectedLoas, () => { fetchStats(); fetchTrend() }, { deep: true })
 watch(activePeriod, () => fetchTrend())
-onMounted(() => { fetchStats(); fetchTrend() })
+// ── Drag-resize divider ────────────────────────────────────────────────────
+const STORAGE_KEY = 'mw_dashboard_left_pct'
+const leftPct  = ref(parseFloat(localStorage.getItem(STORAGE_KEY) || '60'))
+const isDragging = ref(false)
+const containerRef = ref(null)
+
+function onDividerMouseDown(e) {
+  e.preventDefault()
+  isDragging.value = true
+}
+function onMouseMove(e) {
+  if (!isDragging.value || !containerRef.value) return
+  const rect = containerRef.value.getBoundingClientRect()
+  const pct  = ((e.clientX - rect.left) / rect.width) * 100
+  leftPct.value = Math.min(Math.max(pct, 25), 75)
+}
+function onMouseUp() {
+  if (isDragging.value) {
+    isDragging.value = false
+    localStorage.setItem(STORAGE_KEY, leftPct.value.toFixed(1))
+  }
+}
+
+onMounted(() => {
+  fetchStats()
+  fetchTrend()
+  window.addEventListener('mousemove', onMouseMove)
+  window.addEventListener('mouseup', onMouseUp)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('mousemove', onMouseMove)
+  window.removeEventListener('mouseup', onMouseUp)
+})
 </script>
 
 <template>
-  <div class="h-full flex gap-6 animate-fade-in" style="animation-fill-mode: forwards;">
+  <div ref="containerRef" class="h-full flex animate-fade-in" style="animation-fill-mode: forwards;" :class="isDragging ? 'select-none cursor-col-resize' : ''">
 
     <!-- ── Left: Analytics Dashboard ─────────────────────────────────── -->
-    <div class="w-[60%] bg-light-surface rounded-2xl soft-shadow flex flex-col overflow-hidden">
+    <div class="bg-light-surface rounded-2xl soft-shadow flex flex-col overflow-hidden flex-shrink-0"
+      :style="{ width: leftPct + '%' }">
 
       <!-- Card header -->
       <div class="px-7 pt-6 pb-4 border-b border-gray-100 flex-shrink-0">
@@ -287,8 +325,15 @@ onMounted(() => { fetchStats(); fetchTrend() })
       </div>
     </div>
 
+    <!-- ── Drag divider ──────────────────────────────────────────────── -->
+    <div class="flex-shrink-0 flex items-center justify-center w-4 cursor-col-resize group mx-1"
+      @mousedown="onDividerMouseDown">
+      <div class="w-1 h-12 rounded-full transition-colors"
+        :class="isDragging ? 'bg-[#1D5F5E]' : 'bg-gray-200 group-hover:bg-[#1D5F5E]/50'"></div>
+    </div>
+
     <!-- ── Right: Work Context ───────────────────────────────────────── -->
-    <div class="w-[40%] bg-light-surface rounded-2xl soft-shadow flex flex-col overflow-hidden">
+    <div class="bg-light-surface rounded-2xl soft-shadow flex flex-col overflow-hidden flex-1 min-w-0">
 
       <div class="px-7 pt-6 pb-4 border-b border-gray-100 flex-shrink-0">
         <h2 class="text-base font-bold text-gray-800">Work Context</h2>
@@ -347,6 +392,7 @@ onMounted(() => { fetchStats(); fetchTrend() })
                     {{ loa.label.split(' | ')[1] || loa.label }}
                   </span>
                   <span class="text-[11px] font-semibold bg-sky-100 text-sky-950 px-2 py-0.5 rounded-full truncate max-w-[160px]">{{ loa.label.split(' | ')[2] || '—' }}</span>
+                  <span v-if="loa.contractor_nickname" class="text-[11px] font-semibold bg-[#fac9b8] text-[#7c3d2a] px-2 py-0.5 rounded-full truncate max-w-[120px]">{{ loa.contractor_nickname }}</span>
                   <span v-if="loa.label.split(' | ')[0]" class="text-[11px] font-semibold bg-amber-100 text-emerald-900 px-2 py-0.5 rounded-full truncate max-w-[160px]">{{ loa.label.split(' | ')[0] }}</span>
                 </div>
               </div>
