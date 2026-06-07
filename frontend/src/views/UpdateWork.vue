@@ -28,9 +28,15 @@ const romanOrdinal = (n) => {
   return `${n}th`
 }
 
+const supplyPct   = (item) => { const r = item.qty || 0; if (!r) return 0; return Math.min(Math.round((item.supplied_quantity || 0) / r * 100), 999) }
+const execPctItem = (item) => { const r = item.qty || 0; if (!r) return 0; return Math.min(Math.round((item.executed_quantity || 0) / r * 100), 999) }
+
 const progressPct = (item) => {
   const req = item.qty || 0
   if (!req) return 0
+  const cat = item.category || ''
+  if (cat === 'supply_installation' || cat === 'execution') return Math.min(Math.round((item.executed_quantity || 0) / req * 100), 999)
+  if (cat === 'supply') return Math.min(Math.round((item.supplied_quantity || 0) / req * 100), 999)
   const sch  = String(item.schedule || '').toUpperCase().trim()
   const done = sch.startsWith('B') ? (item.executed_quantity || 0) : (item.supplied_quantity || 0)
   return Math.min(Math.round((done / req) * 100), 999)
@@ -623,28 +629,29 @@ const deleteWork = async () => {
             <template v-if="searchQuery"> matching "{{ searchQuery }}"</template>
           </p>
           <div class="grid grid-cols-1 gap-3">
-            <div v-for="work in filteredWorks" :key="work.id"
-              class="bg-white border border-gray-200 hover:border-[#1D5F5E] hover:bg-[#1D5F5E]/5 px-5 py-4 rounded-xl transition-all group cursor-pointer"
+            <button v-for="work in filteredWorks" :key="work.id" type="button"
+              class="w-full text-left bg-white border border-gray-200 hover:border-[#1D5F5E] hover:bg-[#1D5F5E]/5 px-5 py-3 rounded-xl transition-all group cursor-pointer"
               @click="selectWork(work)">
               <div class="flex items-center justify-between gap-3">
                 <div class="min-w-0 flex-1">
-                  <p class="text-sm font-semibold text-gray-900 truncate">{{ work.contractor_name || '—' }}<span v-if="work.contractor_nickname" class="text-gray-400 font-normal"> ({{ work.contractor_nickname }})</span></p>
-                  <div class="flex items-center gap-3 flex-wrap mt-1">
-                    <span class="text-[11px] font-semibold text-[#1D5F5E] bg-[#1D5F5E]/10 px-2 py-0.5 rounded-full">{{ work.loa_number || '—' }}</span>
-                    <span class="text-[11px] text-gray-500">Tender: <span class="font-semibold text-gray-700">{{ work.tender_number || '—' }}</span></span>
+                  <div class="flex flex-wrap items-center gap-2 min-w-0">
+                    <span class="text-sm font-bold text-gray-900 shrink-0">{{ work.loa_number || '—' }}</span>
+                    <span class="text-[11px] font-semibold bg-sky-100 text-sky-950 px-2.5 py-0.5 rounded-full truncate max-w-[180px]">{{ work.contractor_name || '—' }}</span>
+                    <span v-if="work.contractor_nickname" class="text-[11px] font-semibold bg-[#fac9b8] text-[#7c3d2a] px-2.5 py-0.5 rounded-full truncate max-w-[140px]">{{ work.contractor_nickname }}</span>
+                    <span v-if="work.tender_number" class="text-[11px] font-semibold bg-amber-100 text-emerald-900 px-2.5 py-0.5 rounded-full truncate max-w-[180px]">{{ work.tender_number }}</span>
+                  </div>
+                  <div class="flex items-center gap-3 flex-wrap mt-1.5">
                     <span class="text-[11px] text-gray-500">Consignee: <span class="font-semibold text-gray-700">{{ work.consignee_display || work.consignee || '—' }}</span></span>
+                    <span class="text-gray-200">·</span>
                     <span class="text-[11px] text-gray-500">Completion: <span class="font-semibold text-gray-700">{{ fmtDate(work.date_of_completion) }}</span></span>
                   </div>
                 </div>
                 <div class="flex items-center gap-3 flex-shrink-0">
-                  <div class="text-right">
-                    <p class="text-sm font-bold text-gray-800">{{ work.items.length }}</p>
-                    <p class="text-[10px] text-gray-400">items</p>
-                  </div>
-                  <div class="text-right">
-                    <p class="text-sm font-bold text-gray-800">{{ work.items.reduce((s, i) => s + (i.entries || []).length, 0) }}</p>
-                    <p class="text-[10px] text-gray-400">entries</p>
-                  </div>
+                  <p class="text-xs text-gray-500 whitespace-nowrap">
+                    <span class="font-bold text-gray-800">{{ work.items.length }}</span> items
+                    <span class="text-gray-300 mx-1">·</span>
+                    <span class="font-bold text-gray-800">{{ work.items.reduce((s, i) => s + (i.entries || []).length, 0) }}</span> entries
+                  </p>
                   <button v-if="canModifyWork" @click.stop="openEditWork(work)"
                     class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#1D5F5E] hover:bg-[#174E4D] text-white text-xs font-semibold transition-colors">
                     <div class="i-carbon-edit text-xs"></div> Edit
@@ -652,7 +659,7 @@ const deleteWork = async () => {
                   <div class="i-carbon-chevron-right text-gray-300 group-hover:text-[#1D5F5E] transition-colors text-lg"></div>
                 </div>
               </div>
-            </div>
+            </button>
           </div>
         </div>
       </template>
@@ -669,19 +676,14 @@ const deleteWork = async () => {
                 <div class="i-carbon-arrow-left text-base"></div>
               </button>
               <div class="min-w-0">
-                <h2 class="text-xl font-bold text-gray-900 truncate">{{ selectedWork.contractor_name }}<span v-if="selectedWork.contractor_nickname" class="text-gray-400 font-normal text-base"> ({{ selectedWork.contractor_nickname }})</span></h2>
-                <p v-if="selectedWork.name_of_work" class="text-xs text-gray-600 mt-0.5 leading-snug max-w-2xl">{{ selectedWork.name_of_work }}</p>
+                <div class="flex flex-wrap items-center gap-2 min-w-0">
+                  <span class="text-xl font-bold text-gray-900 shrink-0">{{ selectedWork.loa_number || '—' }}</span>
+                  <span class="text-sm font-semibold bg-sky-100 text-sky-950 px-3 py-1 rounded-full truncate max-w-[260px]">{{ selectedWork.contractor_name }}</span>
+                  <span v-if="selectedWork.contractor_nickname" class="text-sm font-semibold bg-[#fac9b8] text-[#7c3d2a] px-3 py-1 rounded-full truncate max-w-[200px]">{{ selectedWork.contractor_nickname }}</span>
+                  <span v-if="selectedWork.tender_number" class="text-sm font-semibold bg-amber-100 text-emerald-900 px-3 py-1 rounded-full truncate max-w-[260px]">{{ selectedWork.tender_number }}</span>
+                </div>
+                <p v-if="selectedWork.name_of_work" class="text-xs text-gray-500 mt-1.5 leading-snug max-w-2xl">{{ selectedWork.name_of_work }}</p>
                 <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-2">
-                  <span class="flex items-center gap-1.5 text-xs text-gray-500">
-                    <span class="font-medium text-gray-400">LOA</span>
-                    <span class="font-semibold text-gray-800">{{ selectedWork.loa_number || '—' }}</span>
-                  </span>
-                  <span class="text-gray-200">·</span>
-                  <span class="flex items-center gap-1.5 text-xs text-gray-500">
-                    <span class="font-medium text-gray-400">Tender</span>
-                    <span class="font-semibold text-gray-800">{{ selectedWork.tender_number || '—' }}</span>
-                  </span>
-                  <span class="text-gray-200">·</span>
                   <span class="flex items-center gap-1.5 text-xs text-gray-500">
                     <span class="font-medium text-gray-400">Consignee</span>
                     <span class="font-semibold text-gray-800">{{ selectedWork.consignee_display || selectedWork.consignee || '—' }}</span>
@@ -765,17 +767,39 @@ const deleteWork = async () => {
                   {{ item.supplied_quantity || 0 }} <span class="font-normal text-gray-400">{{ item.unit }}</span>
                 </td>
                 <td class="px-4 py-3.5">
-                  <div class="flex items-center gap-2">
-                    <div class="flex-1 h-1.5 rounded-full overflow-hidden bg-gray-100">
-                      <div class="h-full rounded-full transition-all duration-500"
-                        :class="progressPct(item) > 100 ? 'bg-orange-400' : (String(item.schedule||'').toUpperCase().startsWith('B') ? 'bg-accent-b' : 'bg-accent')"
-                        :style="{ width: Math.min(progressPct(item), 100) + '%' }"></div>
+                  <!-- S+I: two stacked bars -->
+                  <template v-if="item.category === 'supply_installation'">
+                    <div class="flex flex-col gap-1">
+                      <div class="flex items-center gap-1.5">
+                        <div class="flex-1 h-1 rounded-full overflow-hidden bg-gray-100">
+                          <div class="h-full rounded-full transition-all duration-500 bg-teal-500"
+                            :style="{ width: Math.min(supplyPct(item), 100) + '%' }"></div>
+                        </div>
+                        <span class="text-[9px] font-bold w-7 text-right text-teal-600">{{ supplyPct(item) }}%</span>
+                      </div>
+                      <div class="flex items-center gap-1.5">
+                        <div class="flex-1 h-1 rounded-full overflow-hidden bg-gray-100">
+                          <div class="h-full rounded-full transition-all duration-500 bg-violet-500"
+                            :style="{ width: Math.min(execPctItem(item), 100) + '%' }"></div>
+                        </div>
+                        <span class="text-[9px] font-bold w-7 text-right text-violet-600">{{ execPctItem(item) }}%</span>
+                      </div>
                     </div>
-                    <span class="text-[10px] font-bold w-8 text-right"
-                      :class="progressPct(item) > 100 ? 'text-orange-500' : 'text-gray-500'">
-                      {{ progressPct(item) }}%
-                    </span>
-                  </div>
+                  </template>
+                  <!-- Normal: single bar -->
+                  <template v-else>
+                    <div class="flex items-center gap-2">
+                      <div class="flex-1 h-1.5 rounded-full overflow-hidden bg-gray-100">
+                        <div class="h-full rounded-full transition-all duration-500"
+                          :class="progressPct(item) > 100 ? 'bg-orange-400' : (String(item.schedule||'').toUpperCase().startsWith('B') ? 'bg-accent-b' : 'bg-accent')"
+                          :style="{ width: Math.min(progressPct(item), 100) + '%' }"></div>
+                      </div>
+                      <span class="text-[10px] font-bold w-8 text-right"
+                        :class="progressPct(item) > 100 ? 'text-orange-500' : 'text-gray-500'">
+                        {{ progressPct(item) }}%
+                      </span>
+                    </div>
+                  </template>
                 </td>
                 <td class="px-4 py-3.5 text-center">
                   <button @click="openLotPopup(item)"
@@ -946,16 +970,38 @@ const deleteWork = async () => {
                   <div class="w-px h-8 bg-gray-100"></div>
                   <div class="flex flex-col flex-1">
                     <span class="text-[10px] font-medium text-gray-400 uppercase tracking-wide mb-1.5">Progress</span>
-                    <div class="flex items-center gap-2">
-                      <div class="flex-1 h-2 rounded-full overflow-hidden bg-gray-100">
-                        <div class="h-full rounded-full transition-all duration-500"
-                          :class="progressPct(lotPopupItem) > 100 ? 'bg-orange-400' : (popupIsSchA ? 'bg-accent' : 'bg-accent-b')"
-                          :style="{ width: Math.min(progressPct(lotPopupItem), 100) + '%' }"></div>
+                    <!-- S+I popup: two stacked bars -->
+                    <template v-if="lotPopupItem.category === 'supply_installation'">
+                      <div class="flex flex-col gap-1.5">
+                        <div class="flex items-center gap-2">
+                          <div class="flex-1 h-1.5 rounded-full overflow-hidden bg-gray-100">
+                            <div class="h-full rounded-full transition-all duration-500 bg-teal-500"
+                              :style="{ width: Math.min(supplyPct(lotPopupItem), 100) + '%' }"></div>
+                          </div>
+                          <span class="text-[10px] font-bold w-10 text-right text-teal-600">{{ supplyPct(lotPopupItem) }}% <span class="font-normal text-gray-400">sup</span></span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                          <div class="flex-1 h-1.5 rounded-full overflow-hidden bg-gray-100">
+                            <div class="h-full rounded-full transition-all duration-500 bg-violet-500"
+                              :style="{ width: Math.min(execPctItem(lotPopupItem), 100) + '%' }"></div>
+                          </div>
+                          <span class="text-[10px] font-bold w-10 text-right text-violet-600">{{ execPctItem(lotPopupItem) }}% <span class="font-normal text-gray-400">exe</span></span>
+                        </div>
                       </div>
-                      <span class="text-xs font-bold w-10 text-right" :class="progressPct(lotPopupItem) > 100 ? 'text-orange-500' : 'text-gray-600'">
-                        {{ progressPct(lotPopupItem) }}%
-                      </span>
-                    </div>
+                    </template>
+                    <!-- Normal single bar -->
+                    <template v-else>
+                      <div class="flex items-center gap-2">
+                        <div class="flex-1 h-2 rounded-full overflow-hidden bg-gray-100">
+                          <div class="h-full rounded-full transition-all duration-500"
+                            :class="progressPct(lotPopupItem) > 100 ? 'bg-orange-400' : (popupIsSchA ? 'bg-accent' : 'bg-accent-b')"
+                            :style="{ width: Math.min(progressPct(lotPopupItem), 100) + '%' }"></div>
+                        </div>
+                        <span class="text-xs font-bold w-10 text-right" :class="progressPct(lotPopupItem) > 100 ? 'text-orange-500' : 'text-gray-600'">
+                          {{ progressPct(lotPopupItem) }}%
+                        </span>
+                      </div>
+                    </template>
                   </div>
                 </div>
               </div>

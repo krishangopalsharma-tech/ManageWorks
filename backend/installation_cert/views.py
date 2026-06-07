@@ -25,6 +25,13 @@ from .models import GeneratedCertificate
 EXCLUDED_CATEGORIES = {WorkItem.CATEGORY_SUPPLY}
 
 
+def _is_admin(user):
+    if user.is_staff:
+        return True
+    profile = getattr(user, 'profile', None)
+    return profile is not None and profile.role == 'admin'
+
+
 def _all_works():
     """All works — any consignee can generate a certificate for any LOA."""
     return Work.objects.all()
@@ -132,6 +139,9 @@ class EntriesPreviewView(APIView):
             .exclude(work_item__category__in=list(EXCLUDED_CATEGORIES))
             .select_related('work_item')
         )
+
+        if not _is_admin(request.user):
+            qs = qs.filter(submitted_by=request.user)
 
         if item_id:
             qs = qs.filter(work_item_id=item_id)

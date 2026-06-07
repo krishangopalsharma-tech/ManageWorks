@@ -456,10 +456,13 @@ onMounted(() => {
                 class="w-full text-left bg-white border border-gray-200 hover:border-[#1D5F5E] hover:bg-[#1D5F5E]/5 px-4 py-3 transition-all group rounded-xl">
                 <div class="flex items-center justify-between gap-3">
                   <div class="min-w-0">
-                    <p class="text-sm font-semibold text-gray-900 truncate">{{ w.contractor_name || '—' }}<span v-if="w.contractor_nickname" class="text-gray-400 font-normal"> ({{ w.contractor_nickname }})</span></p>
-                    <div class="flex items-center gap-3 flex-wrap mt-1">
-                      <span class="text-[11px] font-semibold text-[#1D5F5E] bg-[#1D5F5E]/10 px-2 py-0.5 rounded-full">{{ w.loa_number || '—' }}</span>
-                      <span class="text-[11px] text-gray-500">Tender: <span class="font-semibold text-gray-700">{{ w.tender_number || '—' }}</span></span>
+                    <div class="flex flex-wrap items-center gap-2 min-w-0">
+                      <span class="text-sm font-bold text-gray-900 shrink-0">{{ w.loa_number || '—' }}</span>
+                      <span class="text-[11px] font-semibold bg-sky-100 text-sky-950 px-2.5 py-0.5 rounded-full truncate max-w-[180px]">{{ w.contractor_name || '—' }}</span>
+                      <span v-if="w.contractor_nickname" class="text-[11px] font-semibold bg-[#fac9b8] text-[#7c3d2a] px-2.5 py-0.5 rounded-full truncate max-w-[140px]">{{ w.contractor_nickname }}</span>
+                      <span v-if="w.tender_number" class="text-[11px] font-semibold bg-amber-100 text-emerald-900 px-2.5 py-0.5 rounded-full truncate max-w-[180px]">{{ w.tender_number }}</span>
+                    </div>
+                    <div class="flex items-center gap-3 flex-wrap mt-1.5">
                       <span class="text-[11px] text-gray-500">Consignee: <span class="font-semibold text-gray-700">{{ w.consignee_display || w.consignee || '—' }}</span></span>
                     </div>
                   </div>
@@ -485,7 +488,12 @@ onMounted(() => {
           </button>
           <div class="min-w-0">
             <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Selected Work</p>
-            <p class="text-sm font-bold text-gray-900">{{ selectedWork?.contractor_name }} · <span class="text-[#1D5F5E]">{{ selectedWork?.loa_number }}</span></p>
+            <div class="flex flex-wrap items-center gap-2 min-w-0 mt-0.5">
+              <span class="text-sm font-bold text-gray-900 shrink-0">{{ selectedWork?.loa_number }}</span>
+              <span class="text-xs font-semibold bg-sky-100 text-sky-950 px-2.5 py-0.5 rounded-full truncate max-w-[200px]">{{ selectedWork?.contractor_name }}</span>
+              <span v-if="selectedWork?.contractor_nickname" class="text-xs font-semibold bg-[#fac9b8] text-[#7c3d2a] px-2.5 py-0.5 rounded-full truncate max-w-[160px]">{{ selectedWork?.contractor_nickname }}</span>
+              <span v-if="selectedWork?.tender_number" class="text-xs font-semibold bg-amber-100 text-emerald-900 px-2.5 py-0.5 rounded-full truncate max-w-[200px]">{{ selectedWork?.tender_number }}</span>
+            </div>
             <p v-if="selectedWork?.name_of_work" class="text-xs text-gray-500 mt-0.5 leading-snug max-w-2xl">{{ selectedWork.name_of_work }}</p>
           </div>
         </div>

@@ -446,12 +446,14 @@ const onResizerMousedown = (e) => {
           >
             <div class="i-carbon-document text-2xl shrink-0" style="color: var(--color-accent);"></div>
             <div class="flex-1 min-w-0">
-              <div class="flex flex-wrap items-baseline gap-x-4 gap-y-0.5">
-                <span class="text-sm font-bold" style="color: var(--color-text-primary);">{{ loa.loa_number }}</span>
-                <span class="text-xs" style="color: var(--color-text-secondary);"><span class="font-medium">Tender:</span> {{ loa.tender_number }}</span>
+              <div class="flex flex-wrap items-center gap-2 min-w-0">
+                <span class="text-sm font-bold shrink-0" style="color: var(--color-text-primary);">{{ loa.loa_number }}</span>
+                <span class="text-[11px] font-semibold bg-sky-100 text-sky-950 px-2.5 py-0.5 rounded-full truncate max-w-[180px]">{{ loa.contractor_name }}</span>
+                <span v-if="loa.tender_number" class="text-[11px] font-semibold bg-amber-100 text-emerald-900 px-2.5 py-0.5 rounded-full truncate max-w-[180px]">{{ loa.tender_number }}</span>
+              </div>
+              <div class="flex items-center gap-3 flex-wrap mt-1.5">
                 <span class="text-xs" style="color: var(--color-text-secondary);"><span class="font-medium">Date:</span> {{ fmtDate(loa.loa_date) }}</span>
               </div>
-              <div class="mt-0.5 text-xs font-medium truncate" style="color: var(--color-text-secondary);">{{ loa.contractor_name }}</div>
               <div class="mt-0.5 text-xs truncate" style="color: var(--color-text-tertiary);">{{ loa.name_of_work }}</div>
             </div>
             <div class="i-carbon-chevron-right text-lg shrink-0" style="color: var(--color-text-tertiary);"></div>
@@ -467,13 +469,14 @@ const onResizerMousedown = (e) => {
           <button @click="backToList" class="flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors" style="color: var(--color-text-secondary);">
             <div class="i-carbon-arrow-left text-base"></div> All Works
           </button>
-          <span class="text-sm font-semibold truncate" style="color: var(--color-text-primary);">{{ selectedLoa?.loa_number }}</span>
-          <span class="text-xs px-2 py-0.5 rounded-full shrink-0" style="background: var(--color-surface-secondary); color: var(--color-text-secondary);">{{ selectedLoa?.contractor_name }}</span>
+          <span class="text-sm font-bold text-gray-900 shrink-0">{{ selectedLoa?.loa_number }}</span>
+          <span class="text-[11px] font-semibold bg-sky-100 text-sky-950 px-2.5 py-0.5 rounded-full truncate max-w-[200px]">{{ selectedLoa?.contractor_name }}</span>
+          <span v-if="selectedLoa?.tender_number" class="text-[11px] font-semibold bg-amber-100 text-emerald-900 px-2.5 py-0.5 rounded-full truncate max-w-[200px]">{{ selectedLoa?.tender_number }}</span>
         </div>
 
         <!-- LOA info strip -->
         <div class="px-5 py-2 flex flex-wrap gap-x-6 gap-y-0.5 text-xs border-b shrink-0" style="background: var(--color-surface-secondary); border-color: var(--color-separator);">
-          <span><b style="color: var(--color-text-secondary);">Tender:</b> <span style="color: var(--color-text-primary);">{{ selectedLoa?.tender_number }}</span></span>
+          <span><b style="color: var(--color-text-secondary);">Tender:</b> <span style="color: var(--color-text-primary);">{{ selectedLoa?.tender_number || '—' }}</span></span>
           <span><b style="color: var(--color-text-secondary);">Date:</b> <span style="color: var(--color-text-primary);">{{ fmtDate(selectedLoa?.loa_date) }}</span></span>
           <span class="truncate"><b style="color: var(--color-text-secondary);">Work:</b> <span style="color: var(--color-text-primary);">{{ selectedLoa?.name_of_work }}</span></span>
         </div>

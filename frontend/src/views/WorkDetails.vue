@@ -43,6 +43,13 @@ const searchQuery  = ref('')
 const itemFilter   = ref('')
 const expandedId   = ref(null)
 const sortKey      = ref('')
+const wdProgressMin   = ref(0)
+const wdProgressMax   = ref(100)
+const wdIncludeExcess = ref(true)
+const wdProgressFilterActive = computed(() => wdProgressMin.value > 0 || wdProgressMax.value < 100 || !wdIncludeExcess.value)
+const resetWdProgress  = () => { wdProgressMin.value = 0; wdProgressMax.value = 100; wdIncludeExcess.value = true }
+const onWdMinInput     = () => { if (wdProgressMin.value > wdProgressMax.value) wdProgressMax.value = wdProgressMin.value }
+const onWdMaxInput     = () => { if (wdProgressMax.value < wdProgressMin.value) wdProgressMin.value = wdProgressMax.value }
 const sortDir      = ref('desc')
 const activeTab    = ref('analytics')
 const donutsVisible = ref(false)
@@ -116,18 +123,34 @@ const filteredWorks = computed(() => {
 
 const filteredItems = computed(() => {
   if (!selectedWork.value) return []
-  if (!itemFilter.value.trim()) return selectedWork.value.items
-  const q = itemFilter.value.toLowerCase()
-  return selectedWork.value.items.filter(i =>
-    (i.schedule  && i.schedule.toLowerCase().includes(q)) ||
-    (i.item_desc && i.item_desc.toLowerCase().includes(q))
-  )
+  const q = itemFilter.value.toLowerCase().trim()
+  let items = q
+    ? selectedWork.value.items.filter(i =>
+        (i.schedule  && i.schedule.toLowerCase().includes(q)) ||
+        (i.item_desc && i.item_desc.toLowerCase().includes(q))
+      )
+    : selectedWork.value.items
+  if (!wdProgressFilterActive.value) return items
+  const min = wdProgressMin.value
+  const max = wdProgressMax.value
+  const excess = wdIncludeExcess.value
+  return items.filter(i => {
+    const pct = progressPct(i)
+    if (pct > 100) return excess
+    return pct >= min && pct <= max
+  })
 })
 
 // ── Progress ──────────────────────────────────────────────────────────────
+const supplyPct   = (item) => { const r = item.qty || 0; if (!r) return 0; return Math.min(Math.round((item.supplied_quantity || 0) / r * 100), 999) }
+const execPctItem = (item) => { const r = item.qty || 0; if (!r) return 0; return Math.min(Math.round((item.executed_quantity || 0) / r * 100), 999) }
+
 const progressPct = (item) => {
   const req  = item.qty || 0
   if (!req) return 0
+  const cat = item.category || ''
+  if (cat === 'supply_installation' || cat === 'execution') return Math.min(Math.round((item.executed_quantity || 0) / req * 100), 999)
+  if (cat === 'supply') return Math.min(Math.round((item.supplied_quantity || 0) / req * 100), 999)
   const sch  = String(item.schedule || '').toUpperCase().trim()
   const done = sch.startsWith('B') ? (item.executed_quantity || 0) : (item.supplied_quantity || 0)
   return Math.min(Math.round((done / req) * 100), 999)
@@ -159,6 +182,7 @@ const selectWork = (work) => {
   expandedId.value   = null
   sortKey.value      = ''
   activeTab.value    = 'analytics'
+  resetWdProgress()
   selectedWork.value = work
 }
 
@@ -885,11 +909,15 @@ const generateWorkPDF = async () => {
               <div class="flex items-center gap-4">
                 <!-- Left: name + metadata -->
                 <div class="min-w-0 flex-1">
-                  <p class="text-sm font-semibold text-gray-900 truncate">{{ work.contractor_name || '—' }}<span v-if="work.contractor_nickname" class="text-gray-400 font-normal"> ({{ work.contractor_nickname }})</span></p>
-                  <div class="flex items-center gap-3 flex-wrap mt-1">
-                    <span class="text-[11px] font-semibold text-[#1D5F5E] bg-[#1D5F5E]/10 px-2 py-0.5 rounded-full">{{ work.loa_number || '—' }}</span>
-                    <span class="text-[11px] text-gray-500">Tender: <span class="font-semibold text-gray-700">{{ work.tender_number || '—' }}</span></span>
+                  <div class="flex flex-wrap items-center gap-2 min-w-0">
+                    <span class="text-sm font-bold text-gray-900 shrink-0">{{ work.loa_number || '—' }}</span>
+                    <span class="text-[11px] font-semibold bg-sky-100 text-sky-950 px-2.5 py-0.5 rounded-full truncate max-w-[180px]">{{ work.contractor_name || '—' }}</span>
+                    <span v-if="work.contractor_nickname" class="text-[11px] font-semibold bg-[#fac9b8] text-[#7c3d2a] px-2.5 py-0.5 rounded-full truncate max-w-[140px]">{{ work.contractor_nickname }}</span>
+                    <span v-if="work.tender_number" class="text-[11px] font-semibold bg-amber-100 text-emerald-900 px-2.5 py-0.5 rounded-full truncate max-w-[180px]">{{ work.tender_number }}</span>
+                  </div>
+                  <div class="flex items-center gap-3 flex-wrap mt-1.5">
                     <span class="text-[11px] text-gray-500">Consignee: <span class="font-semibold text-gray-700">{{ work.consignee_display || work.consignee || '—' }}</span></span>
+                    <span class="text-gray-200">·</span>
                     <span class="text-[11px] text-gray-500">Completion: <span class="font-semibold text-gray-700">{{ fmtDate(work.date_of_completion) }}</span></span>
                   </div>
                 </div>
@@ -939,13 +967,14 @@ const generateWorkPDF = async () => {
               <div class="i-carbon-arrow-left text-base"></div>
             </button>
             <div class="min-w-0 flex-1">
-              <h2 class="text-xl font-bold text-gray-900 truncate">{{ selectedWork.contractor_name }}<span v-if="selectedWork.contractor_nickname" class="text-gray-400 font-normal text-base"> ({{ selectedWork.contractor_nickname }})</span></h2>
-              <p v-if="selectedWork.name_of_work" class="text-xs text-gray-500 mt-0.5 leading-snug max-w-3xl">{{ selectedWork.name_of_work }}</p>
+              <div class="flex flex-wrap items-center gap-2 min-w-0">
+                <span class="text-xl font-bold text-gray-900 shrink-0">{{ selectedWork.loa_number || '—' }}</span>
+                <span class="text-sm font-semibold bg-sky-100 text-sky-950 px-3 py-1 rounded-full truncate max-w-[260px]">{{ selectedWork.contractor_name }}</span>
+                <span v-if="selectedWork.contractor_nickname" class="text-sm font-semibold bg-[#fac9b8] text-[#7c3d2a] px-3 py-1 rounded-full truncate max-w-[200px]">{{ selectedWork.contractor_nickname }}</span>
+                <span v-if="selectedWork.tender_number" class="text-sm font-semibold bg-amber-100 text-emerald-900 px-3 py-1 rounded-full truncate max-w-[260px]">{{ selectedWork.tender_number }}</span>
+              </div>
+              <p v-if="selectedWork.name_of_work" class="text-xs text-gray-500 mt-1.5 leading-snug max-w-3xl">{{ selectedWork.name_of_work }}</p>
               <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 text-xs text-gray-500">
-                <span><span class="text-gray-400 font-medium">LOA</span> <span class="font-semibold text-gray-800">{{ selectedWork.loa_number || '—' }}</span></span>
-                <span class="text-gray-200">·</span>
-                <span><span class="text-gray-400 font-medium">Tender</span> <span class="font-semibold text-gray-800">{{ selectedWork.tender_number || '—' }}</span></span>
-                <span class="text-gray-200">·</span>
                 <span><span class="text-gray-400 font-medium">Consignee</span> <span class="font-semibold text-gray-800">{{ selectedWork.consignee_display || selectedWork.consignee || '—' }}</span></span>
                 <span class="text-gray-200">·</span>
                 <span><span class="text-gray-400 font-medium">Completion</span> <span class="font-semibold text-gray-800">{{ fmtDate(selectedWork.date_of_completion) }}</span></span>
@@ -1133,17 +1162,48 @@ const generateWorkPDF = async () => {
         <!-- ══ ITEMS & LEVEL TRACKING TAB ════════════════════════════ -->
         <div v-else class="flex flex-col flex-1 overflow-hidden">
 
-          <!-- Filter bar -->
+          <!-- Filter bar — single row -->
           <div class="flex-shrink-0 px-6 py-3 border-b border-gray-100 flex items-center gap-3">
-            <div class="flex items-center bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 flex-1 max-w-xs focus-within:ring-2 focus-within:ring-[#1D5F5E]/20 focus-within:border-[#1D5F5E] transition-all">
-              <div class="i-carbon-filter text-gray-400 mr-2 text-sm"></div>
+            <!-- Text filter -->
+            <div class="flex items-center bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 flex-1 max-w-xs focus-within:ring-2 focus-within:ring-[#1D5F5E]/20 focus-within:border-[#1D5F5E] transition-all flex-shrink-0">
+              <div class="i-carbon-filter text-gray-400 mr-2 text-sm flex-shrink-0"></div>
               <input v-model="itemFilter" type="text" placeholder="Filter items..."
                 class="bg-transparent outline-none w-full text-xs text-gray-700 placeholder-gray-400 font-medium">
             </div>
-            <button @click="sortKey = ''; itemFilter = ''" class="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-500 hover:bg-gray-50 transition-colors flex items-center gap-1">
+
+            <!-- Progress slider -->
+            <div class="flex items-center gap-2 w-100 flex-shrink-0">
+              <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex-shrink-0">Progress</span>
+              <span class="text-[11px] font-bold text-gray-600 w-7 text-right flex-shrink-0 tabular-nums">{{ wdProgressMin }}%</span>
+              <div class="relative flex-1 h-5 flex items-center" style="min-width:80px">
+                <div class="absolute w-full h-1.5 bg-gray-200 rounded-full"></div>
+                <div class="absolute h-1.5 bg-[#1D5F5E] rounded-full pointer-events-none"
+                  :style="{ left: wdProgressMin + '%', width: (wdProgressMax - wdProgressMin) + '%' }"></div>
+                <input type="range" min="0" max="100" step="1" v-model.number="wdProgressMin"
+                  @input="onWdMinInput" class="progress-thumb absolute w-full">
+                <input type="range" min="0" max="100" step="1" v-model.number="wdProgressMax"
+                  @input="onWdMaxInput" class="progress-thumb absolute w-full">
+              </div>
+              <span class="text-[11px] font-bold text-gray-600 w-8 flex-shrink-0 tabular-nums">{{ wdProgressMax }}%</span>
+            </div>
+
+            <!-- Excess toggle -->
+            <button @click="wdIncludeExcess = !wdIncludeExcess"
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all flex-shrink-0"
+              :class="wdIncludeExcess
+                ? 'bg-orange-50 border-orange-300 text-orange-700'
+                : 'bg-white border-gray-200 text-gray-400 line-through'">
+              <div class="i-carbon-overflow-menu-horizontal text-[11px]"></div>
+              +Excess
+            </button>
+
+            <!-- Reset -->
+            <button @click="sortKey = ''; itemFilter = ''; resetWdProgress()" class="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-500 hover:bg-gray-50 transition-colors flex items-center gap-1 flex-shrink-0">
               <div class="i-carbon-reset text-xs"></div> Reset
             </button>
-            <div class="ml-auto text-[11px] text-gray-400 font-medium">
+
+            <!-- Count -->
+            <div class="text-[11px] text-gray-400 font-medium flex-shrink-0">
               {{ sortedItems.length }} item{{ sortedItems.length !== 1 ? 's' : '' }}
             </div>
           </div>
@@ -1205,18 +1265,40 @@ const generateWorkPDF = async () => {
                       <span v-if="(item.supplied_quantity || 0) > (item.qty || 0)" class="ml-1 text-[9px] text-orange-400 font-bold">OVER</span>
                     </td>
                     <td class="px-4 py-3">
-                      <div class="flex items-center gap-2">
-                        <div class="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                          <div class="h-full rounded-full transition-all duration-500"
-                            :class="progressPct(item) > 100 ? 'bg-orange-400' : 'bg-[#1D5F5E]'"
-                            :style="{ width: Math.min(progressPct(item), 100) + '%' }">
+                      <!-- S+I: two stacked bars -->
+                      <template v-if="item.category === 'supply_installation'">
+                        <div class="flex flex-col gap-1">
+                          <div class="flex items-center gap-1.5">
+                            <div class="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
+                              <div class="h-full rounded-full transition-all duration-500 bg-teal-500"
+                                :style="{ width: Math.min(supplyPct(item), 100) + '%' }"></div>
+                            </div>
+                            <span class="text-[9px] font-bold w-7 text-right text-teal-600">{{ supplyPct(item) }}%</span>
+                          </div>
+                          <div class="flex items-center gap-1.5">
+                            <div class="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
+                              <div class="h-full rounded-full transition-all duration-500 bg-violet-500"
+                                :style="{ width: Math.min(execPctItem(item), 100) + '%' }"></div>
+                            </div>
+                            <span class="text-[9px] font-bold w-7 text-right text-violet-600">{{ execPctItem(item) }}%</span>
                           </div>
                         </div>
-                        <span class="text-[10px] font-bold w-8 text-right"
-                          :class="progressPct(item) > 100 ? 'text-orange-500' : progressPct(item) >= 99 ? 'text-[#1D5F5E]' : 'text-gray-500'">
-                          {{ progressPct(item) }}%
-                        </span>
-                      </div>
+                      </template>
+                      <!-- Normal: single bar -->
+                      <template v-else>
+                        <div class="flex items-center gap-2">
+                          <div class="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div class="h-full rounded-full transition-all duration-500"
+                              :class="progressPct(item) > 100 ? 'bg-orange-400' : 'bg-[#1D5F5E]'"
+                              :style="{ width: Math.min(progressPct(item), 100) + '%' }">
+                            </div>
+                          </div>
+                          <span class="text-[10px] font-bold w-8 text-right"
+                            :class="progressPct(item) > 100 ? 'text-orange-500' : progressPct(item) >= 99 ? 'text-[#1D5F5E]' : 'text-gray-500'">
+                            {{ progressPct(item) }}%
+                          </span>
+                        </div>
+                      </template>
                     </td>
                     <td class="px-4 py-3 text-center">
                       <div class="flex items-center justify-center gap-1">
@@ -1328,4 +1410,42 @@ const generateWorkPDF = async () => {
 <style scoped>
 @keyframes fade-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 .animate-fade-in { animation: fade-in 0.25s cubic-bezier(.4,0,.2,1); }
+
+.progress-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  pointer-events: none;
+  height: 6px;
+  position: absolute;
+  width: 100%;
+  margin: 0;
+}
+.progress-thumb::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #1D5F5E;
+  border: 2.5px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+  cursor: pointer;
+  pointer-events: all;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+.progress-thumb::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  box-shadow: 0 2px 8px rgba(29,95,94,0.35);
+}
+.progress-thumb::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #1D5F5E;
+  border: 2.5px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+  cursor: pointer;
+  pointer-events: all;
+}
 </style>

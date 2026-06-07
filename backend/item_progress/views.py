@@ -20,19 +20,21 @@ class WorkListView(APIView):
 
 class ItemSearchView(APIView):
     """
-    GET /api/item-progress/search/?q=cable&work_ids=1,2,3
-    Returns WorkItems matching the query, optionally filtered to specific works.
-    At least one character in `q` is required to prevent returning all items.
+    GET /api/item-progress/search/?work_ids=1,2,3         — all items for those works
+    GET /api/item-progress/search/?work_ids=1,2&q=cable   — filtered by q within those works
+    Requires at least work_ids OR q. Both empty → returns [].
     """
 
     def get(self, request):
         if not request.user.is_authenticated:
             return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
-        q = request.query_params.get('q', '').strip()
-        if not q:
+
+        q              = request.query_params.get('q', '').strip()
+        work_ids_param = request.query_params.get('work_ids', '').strip()
+
+        if not q and not work_ids_param:
             return Response([])
 
-        work_ids_param = request.query_params.get('work_ids', '')
         queryset = WorkItem.objects.select_related('work').prefetch_related('entries__submitted_by__profile')
 
         if work_ids_param:
@@ -42,19 +44,20 @@ class ItemSearchView(APIView):
             except ValueError:
                 pass
 
-        queryset = queryset.filter(
-            Q(item_desc__icontains=q) |
-            Q(schedule__icontains=q) |
-            Q(serial_number__icontains=q)
-        )
+        if q:
+            queryset = queryset.filter(
+                Q(item_desc__icontains=q) |
+                Q(schedule__icontains=q) |
+                Q(serial_number__icontains=q)
+            )
 
         data = []
         for item in queryset:
             serialized = WorkItemSerializer(item).data
-            serialized['loa_number']         = item.work.loa_number or '—'
-            serialized['contractor_name']    = item.work.contractor_name or '—'
+            serialized['loa_number']          = item.work.loa_number or '—'
+            serialized['contractor_name']     = item.work.contractor_name or '—'
             serialized['contractor_nickname'] = _nickname(item.work.contractor_name or '')
-            serialized['tender_number']      = item.work.tender_number or '—'
+            serialized['tender_number']       = item.work.tender_number or '—'
             data.append(serialized)
 
         return Response(data)

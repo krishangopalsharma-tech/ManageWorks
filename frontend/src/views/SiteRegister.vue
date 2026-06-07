@@ -403,40 +403,35 @@ async function exportPdf() {
             <template v-if="searchQuery"> matching "{{ searchQuery }}"</template>
           </p>
           <div class="grid grid-cols-1 gap-3">
-            <div v-for="work in filteredWorks" :key="work.work_id"
-              class="bg-white border border-gray-200 hover:border-[#1D5F5E] hover:bg-[#1D5F5E]/5 px-5 py-4 rounded-xl transition-all group cursor-pointer"
+            <button v-for="work in filteredWorks" :key="work.work_id" type="button"
+              class="w-full text-left bg-white border border-gray-200 hover:border-[#1D5F5E] hover:bg-[#1D5F5E]/5 px-5 py-3 rounded-xl transition-all group cursor-pointer"
               @click="selectWork(work)">
               <div class="flex items-center justify-between gap-3">
                 <div class="min-w-0 flex-1">
-                  <p class="text-sm font-semibold text-gray-900 truncate">{{ work.contractor_name || '—' }}<span v-if="work.contractor_nickname" class="text-gray-400 font-normal"> ({{ work.contractor_nickname }})</span></p>
-                  <div class="flex items-center gap-3 flex-wrap mt-1">
-                    <span class="text-[11px] font-semibold text-[#1D5F5E] bg-[#1D5F5E]/10 px-2 py-0.5 rounded-full">
-                      {{ work.loa_number || '—' }}
-                    </span>
-                    <span class="text-[11px] text-gray-500">
-                      Tender: <span class="font-semibold text-gray-700">{{ work.tender_number || '—' }}</span>
-                    </span>
+                  <div class="flex flex-wrap items-center gap-2 min-w-0">
+                    <span class="text-sm font-bold text-gray-900 shrink-0">{{ work.loa_number || '—' }}</span>
+                    <span class="text-[11px] font-semibold bg-sky-100 text-sky-950 px-2.5 py-0.5 rounded-full truncate max-w-[180px]">{{ work.contractor_name || '—' }}</span>
+                    <span v-if="work.contractor_nickname" class="text-[11px] font-semibold bg-[#fac9b8] text-[#7c3d2a] px-2.5 py-0.5 rounded-full truncate max-w-[140px]">{{ work.contractor_nickname }}</span>
+                    <span v-if="work.tender_number" class="text-[11px] font-semibold bg-amber-100 text-emerald-900 px-2.5 py-0.5 rounded-full truncate max-w-[180px]">{{ work.tender_number }}</span>
+                  </div>
+                  <div class="flex items-center gap-3 flex-wrap mt-1.5">
                     <span class="text-[11px] text-gray-500">
                       Consignee: <span class="font-semibold text-gray-700">{{ work.consignee || '—' }}</span>
                     </span>
+                    <span class="text-gray-200">·</span>
                     <span class="text-[11px] text-gray-500">
                       Completion: <span class="font-semibold text-gray-700">{{ fmtDate(work.date_of_completion) }}</span>
                     </span>
                   </div>
                 </div>
-                <div class="flex items-center gap-4 flex-shrink-0">
-                  <div class="text-right">
-                    <p class="text-sm font-bold text-gray-800">{{ work.thread_count || 0 }}</p>
-                    <p class="text-[10px] text-gray-400">SR entries</p>
-                  </div>
-                  <div class="text-right">
-                    <p class="text-sm font-bold text-gray-800">{{ work.items.length }}</p>
-                    <p class="text-[10px] text-gray-400">items</p>
-                  </div>
+                <div class="flex items-center gap-3 flex-shrink-0">
+                  <p class="text-xs text-gray-500 whitespace-nowrap">
+                    <span class="font-bold text-gray-800">{{ work.thread_count || 0 }}</span> SR entries
+                  </p>
                   <div class="i-carbon-chevron-right text-gray-300 group-hover:text-[#1D5F5E] transition-colors text-lg"></div>
                 </div>
               </div>
-            </div>
+            </button>
           </div>
         </div>
       </template>
@@ -576,21 +571,16 @@ async function exportPdf() {
               <div class="i-carbon-arrow-left text-base"></div>
             </button>
             <div class="min-w-0 flex-1">
-              <h2 class="text-xl font-bold text-gray-900 truncate">{{ selectedWork.contractor_name }}<span v-if="selectedWork.contractor_nickname" class="text-gray-400 font-normal text-base"> ({{ selectedWork.contractor_nickname }})</span></h2>
-              <p v-if="selectedWork.name_of_work" class="text-xs text-gray-600 mt-0.5 leading-snug max-w-2xl">
+              <div class="flex flex-wrap items-center gap-2 min-w-0">
+                <span class="text-xl font-bold text-gray-900 shrink-0">{{ selectedWork.loa_number || '—' }}</span>
+                <span class="text-sm font-semibold bg-sky-100 text-sky-950 px-3 py-1 rounded-full truncate max-w-[260px]">{{ selectedWork.contractor_name }}</span>
+                <span v-if="selectedWork.contractor_nickname" class="text-sm font-semibold bg-[#fac9b8] text-[#7c3d2a] px-3 py-1 rounded-full truncate max-w-[200px]">{{ selectedWork.contractor_nickname }}</span>
+                <span v-if="selectedWork.tender_number" class="text-sm font-semibold bg-amber-100 text-emerald-900 px-3 py-1 rounded-full truncate max-w-[260px]">{{ selectedWork.tender_number }}</span>
+              </div>
+              <p v-if="selectedWork.name_of_work" class="text-xs text-gray-600 mt-1.5 leading-snug max-w-2xl">
                 {{ selectedWork.name_of_work }}
               </p>
               <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-2">
-                <span class="flex items-center gap-1.5 text-xs text-gray-500">
-                  <span class="font-medium text-gray-400">LOA</span>
-                  <span class="font-semibold text-gray-800">{{ selectedWork.loa_number || '—' }}</span>
-                </span>
-                <span class="text-gray-200">·</span>
-                <span class="flex items-center gap-1.5 text-xs text-gray-500">
-                  <span class="font-medium text-gray-400">Tender</span>
-                  <span class="font-semibold text-gray-800">{{ selectedWork.tender_number || '—' }}</span>
-                </span>
-                <span class="text-gray-200">·</span>
                 <span class="flex items-center gap-1.5 text-xs text-gray-500">
                   <span class="font-medium text-gray-400">Consignee</span>
                   <span class="font-semibold text-gray-800">{{ selectedWork.consignee || '—' }}</span>

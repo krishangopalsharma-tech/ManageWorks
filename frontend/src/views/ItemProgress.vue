@@ -2,35 +2,21 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import axios from 'axios'
 
-const allWorks      = ref([])
-const searchResults = ref([])
+const allWorks       = ref([])
+const allItems       = ref([])   // all items for selected LOAs (from server)
 const isLoadingWorks = ref(true)
-const isSearching   = ref(false)
-const itemSearch    = ref('')
-const workSearch    = ref('')
-const selectedIds   = ref([])
-const dropdownOpen  = ref(false)
-const dropdownRef   = ref(null)
+const isLoadingItems = ref(false)
+const itemSearch     = ref('')
+const workSearch     = ref('')
+const selectedIds    = ref([])
+const dropdownOpen   = ref(false)
+const dropdownRef    = ref(null)
 
-// ── Hover tooltip ──────────────────────────────────────────────────────────
-const hoveredItem = ref(null)
-const tooltipPos  = ref({ x: 0, y: 0 })
-let hideTimer = null
-
-const showTooltip = (item, e) => { clearTimeout(hideTimer); hoveredItem.value = item; tooltipPos.value = { x: e.clientX, y: e.clientY } }
-const moveTooltip = (e) => { tooltipPos.value = { x: e.clientX, y: e.clientY } }
-const hideTooltip = () => { hideTimer = setTimeout(() => { hoveredItem.value = null }, 120) }
-const keepTooltip = () => { clearTimeout(hideTimer) }
-
-const tooltipStyle = computed(() => {
-  const vw = window.innerWidth
-  const vh = window.innerHeight
-  const left = (tooltipPos.value.x + 340 > vw)
-    ? (tooltipPos.value.x - 344) + 'px'
-    : (tooltipPos.value.x + 12) + 'px'
-  const top = Math.min(tooltipPos.value.y - 16, vh - 380) + 'px'
-  return { left, top }
-})
+// ── Click-to-expand entries ────────────────────────────────────────────────
+const expandedItemId = ref(null)
+const toggleExpand = (id) => {
+  expandedItemId.value = expandedItemId.value === id ? null : id
+}
 
 const fmtDate = (val) => {
   if (!val) return '—'
@@ -51,8 +37,8 @@ const loadWorks = async () => {
   isLoadingWorks.value = true
   try {
     const res = await axios.get('/api/item-progress/works/')
-    allWorks.value    = res.data
-    selectedIds.value = res.data.map(w => w.id)
+    allWorks.value = res.data
+    // start with nothing selected — user picks LOAs explicitly
   } catch (e) {
     console.error(e)
   } finally {
@@ -60,37 +46,32 @@ const loadWorks = async () => {
   }
 }
 
-// ── Item search ────────────────────────────────────────────────────────────
-let debounceTimer = null
-const doSearch = async () => {
-  const q = itemSearch.value.trim()
-  if (!q) { searchResults.value = []; return }
-  isSearching.value = true
+// ── Load items for selected LOAs (server fetch, no q required) ─────────────
+let itemLoadTimer = null
+const loadItems = async () => {
+  if (!selectedIds.value.length) { allItems.value = []; return }
+  isLoadingItems.value = true
   try {
-    const params = { q }
-    if (selectedIds.value.length && selectedIds.value.length < allWorks.value.length)
-      params.work_ids = selectedIds.value.join(',')
-    const res = await axios.get('/api/item-progress/search/', { params })
-    searchResults.value = res.data
+    const res = await axios.get('/api/item-progress/search/', {
+      params: { work_ids: selectedIds.value.join(',') },
+    })
+    allItems.value = res.data
   } catch (e) {
     console.error(e)
   } finally {
-    isSearching.value = false
+    isLoadingItems.value = false
   }
 }
 
-watch(itemSearch, () => {
-  clearTimeout(debounceTimer)
-  if (!itemSearch.value.trim()) { searchResults.value = []; return }
-  debounceTimer = setTimeout(doSearch, 350)
-})
+// Debounce rapid LOA toggles (avoid hammering on "Select All" then individual toggle)
 watch(selectedIds, () => {
-  if (itemSearch.value.trim()) { clearTimeout(debounceTimer); debounceTimer = setTimeout(doSearch, 200) }
+  clearTimeout(itemLoadTimer)
+  itemLoadTimer = setTimeout(loadItems, 250)
 }, { deep: true })
 
 const closeDropdown = (e) => { if (dropdownRef.value && !dropdownRef.value.contains(e.target)) dropdownOpen.value = false }
 onMounted(() => { loadWorks(); document.addEventListener('click', closeDropdown) })
-onBeforeUnmount(() => { document.removeEventListener('click', closeDropdown); clearTimeout(debounceTimer) })
+onBeforeUnmount(() => { document.removeEventListener('click', closeDropdown); clearTimeout(itemLoadTimer) })
 
 // ── Dropdown helpers ───────────────────────────────────────────────────────
 const filteredWorksDropdown = computed(() => {
@@ -104,6 +85,7 @@ const filteredWorksDropdown = computed(() => {
   )
 })
 const allSelected = computed(() => selectedIds.value.length === allWorks.value.length)
+const noneSelected = computed(() => selectedIds.value.length === 0)
 const dropdownLabel = computed(() => {
   if (allSelected.value) return 'All Works'
   const n = selectedIds.value.length
@@ -117,27 +99,83 @@ const toggleWork = (id) => {
   else selectedIds.value.push(id)
 }
 
-// ── Progress helpers ───────────────────────────────────────────────────────
+// ── Category helpers ───────────────────────────────────────────────────────
 const isSchB = (item) => String(item.schedule || '').toUpperCase().trim().startsWith('B')
+const isSI   = (item) => (item.category || '') === 'supply_installation'
 
-// Sch-A progress = supply entries; Sch-B progress = execution entries
+const supplyPct   = (item) => { const r = item.qty || 0; if (!r) return 0; return Math.min(Math.round((item.supplied_quantity || 0) / r * 100), 999) }
+const execPctItem = (item) => { const r = item.qty || 0; if (!r) return 0; return Math.min(Math.round((item.executed_quantity || 0) / r * 100), 999) }
+
 const progressPct = (item) => {
-  const req  = item.qty || 0
+  const req = item.qty || 0
   if (!req) return 0
+  const cat = item.category || ''
+  if (cat === 'supply_installation' || cat === 'execution') return Math.min(Math.round((item.executed_quantity || 0) / req * 100), 999)
+  if (cat === 'supply') return Math.min(Math.round((item.supplied_quantity || 0) / req * 100), 999)
   const done = isSchB(item) ? (item.executed_quantity || 0) : (item.supplied_quantity || 0)
   return Math.min(Math.round((done / req) * 100), 999)
 }
+
+// ── Category filter ────────────────────────────────────────────────────────
+const selectedCategories = ref(['supply', 'supply_installation', 'execution'])
+const toggleCategory = (cat) => {
+  const idx = selectedCategories.value.indexOf(cat)
+  if (idx >= 0) selectedCategories.value.splice(idx, 1)
+  else selectedCategories.value.push(cat)
+}
+
+// ── Progress range slider ──────────────────────────────────────────────────
+const progressMin    = ref(0)
+const progressMax    = ref(100)
+const includeExcess  = ref(true)
+const progressFilterActive = computed(() => progressMin.value > 0 || progressMax.value < 100 || !includeExcess.value)
+const resetProgress  = () => { progressMin.value = 0; progressMax.value = 100; includeExcess.value = true }
+const onMinInput     = () => { if (progressMin.value > progressMax.value) progressMax.value = progressMin.value }
+const onMaxInput     = () => { if (progressMax.value < progressMin.value) progressMin.value = progressMax.value }
+
+// ── Client-side search + category filter (instant, no API call) ────────────
+const filteredBySearch = computed(() => {
+  const q = itemSearch.value.toLowerCase().trim()
+  if (!q) return allItems.value
+  return allItems.value.filter(item =>
+    (item.item_desc    && item.item_desc.toLowerCase().includes(q)) ||
+    (item.schedule     && item.schedule.toLowerCase().includes(q)) ||
+    (item.serial_number && item.serial_number.toLowerCase().includes(q)) ||
+    (item.loa_number   && item.loa_number.toLowerCase().includes(q))
+  )
+})
+
+const filteredByCat = computed(() => {
+  if (selectedCategories.value.length === 3) return filteredBySearch.value
+  return filteredBySearch.value.filter(item => selectedCategories.value.includes(item.category || 'supply'))
+})
+
+const filteredResults = computed(() => {
+  if (!progressFilterActive.value) return filteredByCat.value
+  const min = progressMin.value
+  const max = progressMax.value
+  const excess = includeExcess.value
+  return filteredByCat.value.filter(item => {
+    const pct = progressPct(item)
+    if (pct > 100) return excess
+    return pct >= min && pct <= max
+  })
+})
 
 // ── Cumulative stats ───────────────────────────────────────────────────────
 const stats = computed(() => {
   let supplyTotal = 0, supplyDone = 0, supplyCount = 0
   let execTotal   = 0, execDone   = 0, execCount   = 0
-  for (const item of searchResults.value) {
+  for (const item of filteredResults.value) {
     const req = item.qty || 0
-    if (!isSchB(item)) {
+    const cat = item.category || ''
+    if (cat === 'supply') {
       supplyTotal += req; supplyDone += item.supplied_quantity || 0; supplyCount++
-    } else {
+    } else if (cat === 'execution' || cat === 'supply_installation') {
       execTotal += req; execDone += item.executed_quantity || 0; execCount++
+    } else {
+      if (!isSchB(item)) { supplyTotal += req; supplyDone += item.supplied_quantity || 0; supplyCount++ }
+      else               { execTotal   += req; execDone   += item.executed_quantity  || 0; execCount++ }
     }
   }
   const pct = (d, t) => t > 0 ? Math.round(d / t * 100) : 0
@@ -156,8 +194,8 @@ const sortIcon = (key) => {
   return sortDir.value === 'asc' ? 'i-carbon-arrow-up' : 'i-carbon-arrow-down'
 }
 const sortedResults = computed(() => {
-  if (!sortKey.value) return searchResults.value
-  return [...searchResults.value].sort((a, b) => {
+  if (!sortKey.value) return filteredResults.value
+  return [...filteredResults.value].sort((a, b) => {
     let av, bv
     if      (sortKey.value === 'qty')       { av = a.qty || 0;               bv = b.qty || 0 }
     else if (sortKey.value === 'submitted') { av = a.supplied_quantity || 0; bv = b.supplied_quantity || 0 }
@@ -170,7 +208,10 @@ const sortedResults = computed(() => {
 
 // ── Remaining quantity ─────────────────────────────────────────────────────
 const remainingQty = (item) => {
-  const req  = item.qty || 0
+  const req = item.qty || 0
+  const cat = item.category || ''
+  if (cat === 'execution' || cat === 'supply_installation') return req - (item.executed_quantity || 0)
+  if (cat === 'supply') return req - (item.supplied_quantity || 0)
   const done = isSchB(item) ? (item.executed_quantity || 0) : (item.supplied_quantity || 0)
   return req - done
 }
@@ -191,7 +232,7 @@ const confirmPdfExport = async (includeEntries) => {
 }
 
 const generateItemPDF = async (includeEntries = true) => {
-  if (!sortedResults.value.length) return
+  if (!filteredResults.value.length) return
   isGeneratingPDF.value = true
   try {
     const { jsPDF } = await import('jspdf')
@@ -208,7 +249,7 @@ const generateItemPDF = async (includeEntries = true) => {
     const C_BLUE  = [0, 113, 227]
     const C_GRAY  = [107, 114, 128]
 
-    const items = sortedResults.value
+    const items = sortedResults.value  // already uses filteredResults
     const st    = stats.value
     const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 
@@ -283,7 +324,7 @@ const generateItemPDF = async (includeEntries = true) => {
           { content: `Remaining: ${remaining} ${item.unit}`, styles: { fillColor: [235, 245, 244], textColor: remaining < 0 ? [220, 80, 30] : C_GRAY, fontSize: 7.5, halign: 'right' } },
           { content: `${pct}%`, styles: { fillColor: [235, 245, 244], textColor: pctNum >= 99 ? C_TEAL : pctNum > 0 ? C_BLUE : C_GRAY, fontStyle: 'bold', fontSize: 8, halign: 'right' } },
         ]],
-        body: [[{ content: item.item_desc || '', colSpan: 6, styles: { fontSize: 7.5, textColor: [50, 50, 50], cellPadding: { top: 2, bottom: 2, left: 3, right: 3 } } }]],
+        body: [[{ content: (() => { const d = item.item_desc || ''; return d.length > 130 ? d.substring(0, 127) + '…' : d })(), colSpan: 6, styles: { fontSize: 7.5, textColor: [50, 50, 50], cellPadding: { top: 2, bottom: 2, left: 3, right: 3 }, overflow: 'ellipsize', minCellHeight: 0 } }]],
         columnStyles: {
           0: { cellWidth: 'auto' },
           1: { cellWidth: 48 },
@@ -355,7 +396,7 @@ const generateItemPDF = async (includeEntries = true) => {
       doc.text('ManageWorks — Item Progress Report', mg, ph - 4)
     }
 
-    const safeName = (itemSearch.value || 'export').replace(/[^a-z0-9]/gi, '_').substring(0, 30)
+    const safeName = (itemSearch.value || dropdownLabel.value || 'export').replace(/[^a-z0-9]/gi, '_').substring(0, 30)
     doc.save(`Item_Progress_${safeName}_${new Date().toISOString().substring(0, 10)}.pdf`)
   } finally {
     isGeneratingPDF.value = false
@@ -369,85 +410,182 @@ const generateItemPDF = async (includeEntries = true) => {
     <!-- Header -->
     <div class="flex-shrink-0 px-8 pt-7 pb-5 border-b border-gray-100">
       <h1 class="text-2xl font-bold text-gray-900 tracking-tight mb-1">Item Progress</h1>
-      <p class="text-gray-400 text-sm font-medium mb-5">Search and filter individual item progress across works.</p>
+      <p class="text-gray-400 text-sm font-medium mb-4">Select LOAs → filter by category → search items.</p>
 
-      <!-- Filters -->
-      <div class="flex gap-3">
-        <!-- Item search -->
-        <div class="flex-1 flex items-center bg-gray-50 border border-gray-200 rounded-2xl px-5 py-3 focus-within:ring-2 focus-within:ring-[#1D5F5E]/20 focus-within:border-[#1D5F5E] focus-within:bg-white transition-all">
-          <div v-if="isSearching" class="i-carbon-circle-dash animate-spin text-gray-400 text-base mr-3 flex-shrink-0"></div>
-          <div v-else class="i-carbon-search text-gray-400 text-base mr-3 flex-shrink-0"></div>
+      <!-- Single filter row: LOA selector | category pills | search bar -->
+      <div class="flex items-center gap-3 mb-3">
+
+        <!-- LOA multi-select dropdown (fixed width) -->
+        <div class="relative flex-shrink-0 w-72" ref="dropdownRef">
+          <button @click.stop="dropdownOpen = !dropdownOpen"
+            class="w-full flex items-center justify-between bg-gray-50 border border-gray-200 rounded-2xl px-4 py-2.5 text-sm font-medium text-gray-700 hover:border-[#1D5F5E] hover:bg-white transition-all"
+            :class="{ 'border-[#1D5F5E] bg-white ring-2 ring-[#1D5F5E]/10': dropdownOpen }">
+            <div class="flex items-center gap-2 min-w-0">
+              <div v-if="isLoadingWorks || isLoadingItems" class="i-carbon-circle-dash animate-spin text-gray-400 text-base flex-shrink-0"></div>
+              <div v-else class="i-carbon-building text-gray-400 text-base flex-shrink-0"></div>
+              <span class="truncate text-sm">{{ isLoadingWorks ? 'Loading…' : dropdownLabel }}</span>
+            </div>
+            <div :class="dropdownOpen ? 'i-carbon-chevron-up' : 'i-carbon-chevron-down'" class="text-gray-400 text-sm flex-shrink-0 ml-2"></div>
+          </button>
+
+          <!-- Dropdown panel — wide, anchored left -->
+          <div v-if="dropdownOpen"
+            class="absolute top-full mt-2 left-0 w-[520px] bg-white rounded-2xl border border-gray-200 shadow-xl z-50 overflow-hidden">
+            <!-- Search inside dropdown -->
+            <div class="p-3 border-b border-gray-100">
+              <div class="flex items-center bg-gray-50 rounded-xl px-3 py-2 gap-2">
+                <div class="i-carbon-search text-gray-400 text-sm flex-shrink-0"></div>
+                <input v-model="workSearch" type="text"
+                  placeholder="Search by name, LOA number, tender, nickname…"
+                  class="bg-transparent outline-none text-xs text-gray-700 w-full placeholder-gray-400 font-medium" @click.stop>
+                <button v-if="workSearch" @click.stop="workSearch = ''" class="text-gray-300 hover:text-gray-500 transition-colors">
+                  <div class="i-carbon-close text-xs"></div>
+                </button>
+              </div>
+            </div>
+            <!-- Select All / Clear + count -->
+            <div class="px-4 py-2 border-b border-gray-100 flex items-center gap-3">
+              <button @click.stop="selectedIds = allWorks.map(w => w.id)"
+                class="text-xs font-semibold text-[#1D5F5E] hover:underline flex items-center gap-1">
+                <div class="i-carbon-checkmark-filled text-[11px]"></div> Select All
+              </button>
+              <span class="text-gray-200">·</span>
+              <button @click.stop="selectedIds = []"
+                class="text-xs font-semibold text-gray-400 hover:text-gray-600 hover:underline flex items-center gap-1">
+                <div class="i-carbon-close text-[11px]"></div> Clear
+              </button>
+              <span class="ml-auto text-[11px] text-gray-400 font-medium">
+                {{ selectedIds.length }} / {{ allWorks.length }} selected
+              </span>
+            </div>
+            <!-- Work list — 2 columns -->
+            <div class="max-h-72 overflow-y-auto" style="scrollbar-width: thin;">
+              <div v-if="filteredWorksDropdown.length === 0" class="px-4 py-6 text-center text-xs text-gray-400">No works found</div>
+              <div class="grid grid-cols-2">
+                <label v-for="work in filteredWorksDropdown" :key="work.id"
+                  class="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors border-b border-gray-50 border-r border-r-gray-50">
+                  <input type="checkbox" :checked="selectedIds.includes(work.id)" @change="toggleWork(work.id)"
+                    class="mt-0.5 accent-[#1D5F5E] flex-shrink-0" @click.stop>
+                  <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-1.5 min-w-0">
+                      <span class="text-xs font-bold text-gray-900 shrink-0">{{ work.loa_number || '—' }}</span>
+                      <span class="text-[10px] font-semibold bg-sky-100 text-sky-950 px-2 py-0.5 rounded-full truncate max-w-[120px]">{{ work.contractor_name || '—' }}</span>
+                      <span v-if="work.contractor_nickname" class="text-[10px] font-semibold bg-[#fac9b8] text-[#7c3d2a] px-2 py-0.5 rounded-full truncate max-w-[100px]">{{ work.contractor_nickname }}</span>
+                      <span v-if="work.tender_number" class="text-[10px] font-semibold bg-amber-100 text-emerald-900 px-2 py-0.5 rounded-full truncate max-w-[120px]">{{ work.tender_number }}</span>
+                    </div>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Category filter pills -->
+        <div class="flex items-center gap-1.5 flex-shrink-0">
+          <button @click="toggleCategory('supply')"
+            class="px-3 py-2 rounded-xl text-[11px] font-bold border transition-all"
+            :class="selectedCategories.includes('supply')
+              ? 'bg-teal-50 border-teal-300 text-teal-700'
+              : 'bg-white border-gray-200 text-gray-400'">
+            Supply
+          </button>
+          <button @click="toggleCategory('supply_installation')"
+            class="px-3 py-2 rounded-xl text-[11px] font-bold border transition-all"
+            :class="selectedCategories.includes('supply_installation')
+              ? 'bg-violet-50 border-violet-300 text-violet-700'
+              : 'bg-white border-gray-200 text-gray-400'">
+            S+I
+          </button>
+          <button @click="toggleCategory('execution')"
+            class="px-3 py-2 rounded-xl text-[11px] font-bold border transition-all"
+            :class="selectedCategories.includes('execution')
+              ? 'bg-orange-50 border-orange-300 text-orange-700'
+              : 'bg-white border-gray-200 text-gray-400'">
+            Execution
+          </button>
+        </div>
+
+        <!-- Divider -->
+        <div class="w-px h-6 bg-gray-200 flex-shrink-0"></div>
+
+        <!-- Item search (flex-1, client-side instant) -->
+        <div class="flex-1 flex items-center bg-gray-50 border border-gray-200 rounded-2xl px-4 py-2.5 focus-within:ring-2 focus-within:ring-[#1D5F5E]/20 focus-within:border-[#1D5F5E] focus-within:bg-white transition-all">
+          <div class="i-carbon-search text-gray-400 text-base mr-3 flex-shrink-0"></div>
           <input v-model="itemSearch" type="text"
-            placeholder="Search items by description, schedule, serial no..."
+            placeholder="Search items by description, LOA, schedule, serial no…"
             class="bg-transparent outline-none w-full text-gray-700 font-medium placeholder-gray-400 text-sm">
           <button v-if="itemSearch" @click="itemSearch = ''" class="ml-2 text-gray-300 hover:text-gray-500 transition-colors">
             <div class="i-carbon-close text-sm"></div>
           </button>
         </div>
 
-        <!-- Work multi-select dropdown -->
-        <div class="relative w-72 flex-shrink-0" ref="dropdownRef">
-          <button @click.stop="dropdownOpen = !dropdownOpen"
-            class="w-full flex items-center justify-between bg-gray-50 border border-gray-200 rounded-2xl px-5 py-3 text-sm font-medium text-gray-700 hover:border-[#1D5F5E] hover:bg-white transition-all">
-            <div class="flex items-center gap-2 min-w-0">
-              <div class="i-carbon-filter text-gray-400 text-base flex-shrink-0"></div>
-              <span class="truncate">{{ isLoadingWorks ? 'Loading...' : dropdownLabel }}</span>
-            </div>
-            <div :class="dropdownOpen ? 'i-carbon-chevron-up' : 'i-carbon-chevron-down'" class="text-gray-400 text-sm flex-shrink-0 ml-2"></div>
-          </button>
-
-          <div v-if="dropdownOpen"
-            class="absolute top-full mt-2 right-0 w-80 bg-white rounded-2xl border border-gray-200 shadow-xl z-50 overflow-hidden">
-            <div class="p-3 border-b border-gray-100">
-              <div class="flex items-center bg-gray-50 rounded-xl px-3 py-2 gap-2">
-                <div class="i-carbon-search text-gray-400 text-sm"></div>
-                <input v-model="workSearch" type="text" placeholder="Search works..."
-                  class="bg-transparent outline-none text-xs text-gray-700 w-full placeholder-gray-400 font-medium" @click.stop>
-              </div>
-            </div>
-            <div class="px-4 py-2 border-b border-gray-100 flex gap-3">
-              <button @click="selectedIds = allWorks.map(w => w.id)" class="text-xs font-semibold text-[#1D5F5E] hover:underline">Select All</button>
-              <span class="text-gray-200">·</span>
-              <button @click="selectedIds = []" class="text-xs font-semibold text-gray-400 hover:text-gray-600 hover:underline">Clear All</button>
-            </div>
-            <div class="max-h-60 overflow-y-auto" style="scrollbar-width: thin;">
-              <div v-if="filteredWorksDropdown.length === 0" class="px-4 py-6 text-center text-xs text-gray-400">No works found</div>
-              <label v-for="work in filteredWorksDropdown" :key="work.id"
-                class="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors border-b border-gray-50 last:border-0">
-                <input type="checkbox" :checked="selectedIds.includes(work.id)" @change="toggleWork(work.id)"
-                  class="mt-0.5 accent-[#1D5F5E] flex-shrink-0" @click.stop>
-                <div class="min-w-0">
-                  <p class="text-xs font-semibold text-gray-800 truncate">{{ work.loa_number || '—' }}</p>
-                  <p class="text-[11px] text-gray-400 truncate">{{ work.contractor_name || '—' }}<span v-if="work.contractor_nickname" class="text-gray-300"> ({{ work.contractor_nickname }})</span></p>
-                </div>
-              </label>
-            </div>
-          </div>
-        </div>
       </div>
 
-      <!-- Progress stats pills + Export -->
-      <div v-if="searchResults.length > 0" class="mt-4 flex flex-wrap items-center gap-3">
-        <div class="flex items-center gap-2 bg-accent-soft border border-accent/20 rounded-xl px-4 py-2">
-          <div class="w-2 h-2 rounded-full bg-accent"></div>
-          <span class="text-xs font-semibold text-accent">
-            Supply (Sch A): {{ stats.supplyPct }}%
-            <span class="font-normal opacity-70">({{ stats.supplyCount }} items)</span>
+      <!-- Progress range slider (visible when items loaded) -->
+      <div v-if="allItems.length > 0" class="flex items-center gap-3 mt-2.5">
+        <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex-shrink-0">Progress</span>
+
+        <!-- Dual-handle slider -->
+        <div class="flex items-center gap-2 flex-1 max-w-sm">
+          <span class="text-[11px] font-bold text-gray-600 w-8 text-right flex-shrink-0 tabular-nums">{{ progressMin }}%</span>
+          <div class="relative flex-1 h-5 flex items-center">
+            <!-- Track background -->
+            <div class="absolute w-full h-1.5 bg-gray-200 rounded-full"></div>
+            <!-- Track fill -->
+            <div class="absolute h-1.5 bg-[#1D5F5E] rounded-full pointer-events-none"
+              :style="{ left: progressMin + '%', width: (progressMax - progressMin) + '%' }"></div>
+            <!-- Min thumb -->
+            <input type="range" min="0" max="100" step="1" v-model.number="progressMin"
+              @input="onMinInput" class="progress-thumb absolute w-full">
+            <!-- Max thumb -->
+            <input type="range" min="0" max="100" step="1" v-model.number="progressMax"
+              @input="onMaxInput" class="progress-thumb absolute w-full">
+          </div>
+          <span class="text-[11px] font-bold text-gray-600 w-8 flex-shrink-0 tabular-nums">{{ progressMax }}%</span>
+        </div>
+
+        <!-- Excess toggle -->
+        <button @click="includeExcess = !includeExcess"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all flex-shrink-0"
+          :class="includeExcess
+            ? 'bg-orange-50 border-orange-300 text-orange-700'
+            : 'bg-white border-gray-200 text-gray-400 line-through'">
+          <div class="i-carbon-overflow-menu-horizontal text-[11px]"></div>
+          +Excess
+        </button>
+
+        <!-- Reset -->
+        <button v-if="progressFilterActive" @click="resetProgress"
+          class="flex items-center gap-1 text-[10px] font-semibold text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0">
+          <div class="i-carbon-reset text-[11px]"></div> Reset
+        </button>
+      </div>
+
+      <!-- Stats pills + Export (visible when items exist) -->
+      <div v-if="filteredResults.length > 0" class="flex flex-wrap items-center gap-3">
+        <div class="flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-xl px-4 py-2">
+          <div class="w-2 h-2 rounded-full bg-teal-500"></div>
+          <span class="text-xs font-semibold text-teal-700">
+            Supply: {{ stats.supplyPct }}%
+            <span class="font-normal opacity-70">({{ stats.supplyCount }})</span>
           </span>
         </div>
-        <div class="flex items-center gap-2 bg-accent-b-soft border border-accent-b/20 rounded-xl px-4 py-2">
-          <div class="w-2 h-2 rounded-full bg-accent-b"></div>
-          <span class="text-xs font-semibold text-accent-b">
-            Execution (Sch B): {{ stats.execPct }}%
-            <span class="font-normal opacity-70">({{ stats.execCount }} items)</span>
+        <div class="flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-xl px-4 py-2">
+          <div class="w-2 h-2 rounded-full bg-orange-500"></div>
+          <span class="text-xs font-semibold text-orange-700">
+            Exec + S+I: {{ stats.execPct }}%
+            <span class="font-normal opacity-70">({{ stats.execCount }})</span>
           </span>
         </div>
         <div class="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2">
           <div class="i-carbon-list text-gray-400 text-sm"></div>
-          <span class="text-xs font-semibold text-gray-600">{{ searchResults.length }} items found</span>
+          <span class="text-xs font-semibold text-gray-600">
+            {{ filteredResults.length }}
+            <span v-if="filteredResults.length < allItems.length" class="font-normal text-gray-400"> of {{ allItems.length }}</span>
+            items
+          </span>
         </div>
-
-        <button @click="onExportClick" :disabled="isGeneratingPDF"
+        <button @click="onExportClick" :disabled="isGeneratingPDF || !sortedResults.length"
           class="ml-auto flex items-center gap-1.5 px-4 py-2 rounded-xl border border-gray-300 text-xs font-semibold text-gray-600 hover:bg-gray-100 hover:border-gray-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0">
           <div :class="isGeneratingPDF ? 'i-carbon-circle-dash animate-spin' : 'i-carbon-document-pdf'" class="text-sm"></div>
           {{ isGeneratingPDF ? 'Generating…' : 'Export PDF' }}
@@ -455,22 +593,34 @@ const generateItemPDF = async (includeEntries = true) => {
       </div>
     </div>
 
-    <!-- Empty / prompt state -->
-    <div v-if="!isSearching && searchResults.length === 0" class="flex-1 flex flex-col items-center justify-center py-24 text-center">
+    <!-- Loading state -->
+    <div v-if="isLoadingItems" class="flex-1 flex flex-col items-center justify-center py-24 text-center">
+      <div class="i-carbon-circle-dash animate-spin text-4xl text-gray-300 mb-4"></div>
+      <p class="text-sm font-semibold text-gray-400">Loading items…</p>
+    </div>
+
+    <!-- No LOA selected -->
+    <div v-else-if="noneSelected && !isLoadingWorks" class="flex-1 flex flex-col items-center justify-center py-24 text-center">
+      <div class="i-carbon-building text-5xl text-gray-200 mb-4"></div>
+      <p class="text-sm font-semibold text-gray-400">No LOA selected.</p>
+      <p class="text-xs text-gray-300 mt-1">Select one or more LOAs above to load items.</p>
+    </div>
+
+    <!-- No items match filter/search -->
+    <div v-else-if="!isLoadingItems && allItems.length > 0 && filteredResults.length === 0" class="flex-1 flex flex-col items-center justify-center py-24 text-center">
       <div class="i-carbon-search text-5xl text-gray-200 mb-4"></div>
-      <p class="text-sm font-semibold text-gray-400">
-        {{ !itemSearch.trim() ? 'Type in the search box above to find items.' : 'No items match your search.' }}
-      </p>
-      <p v-if="!itemSearch.trim()" class="text-xs text-gray-300 mt-1">e.g. "switch", "cable", "transformer"</p>
+      <p class="text-sm font-semibold text-gray-400">No items match your filters.</p>
+      <p class="text-xs text-gray-300 mt-1">Try adjusting the search or enabling more category filters.</p>
     </div>
 
     <!-- Table -->
-    <div v-else-if="searchResults.length > 0" class="overflow-auto flex-1">
+    <div v-else-if="!isLoadingItems && filteredResults.length > 0" class="overflow-auto flex-1">
       <table class="w-full border-collapse">
         <thead class="bg-gray-50 sticky top-0 z-10">
           <tr class="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100">
             <th class="px-4 py-3 text-left w-32">Work No.</th>
             <th class="px-4 py-3 text-left w-36">LOA Number</th>
+            <th class="px-4 py-3 text-center w-16">Cat</th>
             <th class="px-4 py-3 text-center w-14">Sch</th>
             <th class="px-4 py-3 text-center w-14">S.No</th>
             <th class="px-4 py-3 text-left">Item Description</th>
@@ -492,202 +642,197 @@ const generateItemPDF = async (includeEntries = true) => {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="item in sortedResults" :key="item.id"
-            class="border-b border-gray-100 hover:bg-accent-soft/40 transition-colors">
-            <td class="px-4 py-3">
-              <p class="text-xs font-semibold text-gray-700 line-clamp-1 leading-snug">{{ item.tender_number || '—' }}</p>
-              <p class="text-[11px] text-gray-400 line-clamp-1 leading-snug mt-0.5">{{ item.contractor_name || '—' }}</p>
-            </td>
-            <td class="px-4 py-3">
-              <span class="text-[11px] font-semibold text-accent bg-accent-soft px-2 py-0.5 rounded-full whitespace-nowrap">
-                {{ item.loa_number || '—' }}
-              </span>
-            </td>
-            <td class="px-4 py-3 text-center">
-              <span class="rounded-md px-2 py-1 text-[10px] font-bold"
-                :class="isSchB(item) ? 'bg-accent-b-soft text-accent-b' : 'bg-accent-soft text-accent'">
-                {{ item.schedule }}
-              </span>
-            </td>
-            <td class="px-4 py-3 text-center text-[11px] text-gray-500 font-semibold">{{ item.serial_number }}</td>
-            <td class="px-4 py-3">
-              <p class="text-xs font-medium text-gray-800 line-clamp-2 leading-relaxed">{{ item.item_desc }}</p>
-            </td>
-            <td class="px-4 py-3 text-right text-xs font-semibold text-gray-600">
-              {{ item.qty }} <span class="text-gray-400 font-normal">{{ item.unit }}</span>
-            </td>
-            <td class="px-4 py-3 text-right text-xs font-semibold cursor-help"
-              :class="(item.supplied_quantity || 0) > (item.qty || 0) ? 'text-orange-500' : 'text-gray-800'"
-              @mouseenter="showTooltip(item, $event)" @mousemove="moveTooltip($event)" @mouseleave="hideTooltip">
-              {{ item.supplied_quantity || 0 }}
-              <span class="text-gray-400 font-normal">{{ item.unit }}</span>
-              <span v-if="(item.supplied_quantity || 0) > (item.qty || 0)" class="ml-1 text-[9px] text-orange-400 font-bold">OVER</span>
-            </td>
-            <td class="px-4 py-3 text-right text-xs font-semibold"
-              :class="remainingQty(item) < 0 ? 'text-orange-500' : 'text-gray-600'">
-              {{ remainingQty(item) }} <span class="text-gray-400 font-normal">{{ item.unit }}</span>
-            </td>
-            <td class="px-4 py-3 cursor-help"
-              @mouseenter="showTooltip(item, $event)" @mousemove="moveTooltip($event)" @mouseleave="hideTooltip">
-              <div class="flex items-center gap-2">
-                <div class="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                  <div class="h-full rounded-full transition-all duration-500"
-                    :class="progressPct(item) > 100 ? 'bg-orange-400' : (isSchB(item) ? 'bg-accent-b' : 'bg-accent')"
-                    :style="{ width: Math.min(progressPct(item), 100) + '%' }">
-                  </div>
-                </div>
-                <span class="text-[10px] font-bold w-8 text-right"
-                  :class="progressPct(item) > 100 ? 'text-orange-500' : 'text-gray-500'">
-                  {{ progressPct(item) }}%
+          <template v-for="item in sortedResults" :key="item.id">
+            <!-- Main row -->
+            <tr @click="toggleExpand(item.id)"
+              class="border-b border-gray-100 hover:bg-accent-soft/40 transition-colors cursor-pointer select-none"
+              :class="expandedItemId === item.id ? 'bg-accent-soft/30 border-accent/20' : ''">
+              <td class="px-4 py-3">
+                <p class="text-xs font-semibold text-gray-700 line-clamp-1 leading-snug">{{ item.tender_number || '—' }}</p>
+                <p class="text-[11px] text-gray-400 line-clamp-1 leading-snug mt-0.5">{{ item.contractor_name || '—' }}</p>
+              </td>
+              <td class="px-4 py-3">
+                <span class="text-[11px] font-semibold text-accent bg-accent-soft px-2 py-0.5 rounded-full whitespace-nowrap">
+                  {{ item.loa_number || '—' }}
                 </span>
-              </div>
-            </td>
-            <td class="px-4 py-3 text-center cursor-help"
-              @mouseenter="showTooltip(item, $event)" @mousemove="moveTooltip($event)" @mouseleave="hideTooltip">
-              <span class="text-[11px] font-bold"
-                :class="(item.entries||[]).length > 0 ? 'text-accent' : 'text-gray-300'">
-                {{ (item.entries || []).length }}
-              </span>
-            </td>
-          </tr>
+              </td>
+              <td class="px-4 py-3 text-center">
+                <span class="rounded-md px-2 py-0.5 text-[10px] font-bold whitespace-nowrap"
+                  :class="{
+                    'bg-teal-50 text-teal-600':     item.category === 'supply',
+                    'bg-violet-50 text-violet-600': item.category === 'supply_installation',
+                    'bg-orange-50 text-orange-600': item.category === 'execution',
+                    'bg-gray-100 text-gray-400':    !item.category,
+                  }">
+                  {{ item.category === 'supply' ? 'Supply' : item.category === 'supply_installation' ? 'S+I' : item.category === 'execution' ? 'Exec' : '—' }}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-center">
+                <span class="rounded-md px-2 py-1 text-[10px] font-bold"
+                  :class="isSchB(item) ? 'bg-accent-b-soft text-accent-b' : 'bg-accent-soft text-accent'">
+                  {{ item.schedule }}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-center text-[11px] text-gray-500 font-semibold">{{ item.serial_number }}</td>
+              <td class="px-4 py-3">
+                <p class="text-xs font-medium text-gray-800 line-clamp-2 leading-relaxed">{{ item.item_desc }}</p>
+              </td>
+              <td class="px-4 py-3 text-right text-xs font-semibold text-gray-600">
+                {{ item.qty }} <span class="text-gray-400 font-normal">{{ item.unit }}</span>
+              </td>
+              <td class="px-4 py-3 text-right text-xs font-semibold"
+                :class="(item.supplied_quantity || 0) > (item.qty || 0) ? 'text-orange-500' : 'text-gray-800'">
+                {{ item.supplied_quantity || 0 }}
+                <span class="text-gray-400 font-normal">{{ item.unit }}</span>
+                <span v-if="(item.supplied_quantity || 0) > (item.qty || 0)" class="ml-1 text-[9px] text-orange-400 font-bold">OVER</span>
+              </td>
+              <td class="px-4 py-3 text-right text-xs font-semibold"
+                :class="remainingQty(item) < 0 ? 'text-orange-500' : 'text-gray-600'">
+                {{ remainingQty(item) }} <span class="text-gray-400 font-normal">{{ item.unit }}</span>
+              </td>
+              <td class="px-4 py-3">
+                <!-- S+I: two stacked bars -->
+                <template v-if="isSI(item)">
+                  <div class="flex flex-col gap-1">
+                    <div class="flex items-center gap-1.5">
+                      <div class="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
+                        <div class="h-full rounded-full transition-all duration-500 bg-teal-500"
+                          :style="{ width: Math.min(supplyPct(item), 100) + '%' }"></div>
+                      </div>
+                      <span class="text-[9px] font-bold w-7 text-right text-teal-600">{{ supplyPct(item) }}%</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                      <div class="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
+                        <div class="h-full rounded-full transition-all duration-500 bg-violet-500"
+                          :style="{ width: Math.min(execPctItem(item), 100) + '%' }"></div>
+                      </div>
+                      <span class="text-[9px] font-bold w-7 text-right text-violet-600">{{ execPctItem(item) }}%</span>
+                    </div>
+                  </div>
+                </template>
+                <!-- Normal: single bar -->
+                <template v-else>
+                  <div class="flex items-center gap-2">
+                    <div class="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div class="h-full rounded-full transition-all duration-500"
+                        :class="progressPct(item) > 100 ? 'bg-orange-400' : (isSchB(item) ? 'bg-accent-b' : 'bg-accent')"
+                        :style="{ width: Math.min(progressPct(item), 100) + '%' }">
+                      </div>
+                    </div>
+                    <span class="text-[10px] font-bold w-8 text-right"
+                      :class="progressPct(item) > 100 ? 'text-orange-500' : 'text-gray-500'">
+                      {{ progressPct(item) }}%
+                    </span>
+                  </div>
+                </template>
+              </td>
+              <td class="px-4 py-3 text-center">
+                <div class="flex items-center justify-center gap-1">
+                  <span class="text-[11px] font-bold"
+                    :class="(item.entries||[]).length > 0 ? 'text-accent' : 'text-gray-300'">
+                    {{ (item.entries || []).length }}
+                  </span>
+                  <div class="text-gray-300 text-[10px] transition-transform duration-200"
+                    :class="expandedItemId === item.id ? 'i-carbon-chevron-up' : 'i-carbon-chevron-down'"></div>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Expanded entries panel -->
+            <tr v-if="expandedItemId === item.id" class="bg-gray-50/60">
+              <td colspan="11" class="px-6 pb-5 pt-0 border-b border-accent/10">
+                <div class="rounded-xl border border-gray-100 bg-white overflow-hidden mt-3 shadow-sm">
+
+                  <!-- Panel header -->
+                  <div class="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-3">
+                    <span class="rounded-md px-2 py-0.5 text-[10px] font-bold"
+                      :class="isSchB(item) ? 'bg-accent-b-soft text-accent-b' : 'bg-accent-soft text-accent'">
+                      {{ item.schedule }}
+                    </span>
+                    <span class="text-[10px] font-semibold text-gray-400">S.No {{ item.serial_number }}</span>
+                    <span class="text-[11px] font-semibold text-accent bg-accent-soft px-2 py-0.5 rounded-full">{{ item.loa_number }}</span>
+                    <p class="text-xs font-semibold text-gray-700 line-clamp-1 ml-1 flex-1">{{ item.item_desc }}</p>
+                    <div v-if="isSchB(item)" class="flex items-center gap-3 flex-shrink-0">
+                      <span class="text-[10px] text-gray-500">Supplied: <strong class="text-accent">{{ item.supplied_quantity || 0 }}</strong> <span class="text-gray-400">{{ item.unit }}</span></span>
+                      <span class="text-gray-200">·</span>
+                      <span class="text-[10px] text-gray-500">Executed: <strong class="text-accent-b">{{ item.executed_quantity || 0 }}</strong> <span class="text-gray-400">{{ item.unit }}</span></span>
+                    </div>
+                    <span class="text-[10px] text-gray-400 font-medium flex-shrink-0">
+                      {{ (item.entries || []).length }} entr{{ (item.entries || []).length === 1 ? 'y' : 'ies' }}
+                    </span>
+                  </div>
+
+                  <!-- No entries -->
+                  <div v-if="!(item.entries || []).length"
+                    class="px-4 py-8 text-center text-xs text-gray-400 font-medium">
+                    No entries submitted yet.
+                  </div>
+
+                  <!-- Entries grid -->
+                  <div v-else class="p-3 flex flex-wrap gap-2">
+                    <div v-for="(entry, idx) in [...(item.entries || [])].reverse()" :key="entry.id"
+                      class="border border-gray-100 rounded-xl px-3 py-2.5 min-w-[200px] flex-1 max-w-[280px] hover:border-accent/30 transition-colors">
+                      <div class="flex items-center gap-2 mb-1.5">
+                        <span class="w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center flex-shrink-0"
+                          :class="entry.entry_type === 'supply' ? 'bg-accent-soft text-accent' : 'bg-accent-b-soft text-accent-b'">
+                          {{ (item.entries || []).length - idx }}
+                        </span>
+                        <span class="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide"
+                          :class="entry.entry_type === 'supply' ? 'bg-accent-soft text-accent' : 'bg-accent-b-soft text-accent-b'">
+                          {{ entry.entry_type === 'supply' ? 'Supply' : 'Exec' }}
+                        </span>
+                        <span class="text-xs font-bold text-gray-800">
+                          {{ entry.quantity }} <span class="text-gray-400 font-normal text-[10px]">{{ item.unit }}</span>
+                        </span>
+                        <span class="ml-auto text-[10px] text-gray-400 font-medium flex-shrink-0">
+                          {{ fmtDateTime(entry.submitted_at) }}
+                        </span>
+                      </div>
+                      <div class="flex flex-col gap-0.5 pl-7">
+                        <span class="flex items-center gap-1 text-[10px] text-gray-500 font-medium">
+                          <div class="i-carbon-user text-gray-400" style="font-size:10px;"></div>
+                          {{ entry.submitted_by_user?.full_name || entry.submitted_by_user?.username || '—' }}
+                          <span v-if="entry.submitted_by_designation_display || entry.submitted_by_user?.designation" class="text-gray-400"> · {{ entry.submitted_by_designation_display || entry.submitted_by_user?.designation }}</span>
+                        </span>
+                        <template v-if="entry.entry_type === 'supply'">
+                          <span v-if="entry.challan_no" class="flex items-center gap-1 text-[10px] text-gray-400 font-medium truncate">
+                            <div class="i-carbon-document text-gray-300" style="font-size:10px;"></div>
+                            {{ entry.challan_no }}
+                          </span>
+                          <span v-if="entry.udm_entry" class="flex items-center gap-1 text-[10px] text-gray-400 font-medium truncate">
+                            <div class="i-carbon-tag text-gray-300" style="font-size:10px;"></div>
+                            {{ entry.udm_entry }}
+                          </span>
+                        </template>
+                        <template v-else>
+                          <span v-if="entry.location" class="flex items-center gap-1 text-[10px] text-accent-b font-medium truncate">
+                            <div class="i-carbon-location text-accent-b/60" style="font-size:10px;"></div>
+                            {{ entry.location }}
+                          </span>
+                          <span v-if="entry.remarks" class="flex items-center gap-1 text-[10px] text-gray-500 font-medium line-clamp-1">
+                            <div class="i-carbon-chat text-gray-300" style="font-size:10px;"></div>
+                            {{ entry.remarks }}
+                          </span>
+                        </template>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </td>
+            </tr>
+          </template>
         </tbody>
       </table>
     </div>
 
     <!-- Footer -->
-    <div v-if="searchResults.length > 0" class="px-6 py-3 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
+    <div v-if="filteredResults.length > 0" class="px-6 py-3 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
       <p class="text-[11px] text-gray-400 font-medium">
-        {{ searchResults.length }} {{ searchResults.length === 1 ? 'item' : 'items' }}
+        Showing {{ filteredResults.length }} of {{ allItems.length }} {{ allItems.length === 1 ? 'item' : 'items' }}
         across {{ selectedIds.length }} {{ selectedIds.length === 1 ? 'work' : 'works' }}
       </p>
     </div>
-
-    <!-- ── Hover tooltip ── -->
-    <Teleport to="body">
-      <Transition name="tip">
-        <div v-if="hoveredItem"
-          class="fixed z-[9999] w-84 pointer-events-auto"
-          :style="tooltipStyle"
-          @mouseenter="keepTooltip"
-          @mouseleave="hideTooltip">
-
-          <div class="bg-white rounded-2xl border border-gray-200 shadow-[0_16px_40px_rgba(0,0,0,0.12)] overflow-hidden" style="width:336px;">
-
-            <!-- Tooltip header -->
-            <div class="px-4 py-3 border-b border-gray-100 bg-gray-50/80">
-              <div class="flex items-center gap-2 mb-1">
-                <span class="rounded-md px-2 py-0.5 text-[10px] font-bold"
-                  :class="isSchB(hoveredItem) ? 'bg-accent-b-soft text-accent-b' : 'bg-accent-soft text-accent'">
-                  {{ hoveredItem.schedule }}
-                </span>
-                <span class="text-[10px] font-semibold text-gray-400">S.No {{ hoveredItem.serial_number }}</span>
-                <span class="ml-auto text-[10px] font-semibold text-accent bg-accent-soft px-2 py-0.5 rounded-full">
-                  {{ hoveredItem.loa_number }}
-                </span>
-              </div>
-              <p class="text-xs font-semibold text-gray-800 leading-snug line-clamp-2">{{ hoveredItem.item_desc }}</p>
-              <!-- Sch-B: show supply + execution totals -->
-              <div v-if="isSchB(hoveredItem)" class="mt-2 flex gap-3">
-                <span class="text-[10px] text-gray-500">
-                  Supplied: <strong class="text-accent">{{ hoveredItem.supplied_quantity || 0 }}</strong>
-                  <span class="text-gray-400"> {{ hoveredItem.unit }}</span>
-                </span>
-                <span class="text-gray-200">·</span>
-                <span class="text-[10px] text-gray-500">
-                  Executed: <strong class="text-accent-b">{{ hoveredItem.executed_quantity || 0 }}</strong>
-                  <span class="text-gray-400"> {{ hoveredItem.unit }}</span>
-                </span>
-              </div>
-            </div>
-
-            <!-- No entries -->
-            <div v-if="!(hoveredItem.entries || []).length"
-              class="px-4 py-6 text-center text-xs text-gray-400 font-medium">
-              No entries submitted yet.
-            </div>
-
-            <!-- Entry list -->
-            <div v-else class="max-h-64 overflow-y-auto" style="scrollbar-width: thin;">
-              <div v-for="(entry, idx) in [...(hoveredItem.entries || [])].reverse()" :key="entry.id"
-                class="px-4 py-2.5 border-b border-gray-50 last:border-0 hover:bg-accent-soft/40 transition-colors">
-                <div class="flex items-center justify-between gap-2">
-                  <div class="flex items-center gap-2 min-w-0">
-                    <!-- Index bubble + type badge -->
-                    <span class="flex-shrink-0 w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center"
-                      :class="entry.entry_type === 'supply' ? 'bg-accent-soft text-accent' : 'bg-accent-b-soft text-accent-b'">
-                      {{ (hoveredItem.entries || []).length - idx }}
-                    </span>
-                    <span class="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide"
-                      :class="entry.entry_type === 'supply' ? 'bg-accent-soft text-accent' : 'bg-accent-b-soft text-accent-b'">
-                      {{ entry.entry_type === 'supply' ? 'Supply' : 'Exec' }}
-                    </span>
-                    <span class="text-xs font-bold text-gray-800">
-                      {{ entry.quantity }}
-                      <span class="text-gray-400 font-normal text-[10px]">{{ hoveredItem.unit }}</span>
-                    </span>
-                  </div>
-                  <span class="text-[10px] text-gray-400 font-medium flex-shrink-0">
-                    {{ fmtDateTime(entry.submitted_at) }}
-                  </span>
-                </div>
-                <div class="mt-1 pl-7 flex flex-col gap-0.5">
-                  <!-- Submitted by -->
-                  <span class="flex items-center gap-1 text-[10px] text-gray-500 font-medium">
-                    <div class="i-carbon-user text-gray-400" style="font-size:10px;"></div>
-                    {{ entry.submitted_by_user?.full_name || entry.submitted_by_user?.username || '—' }}
-                    <span v-if="entry.submitted_by_designation_display || entry.submitted_by_user?.designation" class="text-gray-400"> · {{ entry.submitted_by_designation_display || entry.submitted_by_user?.designation }}</span>
-                  </span>
-                  <!-- Supply fields -->
-                  <template v-if="entry.entry_type === 'supply'">
-                    <span v-if="entry.challan_no" class="flex items-center gap-1 text-[10px] text-gray-400 font-medium truncate">
-                      <div class="i-carbon-document text-gray-300" style="font-size:10px;"></div>
-                      {{ entry.challan_no }}
-                    </span>
-                    <span v-if="entry.udm_entry" class="flex items-center gap-1 text-[10px] text-gray-400 font-medium truncate">
-                      <div class="i-carbon-tag text-gray-300" style="font-size:10px;"></div>
-                      {{ entry.udm_entry }}
-                    </span>
-                  </template>
-                  <!-- Execution fields -->
-                  <template v-else>
-                    <span v-if="entry.location" class="flex items-center gap-1 text-[10px] text-accent-b font-medium truncate">
-                      <div class="i-carbon-location text-accent-b/60" style="font-size:10px;"></div>
-                      {{ entry.location }}
-                    </span>
-                    <span v-if="entry.remarks" class="flex items-center gap-1 text-[10px] text-gray-500 font-medium line-clamp-1">
-                      <div class="i-carbon-chat text-gray-300" style="font-size:10px;"></div>
-                      {{ entry.remarks }}
-                    </span>
-                  </template>
-                </div>
-              </div>
-            </div>
-
-            <!-- Footer summary -->
-            <div v-if="(hoveredItem.entries || []).length"
-              class="px-4 py-2 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
-              <span class="text-[10px] text-gray-400 font-medium">
-                {{ (hoveredItem.entries || []).length }} entr{{ (hoveredItem.entries || []).length === 1 ? 'y' : 'ies' }}
-              </span>
-              <div class="flex items-center gap-3">
-                <span class="text-[10px] font-bold text-accent">
-                  {{ hoveredItem.supplied_quantity || 0 }}
-                  <span class="text-gray-400 font-normal">{{ hoveredItem.unit }} sup</span>
-                </span>
-                <template v-if="isSchB(hoveredItem)">
-                  <span class="text-gray-200">·</span>
-                  <span class="text-[10px] font-bold text-accent-b">
-                    {{ hoveredItem.executed_quantity || 0 }}
-                    <span class="text-gray-400 font-normal">{{ hoveredItem.unit }} exe</span>
-                  </span>
-                </template>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
 
     <!-- PDF Export Modal -->
     <Teleport to="body">
@@ -734,4 +879,43 @@ const generateItemPDF = async (includeEntries = true) => {
 .tip-leave-active { transition: opacity 0.08s ease; }
 .tip-enter-from  { opacity: 0; transform: translateY(4px) scale(0.98); }
 .tip-leave-to    { opacity: 0; }
+
+/* Dual-handle range slider */
+.progress-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  pointer-events: none;
+  height: 6px;
+  position: absolute;
+  width: 100%;
+  margin: 0;
+}
+.progress-thumb::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #1D5F5E;
+  border: 2.5px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+  cursor: pointer;
+  pointer-events: all;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+.progress-thumb::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  box-shadow: 0 2px 8px rgba(29,95,94,0.35);
+}
+.progress-thumb::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #1D5F5E;
+  border: 2.5px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+  cursor: pointer;
+  pointer-events: all;
+}
 </style>

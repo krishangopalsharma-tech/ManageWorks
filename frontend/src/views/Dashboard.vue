@@ -15,6 +15,17 @@ const activePeriod = ref('monthly')
 const isLoading      = ref(true)
 const isTrendLoading = ref(false)
 
+const seenLoas = ref(new Set(JSON.parse(localStorage.getItem('mw_seen_loas') || '[]')))
+
+function markSeen(id) {
+  seenLoas.value.add(id)
+  localStorage.setItem('mw_seen_loas', JSON.stringify([...seenLoas.value]))
+}
+
+function hasUnseenUpdate(loa) {
+  return (loa.supply_update || loa.execution_update) && !seenLoas.value.has(loa.id)
+}
+
 const filteredLoas = computed(() =>
   loas.value.filter(l => l.label.toLowerCase().includes(searchQuery.value.toLowerCase()))
 )
@@ -22,6 +33,7 @@ const filteredLoas = computed(() =>
 const isAllSelected = computed(() => selectedLoas.value.length === 0)
 
 function toggleLoa(id) {
+  markSeen(id)
   const idx = selectedLoas.value.indexOf(id)
   if (idx === -1) selectedLoas.value.push(id)
   else selectedLoas.value.splice(idx, 1)
@@ -329,21 +341,19 @@ onMounted(() => { fetchStats(); fetchTrend() })
               : 'bg-white border-gray-200 hover:border-[#1D5F5E] hover:bg-[#1D5F5E]/5'">
             <div class="flex items-center justify-between gap-2">
               <div class="min-w-0 flex-1">
-                <p class="text-sm font-semibold truncate"
-                  :class="selectedLoas.includes(loa.id) ? 'text-[#1D5F5E]' : 'text-gray-900'">
-                  {{ loa.label.split(' | ')[2] || loa.label }}
-                </p>
-                <div class="flex items-center gap-2 flex-wrap mt-0.5">
-                  <span class="text-xs font-semibold text-[#1D5F5E] bg-[#1D5F5E]/10 px-1.5 py-0.5 rounded-full">
-                    {{ loa.label.split(' | ')[1] || '—' }}
+                <div class="flex flex-wrap items-center gap-1.5 min-w-0">
+                  <span class="text-sm font-bold shrink-0"
+                    :class="selectedLoas.includes(loa.id) ? 'text-[#1D5F5E]' : 'text-gray-900'">
+                    {{ loa.label.split(' | ')[1] || loa.label }}
                   </span>
-                  <span class="text-xs text-gray-400">Tender: <span class="font-semibold text-gray-600">{{ loa.label.split(' | ')[0] || '—' }}</span></span>
+                  <span class="text-[11px] font-semibold bg-sky-100 text-sky-950 px-2 py-0.5 rounded-full truncate max-w-[160px]">{{ loa.label.split(' | ')[2] || '—' }}</span>
+                  <span v-if="loa.label.split(' | ')[0]" class="text-[11px] font-semibold bg-amber-100 text-emerald-900 px-2 py-0.5 rounded-full truncate max-w-[160px]">{{ loa.label.split(' | ')[0] }}</span>
                 </div>
               </div>
               <div class="flex items-center gap-1.5 flex-shrink-0">
                 <div class="flex gap-1 items-center">
-                  <div v-if="loa.supply_update" class="w-2 h-2 rounded-full bg-[#1D5F5E]" title="Recent supply update"></div>
-                  <div v-if="loa.execution_update" class="w-2 h-2 rounded-full bg-[#34c759]" title="Recent execution update"></div>
+                  <div v-if="loa.supply_update && !seenLoas.has(loa.id)" class="w-2 h-2 rounded-full bg-[#1D5F5E]" title="Recent supply update"></div>
+                  <div v-if="loa.execution_update && !seenLoas.has(loa.id)" class="w-2 h-2 rounded-full bg-[#34c759]" title="Recent execution update"></div>
                 </div>
                 <div class="w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition-all"
                   :class="selectedLoas.includes(loa.id) ? 'bg-[#1D5F5E] border-[#1D5F5E]' : 'border-gray-300 bg-white'">

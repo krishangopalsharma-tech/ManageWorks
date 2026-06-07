@@ -33,6 +33,21 @@ def _is_admin(user):
     return profile is not None and profile.role == 'admin'
 
 
+def _is_consignee(user):
+    if not user.is_authenticated:
+        return False
+    profile = getattr(user, 'profile', None)
+    return profile is not None and profile.role == 'consignee'
+
+
+def _consignee_owns_loas(user, loa_ids):
+    """Return True if all loa_ids are assigned to this consignee (hrms_id match)."""
+    if not loa_ids:
+        return False
+    owned = set(Work.objects.filter(pk__in=loa_ids, hrms_id=user.username).values_list('pk', flat=True))
+    return owned == set(loa_ids)
+
+
 def _can_access_site_register(user):
     if not user.is_authenticated:
         return False
@@ -332,14 +347,20 @@ class LinkedUsersView(APIView):
     DELETE /api/site-register/linked-users/<id>/          — remove supervisor mapping for given loa_ids
     """
     def get(self, request, link_id=None):
-        if not _is_admin(request.user):
+        is_admin     = _is_admin(request.user)
+        is_consignee = _is_consignee(request.user)
+        if not is_admin and not is_consignee:
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
+
         loa_ids_raw = request.query_params.get('loa_ids', '')
         if loa_ids_raw:
             try:
                 loa_ids = [int(x) for x in loa_ids_raw.split(',') if x.strip()]
             except ValueError:
                 return Response({'error': 'Invalid loa_ids.'}, status=status.HTTP_400_BAD_REQUEST)
+            # Consignee can only fetch supervisors for LOAs they own
+            if is_consignee and not is_admin and not _consignee_owns_loas(request.user, loa_ids):
+                return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
             mappings = (
                 WorkContractorTelegram.objects
                 .filter(work_id__in=loa_ids, is_active=True)
@@ -354,6 +375,10 @@ class LinkedUsersView(APIView):
                 row['loa_number'] = m.work.loa_number or f'LOA #{m.work_id}'
                 result.append(row)
             return Response(result)
+
+        # Full list — consignees must provide loa_ids; only admins can list all
+        if not is_admin:
+            return Response({'error': 'loa_ids required.'}, status=status.HTTP_400_BAD_REQUEST)
         links = (
             TelegramUserLink.objects
             .filter(is_verified=True)
@@ -492,11 +517,16 @@ class SupervisorInviteView(APIView):
     → check if invite was used; returns linked user info if so
     """
     def post(self, request):
-        if not _is_admin(request.user):
+        is_admin     = _is_admin(request.user)
+        is_consignee = _is_consignee(request.user)
+        if not is_admin and not is_consignee:
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
         loa_ids = request.data.get('loa_ids', [])
         if not loa_ids:
             return Response({'error': 'loa_ids required.'}, status=status.HTTP_400_BAD_REQUEST)
+        # Consignee can only invite for their own LOAs
+        if is_consignee and not is_admin and not _consignee_owns_loas(request.user, loa_ids):
+            return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
         invite = SupervisorInvite.generate(loa_ids=loa_ids, created_by=request.user)
         return Response({
             'code':       invite.code,
@@ -504,7 +534,7 @@ class SupervisorInviteView(APIView):
         })
 
     def get(self, request, code):
-        if not _is_admin(request.user):
+        if not _is_admin(request.user) and not _is_consignee(request.user):
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
         try:
             invite = SupervisorInvite.objects.get(code=code)
