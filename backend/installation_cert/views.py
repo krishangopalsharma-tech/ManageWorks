@@ -19,6 +19,7 @@ from reportlab.platypus import (
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT  # noqa: F401 — TA_CENTER used in table ALIGN
 
 from works.models import Work, WorkItem, WorkItemEntry
+from works.utils import is_assigned_consignee
 from .models import GeneratedCertificate
 
 
@@ -140,7 +141,7 @@ class EntriesPreviewView(APIView):
             .select_related('work_item')
         )
 
-        if not _is_admin(request.user):
+        if not (_is_admin(request.user) or is_assigned_consignee(request.user, Work.objects.get(pk=loa_id))):
             qs = qs.filter(submitted_by=request.user)
 
         if item_id:

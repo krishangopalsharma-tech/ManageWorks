@@ -23,6 +23,7 @@ INSTALLED_APPS = [
     'documents',
     'users',
     'item_progress',
+    'location_progress',
     'mb_details',
     'installation_cert',
     'site_gsheet_settings',

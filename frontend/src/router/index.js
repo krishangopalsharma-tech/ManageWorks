@@ -2,7 +2,8 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import Dashboard      from '../views/Dashboard.vue'
 import WorkDetails    from '../views/WorkDetails.vue'
-import ItemProgress   from '../views/ItemProgress.vue'
+import ItemProgress        from '../views/ItemProgress.vue'
+import LocationProgress   from '../views/LocationProgress.vue'
 import AddNewWork     from '../views/AddNewWork.vue'
 import UpdateWork     from '../views/UpdateWork.vue'
 import MBDetails      from '../views/MBDetails.vue'
@@ -29,6 +30,7 @@ const routes = [
   { path: '/',                         name: 'Dashboard',        component: Dashboard },
   { path: '/work-details',             name: 'Work Details',     component: WorkDetails },
   { path: '/item-progress',            name: 'Item Progress',    component: ItemProgress },
+  { path: '/location-progress',       name: 'Location Progress', component: LocationProgress },
   { path: '/add-new-work',             name: 'Add New Work',     component: AddNewWork },
   { path: '/update-work',              name: 'Update Work',      component: UpdateWork },
   { path: '/mb-details',               name: 'MB Details',       component: MBDetails },

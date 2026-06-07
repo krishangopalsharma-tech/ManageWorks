@@ -28,6 +28,15 @@ const romanOrdinal = (n) => {
   return `${n}th`
 }
 
+// Location normalisation: force uppercase; two-token input → sort codes + join with hyphen
+// e.g. "NRD - ASV" → "ASV-NRD", "asv nrd" → "ASV-NRD", "ASV" → "ASV"
+const normalizeLocation = (val) => {
+  if (!val) return ''
+  const parts = val.trim().toUpperCase().split(/[\s-]+/).filter(Boolean)
+  if (parts.length === 2) return [...parts].sort().join('-')
+  return parts.join(' ')
+}
+
 const supplyPct   = (item) => { const r = item.qty || 0; if (!r) return 0; return Math.min(Math.round((item.supplied_quantity || 0) / r * 100), 999) }
 const execPctItem = (item) => { const r = item.qty || 0; if (!r) return 0; return Math.min(Math.round((item.executed_quantity || 0) / r * 100), 999) }
 
@@ -720,7 +729,7 @@ const deleteWork = async () => {
                 <th class="px-4 py-3 text-center w-14">S.No</th>
                 <th class="px-4 py-3 text-left">Item Description</th>
                 <th @click="toggleSort('qty')" class="px-4 py-3 text-right w-28 cursor-pointer select-none hover:text-gray-600 transition-colors">
-                  <div class="flex items-center justify-end gap-1">Required <div :class="sortIcon('qty')" class="text-[9px]" :style="{ opacity: sortKey === 'qty' ? 1 : 0.35 }"></div></div>
+                  <div class="flex items-center justify-end gap-1">Scope <div :class="sortIcon('qty')" class="text-[9px]" :style="{ opacity: sortKey === 'qty' ? 1 : 0.35 }"></div></div>
                 </th>
                 <th @click="toggleSort('submitted')" class="px-4 py-3 text-right w-28 cursor-pointer select-none hover:text-gray-600 transition-colors">
                   <div class="flex items-center justify-end gap-1">Supplied <div :class="sortIcon('submitted')" class="text-[9px]" :style="{ opacity: sortKey === 'submitted' ? 1 : 0.35 }"></div></div>
@@ -952,7 +961,7 @@ const deleteWork = async () => {
                 <h2 class="text-sm font-semibold text-gray-900 leading-snug line-clamp-2">{{ lotPopupItem.item_desc }}</h2>
                 <div class="flex items-center gap-4 mt-3 flex-wrap">
                   <div class="flex flex-col">
-                    <span class="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Required</span>
+                    <span class="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Scope</span>
                     <span class="text-sm font-bold text-gray-800">{{ lotPopupItem.qty }} <span class="text-xs font-normal text-gray-400">{{ lotPopupItem.unit }}</span></span>
                   </div>
                   <div class="w-px h-8 bg-gray-100"></div>
@@ -1109,7 +1118,9 @@ const deleteWork = async () => {
                   </div>
                   <div class="flex flex-col gap-1.5">
                     <label class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Location <span class="text-red-400">*</span></label>
-                    <input v-model="entryForm.location" type="text" placeholder="Site / Station / Km..."
+                    <input v-model="entryForm.location" type="text" placeholder="Station / Section"
+                      style="text-transform:uppercase"
+                      @blur="entryForm.location = normalizeLocation(entryForm.location)"
                       class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none focus:border-[#34c759] focus:ring-2 focus:ring-[#34c759]/10 focus:bg-white transition-all">
                   </div>
                 </div>
@@ -1203,6 +1214,8 @@ const deleteWork = async () => {
                         <template v-else>
                           <td class="px-3 py-2">
                             <input v-model="editingEntry.location" type="text"
+                              style="text-transform:uppercase"
+                              @blur="editingEntry.location = normalizeLocation(editingEntry.location)"
                               class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-700 outline-none focus:border-accent-b">
                           </td>
                           <td class="px-3 py-2">

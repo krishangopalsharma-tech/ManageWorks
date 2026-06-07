@@ -4,7 +4,7 @@ from rest_framework import status
 from django.db.models import Q
 from works.models import Work, WorkItem
 from works.serializers import WorkItemSerializer
-from works.utils import contractor_nickname as _nickname
+from works.utils import contractor_nickname as _nickname, can_see_all_entries
 
 
 class WorkListView(APIView):
@@ -58,6 +58,12 @@ class ItemSearchView(APIView):
             serialized['contractor_name']     = item.work.contractor_name or '—'
             serialized['contractor_nickname'] = _nickname(item.work.contractor_name or '')
             serialized['tender_number']       = item.work.tender_number or '—'
+            # Privacy: non-assigned consignees see cumulative totals but only their own entries
+            if not can_see_all_entries(request.user, item.work):
+                serialized['entries'] = [
+                    e for e in serialized.get('entries', [])
+                    if e.get('submitted_by') == request.user.id
+                ]
             data.append(serialized)
 
         return Response(data)

@@ -319,7 +319,7 @@ const generateItemPDF = async (includeEntries = true) => {
         head: [[
           { content: `${item.loa_number || '—'}  ·  ${item.schedule}  ·  S.No ${item.serial_number}`, styles: { fillColor: [235, 245, 244], textColor: C_TEAL, fontStyle: 'bold', fontSize: 7.5 } },
           { content: `${item.tender_number || '—'}\n${item.contractor_name || '—'}`, styles: { fillColor: [235, 245, 244], textColor: C_GRAY, fontSize: 7, halign: 'left' } },
-          { content: `Required: ${item.qty} ${item.unit}`, styles: { fillColor: [235, 245, 244], textColor: C_GRAY, fontSize: 7.5, halign: 'right' } },
+          { content: `Scope: ${item.qty} ${item.unit}`, styles: { fillColor: [235, 245, 244], textColor: C_GRAY, fontSize: 7.5, halign: 'right' } },
           { content: `${isB ? 'Executed' : 'Supplied'}: ${done} ${item.unit}`, styles: { fillColor: [235, 245, 244], textColor: C_GRAY, fontSize: 7.5, halign: 'right' } },
           { content: `Remaining: ${remaining} ${item.unit}`, styles: { fillColor: [235, 245, 244], textColor: remaining < 0 ? [220, 80, 30] : C_GRAY, fontSize: 7.5, halign: 'right' } },
           { content: `${pct}%`, styles: { fillColor: [235, 245, 244], textColor: pctNum >= 99 ? C_TEAL : pctNum > 0 ? C_BLUE : C_GRAY, fontStyle: 'bold', fontSize: 8, halign: 'right' } },
@@ -625,7 +625,7 @@ const generateItemPDF = async (includeEntries = true) => {
             <th class="px-4 py-3 text-center w-14">S.No</th>
             <th class="px-4 py-3 text-left">Item Description</th>
             <th @click="toggleSort('qty')" class="px-4 py-3 text-right w-28 cursor-pointer select-none hover:text-gray-600 transition-colors">
-              <div class="flex items-center justify-end gap-1">Required <div :class="sortIcon('qty')" class="text-[9px]" :style="{ opacity: sortKey === 'qty' ? 1 : 0.35 }"></div></div>
+              <div class="flex items-center justify-end gap-1">Scope <div :class="sortIcon('qty')" class="text-[9px]" :style="{ opacity: sortKey === 'qty' ? 1 : 0.35 }"></div></div>
             </th>
             <th @click="toggleSort('submitted')" class="px-4 py-3 text-right w-28 cursor-pointer select-none hover:text-gray-600 transition-colors">
               <div class="flex items-center justify-end gap-1">Supplied <div :class="sortIcon('submitted')" class="text-[9px]" :style="{ opacity: sortKey === 'submitted' ? 1 : 0.35 }"></div></div>

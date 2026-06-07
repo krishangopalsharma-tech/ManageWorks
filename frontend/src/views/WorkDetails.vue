@@ -754,7 +754,7 @@ const generateWorkPDF = async () => {
       startY: 16,
       margin: { left: mg, right: mg },
       styles: tblFont,
-      head: [['Sch', 'S.No', 'Item Description', 'Required', 'Supplied / Exec', 'Progress', 'Contract Value', 'Earned']],
+      head: [['Sch', 'S.No', 'Item Description', 'Scope', 'Supplied / Exec', 'Progress', 'Contract Value', 'Earned']],
       body: progressItems.map(item => {
         const sch = String(item.schedule || '').toUpperCase().trim()
         const isB = sch.startsWith('B')
@@ -1217,7 +1217,7 @@ const generateWorkPDF = async () => {
                   <th class="px-4 py-3 text-center w-14">S.No</th>
                   <th class="px-4 py-3 text-left">Item Description</th>
                   <th @click="toggleSort('qty')" class="px-4 py-3 text-right w-28 cursor-pointer select-none hover:text-gray-600 transition-colors">
-                    <div class="flex items-center justify-end gap-1">Required <div :class="sortIcon('qty')" class="text-[9px]" :style="{ opacity: sortKey === 'qty' ? 1 : 0.35 }"></div></div>
+                    <div class="flex items-center justify-end gap-1">Scope <div :class="sortIcon('qty')" class="text-[9px]" :style="{ opacity: sortKey === 'qty' ? 1 : 0.35 }"></div></div>
                   </th>
                   <th @click="toggleSort('submitted')" class="px-4 py-3 text-right w-28 cursor-pointer select-none hover:text-gray-600 transition-colors">
                     <div class="flex items-center justify-end gap-1">Submitted <div :class="sortIcon('submitted')" class="text-[9px]" :style="{ opacity: sortKey === 'submitted' ? 1 : 0.35 }"></div></div>

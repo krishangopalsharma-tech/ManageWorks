@@ -25,7 +25,8 @@ const toggleCollapsed = () => {
 const menuItems = ref([
   { name: 'Dashboard',    icon: 'i-carbon-dashboard', path: '/' },
   { name: 'Work Details', icon: 'i-carbon-catalog',   path: '/work-details' },
-  { name: 'Item Progress',icon: 'i-carbon-chart-bar', path: '/item-progress' },
+  { name: 'Item Progress',     icon: 'i-carbon-chart-bar',      path: '/item-progress' },
+  { name: 'Location Progress', icon: 'i-carbon-location-filled', path: '/location-progress' },
   { name: 'Update Work',  icon: 'i-carbon-edit',      path: '/update-work' },
   { name: 'Site Register', icon: 'i-carbon-map',       path: '/site-register', siteRegisterOnly: true },
   { name: 'MB Details',       icon: 'i-carbon-receipt',       path: '/mb-details' },
