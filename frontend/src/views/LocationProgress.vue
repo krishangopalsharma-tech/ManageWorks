@@ -3,7 +3,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import axios from 'axios'
 
 const allWorks       = ref([])
-const allRows        = ref([])   // flat (location, work_item) rows from server
+const allRows        = ref([])
 const isLoadingWorks = ref(true)
 const isLoadingData  = ref(false)
 const workSearch     = ref('')
@@ -12,7 +12,7 @@ const locationSearch = ref('')
 const selectedIds    = ref([])
 const dropdownOpen   = ref(false)
 const dropdownRef    = ref(null)
-const expandedKey    = ref(null)  // "loc__wiId" string
+const expandedKey    = ref(null)
 
 const fmtDateTime = (val) => {
   if (!val) return '—'
@@ -20,7 +20,7 @@ const fmtDateTime = (val) => {
   return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-// ── Works dropdown ────────────────────────────────────────────────────────────
+// ── Works dropdown ─────────────────────────────────────────────────────────────
 const loadWorks = async () => {
   isLoadingWorks.value = true
   try {
@@ -44,7 +44,8 @@ const filteredWorksDropdown = computed(() => {
 const allSelected   = computed(() => selectedIds.value.length === allWorks.value.length && allWorks.value.length > 0)
 const noneSelected  = computed(() => selectedIds.value.length === 0)
 const dropdownLabel = computed(() => {
-  if (noneSelected.value || allSelected.value) return 'All Works'
+  if (noneSelected.value) return 'Select Work…'
+  if (allSelected.value)  return 'All Works'
   const n = selectedIds.value.length
   if (n === 1) { const w = allWorks.value.find(w => w.id === selectedIds.value[0]); return w?.loa_number || w?.contractor_name || '1 work' }
   return `${n} works selected`
@@ -55,14 +56,15 @@ const toggleWork = (id) => {
   else selectedIds.value.push(id)
 }
 
-// ── Load data ─────────────────────────────────────────────────────────────────
+// ── Load data ──────────────────────────────────────────────────────────────────
 let loadTimer = null
 const loadData = async () => {
+  if (noneSelected.value) { allRows.value = []; return }
   isLoadingData.value = true
   expandedKey.value = null
   try {
     const params = {}
-    if (!noneSelected.value && !allSelected.value) params.work_ids = selectedIds.value.join(',')
+    if (!allSelected.value) params.work_ids = selectedIds.value.join(',')
     const res = await axios.get('/api/location-progress/data/', { params })
     allRows.value = res.data
   } catch (e) { console.error(e) }
@@ -74,33 +76,22 @@ watch(selectedIds, () => {
   loadTimer = setTimeout(loadData, 300)
 }, { deep: true })
 
-// ── Category filter ───────────────────────────────────────────────────────────
-const selectedCategories = ref(['supply', 'supply_installation', 'execution'])
+// ── Category filter ────────────────────────────────────────────────────────────
+const selectedCategories = ref(['supply_installation', 'execution'])
 const toggleCategory = (cat) => {
   const idx = selectedCategories.value.indexOf(cat)
   if (idx >= 0) selectedCategories.value.splice(idx, 1)
   else selectedCategories.value.push(cat)
 }
 
-// ── Progress filter ───────────────────────────────────────────────────────────
-const progressMin   = ref(0)
-const progressMax   = ref(100)
-const includeExcess = ref(true)
-const progressFilterActive = computed(() => progressMin.value > 0 || progressMax.value < 100 || !includeExcess.value)
-const resetProgress = () => { progressMin.value = 0; progressMax.value = 100; includeExcess.value = true }
-const onMinInput    = () => { if (progressMin.value > progressMax.value) progressMax.value = progressMin.value }
-const onMaxInput    = () => { if (progressMax.value < progressMin.value) progressMin.value = progressMax.value }
-
-// ── Filtered rows ─────────────────────────────────────────────────────────────
+// ── Filtered rows ──────────────────────────────────────────────────────────────
 const filteredRows = computed(() => {
   let rows = allRows.value
 
-  // Category
-  if (selectedCategories.value.length < 3) {
+  if (selectedCategories.value.length < 2) {
     rows = rows.filter(r => selectedCategories.value.includes(r.category || 'supply'))
   }
 
-  // Item search
   const iq = itemSearch.value.toLowerCase().trim()
   if (iq) {
     rows = rows.filter(r =>
@@ -110,25 +101,15 @@ const filteredRows = computed(() => {
     )
   }
 
-  // Location search
   const lq = locationSearch.value.toUpperCase().trim()
   if (lq) {
     rows = rows.filter(r => r.location.includes(lq))
   }
 
-  // Progress filter
-  if (progressFilterActive.value) {
-    rows = rows.filter(r => {
-      const pct = r.progress_pct
-      if (pct > 100) return includeExcess.value
-      return pct >= progressMin.value && pct <= progressMax.value
-    })
-  }
-
   return rows
 })
 
-// ── Sorting ───────────────────────────────────────────────────────────────────
+// ── Sorting ────────────────────────────────────────────────────────────────────
 const sortKey = ref('')
 const sortDir = ref('desc')
 const toggleSort = (key) => {
@@ -148,35 +129,201 @@ const sortedRows = computed(() => {
     else if (sortKey.value === 'remaining'){ av = a.remaining;      bv = b.remaining }
     else if (sortKey.value === 'progress') { av = a.progress_pct;   bv = b.progress_pct }
     else if (sortKey.value === 'entries')  { av = a.entries_count;  bv = b.entries_count }
-    else if (sortKey.value === 'location') { av = a.location;       bv = b.location; return sortDir.value === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av) }
+    else if (sortKey.value === 'location') { av = a.location; bv = b.location; return sortDir.value === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av) }
     else { av = 0; bv = 0 }
     return sortDir.value === 'asc' ? av - bv : bv - av
   })
 })
 
-// ── Stats ─────────────────────────────────────────────────────────────────────
+// ── Stats ──────────────────────────────────────────────────────────────────────
 const stats = computed(() => {
   const rows = filteredRows.value
   const sections = rows.filter(r => r.location_type === 'section').length
   const stations = rows.filter(r => r.location_type === 'station').length
   const siCount  = rows.filter(r => r.category === 'supply_installation').length
   const exCount  = rows.filter(r => r.category === 'execution').length
-  const avgProg  = rows.length ? Math.round(rows.reduce((s, r) => s + r.progress_pct, 0) / rows.length) : 0
-  return { sections, stations, siCount, exCount, avgProg }
+  return { sections, stations, siCount, exCount }
 })
 
-// ── Expand toggle ─────────────────────────────────────────────────────────────
+// ── Expand toggle ──────────────────────────────────────────────────────────────
 const rowKey = (r) => `${r.location}__${r.work_item_id}`
 const toggleExpand = (r) => {
   const k = rowKey(r)
   expandedKey.value = expandedKey.value === k ? null : k
 }
 
-// ── Dropdown close ────────────────────────────────────────────────────────────
+// ── PDF Export ─────────────────────────────────────────────────────────────────
+const isGeneratingPDF    = ref(false)
+const showPdfModal       = ref(false)
+const pdfIncludeEntries  = ref(null)
+
+const onExportClick = () => { showPdfModal.value = true; pdfIncludeEntries.value = null }
+const confirmPdfExport = async (includeEntries) => {
+  pdfIncludeEntries.value = includeEntries
+  showPdfModal.value = false
+  await generateLocationPDF(includeEntries)
+}
+
+const generateLocationPDF = async (includeEntries = true) => {
+  if (!filteredRows.value.length) return
+  isGeneratingPDF.value = true
+  try {
+    const { jsPDF } = await import('jspdf')
+    const { default: autoTable } = await import('jspdf-autotable')
+
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+    const pw = doc.internal.pageSize.getWidth()
+    const ph = doc.internal.pageSize.getHeight()
+    const mg = 12
+
+    const C_TEAL  = [29, 95, 94]
+    const C_AMBER = [193, 120, 65]
+    const C_BLUE  = [0, 113, 227]
+    const C_GRAY  = [107, 114, 128]
+
+    const rows  = sortedRows.value
+    const st    = stats.value
+    const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+
+    const addPageHeader = () => {
+      doc.setFillColor(...C_TEAL)
+      doc.rect(0, 0, pw, 12, 'F')
+      doc.setTextColor(255, 255, 255)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(8.5)
+      doc.text('Location Progress Report', mg, 8)
+      const filters = [
+        itemSearch.value     && `Item: "${itemSearch.value}"`,
+        locationSearch.value && `Location: "${locationSearch.value}"`,
+      ].filter(Boolean).join('  ·  ')
+      if (filters) {
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(7.5)
+        doc.text(filters, pw / 2, 8, { align: 'center' })
+      }
+      doc.setFontSize(7)
+      doc.text(today, pw - mg, 8, { align: 'right' })
+    }
+
+    addPageHeader()
+
+    autoTable(doc, {
+      startY: 16,
+      margin: { left: mg, right: mg },
+      head: [['S+I Rows', 'Execution Rows', 'Sections', 'Stations', 'Total Rows']],
+      body: [[String(st.siCount), String(st.exCount), String(st.sections), String(st.stations), String(rows.length)]],
+      headStyles: { fillColor: C_TEAL, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold', halign: 'center' },
+      bodyStyles: { fontSize: 10, fontStyle: 'bold', halign: 'center', minCellHeight: 9 },
+      columnStyles: { 0: { textColor: [109, 40, 217] }, 1: { textColor: C_AMBER } },
+      tableLineColor: [229, 231, 235],
+      tableLineWidth: 0.2,
+    })
+
+    let y = doc.lastAutoTable.finalY + 6
+
+    for (const row of rows) {
+      const entryCount = (row.entries || []).length
+      const neededH = 10 + (includeEntries ? entryCount * 5 + 4 : 0)
+      if (y + Math.min(neededH, 30) > ph - 12) {
+        doc.addPage()
+        addPageHeader()
+        y = 16
+      }
+
+      autoTable(doc, {
+        startY: y,
+        margin: { left: mg, right: mg },
+        head: [[
+          { content: `${row.location_type === 'section' ? 'SECTION' : 'STATION'}  ${row.location}`, styles: { fillColor: row.location_type === 'section' ? [219, 234, 254] : [220, 252, 231], textColor: row.location_type === 'section' ? [29, 78, 216] : [21, 128, 61], fontStyle: 'bold', fontSize: 7.5 } },
+          { content: `${row.loa_number || '—'}\n${row.contractor_name || '—'}`, styles: { fillColor: [235, 245, 244], textColor: C_TEAL, fontSize: 7 } },
+          { content: `${row.schedule || '—'}  ·  S.No ${row.serial_number || '—'}`, styles: { fillColor: [235, 245, 244], textColor: C_GRAY, fontSize: 7, halign: 'center' } },
+          { content: `Executed here: ${row.executed_here} ${row.unit}`, styles: { fillColor: [235, 245, 244], textColor: C_AMBER, fontSize: 7.5, halign: 'right' } },
+          { content: `Scope: ${row.scope} ${row.unit}`, styles: { fillColor: [235, 245, 244], textColor: C_GRAY, fontSize: 7.5, halign: 'right' } },
+          { content: `Remaining: ${row.remaining} ${row.unit}`, styles: { fillColor: [235, 245, 244], textColor: row.remaining < 0 ? [220, 80, 30] : C_GRAY, fontSize: 7.5, halign: 'right' } },
+          { content: `${row.progress_pct}%`, styles: { fillColor: [235, 245, 244], textColor: row.progress_pct > 100 ? C_AMBER : row.progress_pct >= 99 ? C_TEAL : C_BLUE, fontStyle: 'bold', fontSize: 8, halign: 'right' } },
+        ]],
+        body: [[{
+          content: (() => { const d = row.item_desc || ''; return d.length > 160 ? d.substring(0, 157) + '…' : d })(),
+          colSpan: 7,
+          styles: { fontSize: 7.5, textColor: [50, 50, 50], cellPadding: { top: 2, bottom: 2, left: 3, right: 3 } },
+        }]],
+        columnStyles: {
+          0: { cellWidth: 38 },
+          1: { cellWidth: 44 },
+          2: { cellWidth: 28, halign: 'center' },
+          3: { cellWidth: 36, halign: 'right' },
+          4: { cellWidth: 32, halign: 'right' },
+          5: { cellWidth: 36, halign: 'right' },
+          6: { cellWidth: 20, halign: 'right' },
+        },
+        tableLineColor: [209, 231, 229],
+        tableLineWidth: 0.2,
+      })
+
+      y = doc.lastAutoTable.finalY
+
+      if (includeEntries && entryCount > 0) {
+        const hasPrivacyNote = row.visible_entries_count < row.entries_count
+        autoTable(doc, {
+          startY: y,
+          margin: { left: mg + 3, right: mg },
+          head: [['#', 'Qty', 'Submitted By', 'Designation', 'Date & Time', 'Remarks']],
+          body: [
+            ...row.entries.map((e, idx) => [
+              idx + 1,
+              `${e.quantity} ${row.unit}`,
+              e.submitted_by_name || '—',
+              e.submitted_by_designation || '—',
+              fmtDateTime(e.submitted_at),
+              e.remarks || '—',
+            ]),
+            ...(hasPrivacyNote ? [[{
+              content: `(${row.visible_entries_count} of ${row.entries_count} entries shown — limited by access level)`,
+              colSpan: 6,
+              styles: { textColor: C_GRAY, fontSize: 6.5, fontStyle: 'italic', halign: 'center' },
+            }]] : []),
+          ],
+          headStyles: { fillColor: [241, 245, 249], textColor: C_GRAY, fontSize: 7, fontStyle: 'bold' },
+          bodyStyles: { fontSize: 7 },
+          columnStyles: {
+            0: { cellWidth: 8, halign: 'center' },
+            1: { cellWidth: 24, halign: 'right' },
+            2: { cellWidth: 36 },
+            3: { cellWidth: 32 },
+            4: { cellWidth: 34 },
+            5: { cellWidth: 'auto' },
+          },
+          tableLineColor: [229, 231, 235],
+          tableLineWidth: 0.15,
+        })
+        y = doc.lastAutoTable.finalY + 5
+      } else {
+        y += 5
+      }
+    }
+
+    const totalPages = doc.getNumberOfPages()
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7)
+      doc.setTextColor(...C_GRAY)
+      doc.text(`Page ${i} of ${totalPages}`, pw - mg, ph - 4, { align: 'right' })
+      doc.text('ManageWorks — Location Progress Report', mg, ph - 4)
+    }
+
+    const safeName = (locationSearch.value || dropdownLabel.value || 'export').replace(/[^a-z0-9]/gi, '_').substring(0, 30)
+    doc.save(`Location_Progress_${safeName}_${new Date().toISOString().substring(0, 10)}.pdf`)
+  } finally {
+    isGeneratingPDF.value = false
+  }
+}
+
+// ── Dropdown close ─────────────────────────────────────────────────────────────
 const closeDropdown = (e) => {
   if (dropdownRef.value && !dropdownRef.value.contains(e.target)) dropdownOpen.value = false
 }
-onMounted(() => { loadWorks(); loadData(); document.addEventListener('click', closeDropdown) })
+onMounted(() => { loadWorks(); document.addEventListener('click', closeDropdown) })
 onBeforeUnmount(() => { document.removeEventListener('click', closeDropdown); clearTimeout(loadTimer) })
 </script>
 
@@ -186,7 +333,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', closeDropdown); cl
     <!-- Header -->
     <div class="flex-shrink-0 px-8 pt-7 pb-5 border-b border-gray-100">
       <h1 class="text-2xl font-bold text-gray-900 tracking-tight mb-1">Location Progress</h1>
-      <p class="text-gray-400 text-sm font-medium mb-4">Execution entries grouped by location — station or section.</p>
+      <p class="text-gray-400 text-sm font-medium mb-4">S+I and Execution entries grouped by location — station or section.</p>
 
       <!-- Filter row -->
       <div class="flex items-center gap-3 mb-3">
@@ -199,7 +346,9 @@ onBeforeUnmount(() => { document.removeEventListener('click', closeDropdown); cl
             <div class="flex items-center gap-2 min-w-0">
               <div v-if="isLoadingWorks || isLoadingData" class="i-carbon-circle-dash animate-spin text-gray-400 text-base flex-shrink-0"></div>
               <div v-else class="i-carbon-building text-gray-400 text-base flex-shrink-0"></div>
-              <span class="truncate text-sm">{{ isLoadingWorks ? 'Loading…' : dropdownLabel }}</span>
+              <span class="truncate text-sm" :class="noneSelected ? 'text-gray-400' : 'text-gray-700'">
+                {{ isLoadingWorks ? 'Loading…' : dropdownLabel }}
+              </span>
             </div>
             <div :class="dropdownOpen ? 'i-carbon-chevron-up' : 'i-carbon-chevron-down'" class="text-gray-400 text-sm flex-shrink-0 ml-2"></div>
           </button>
@@ -252,15 +401,8 @@ onBeforeUnmount(() => { document.removeEventListener('click', closeDropdown); cl
           </div>
         </div>
 
-        <!-- Category filter pills -->
+        <!-- Category filter pills — S+I and Execution only -->
         <div class="flex items-center gap-1.5 flex-shrink-0">
-          <button @click="toggleCategory('supply')"
-            class="px-3 py-2 rounded-xl text-[11px] font-bold border transition-all"
-            :class="selectedCategories.includes('supply')
-              ? 'bg-teal-50 border-teal-300 text-teal-700'
-              : 'bg-white border-gray-200 text-gray-400'">
-            Supply
-          </button>
           <button @click="toggleCategory('supply_installation')"
             class="px-3 py-2 rounded-xl text-[11px] font-bold border transition-all"
             :class="selectedCategories.includes('supply_installation')
@@ -279,59 +421,34 @@ onBeforeUnmount(() => { document.removeEventListener('click', closeDropdown); cl
 
         <div class="w-px h-6 bg-gray-200 flex-shrink-0"></div>
 
-        <!-- Item search -->
-        <div class="flex-1 flex items-center bg-gray-50 border border-gray-200 rounded-2xl px-4 py-2.5 focus-within:ring-2 focus-within:ring-[#1D5F5E]/20 focus-within:border-[#1D5F5E] focus-within:bg-white transition-all">
-          <div class="i-carbon-search text-gray-400 text-base mr-3 flex-shrink-0"></div>
-          <input v-model="itemSearch" type="text"
-            placeholder="Search items by description, schedule, serial no…"
-            class="bg-transparent outline-none w-full text-gray-700 font-medium placeholder-gray-400 text-sm">
-          <button v-if="itemSearch" @click="itemSearch = ''" class="ml-2 text-gray-300 hover:text-gray-500 transition-colors">
-            <div class="i-carbon-close text-sm"></div>
-          </button>
-        </div>
-
-        <!-- Location search -->
-        <div class="flex items-center bg-gray-50 border border-gray-200 rounded-2xl px-4 py-2.5 focus-within:ring-2 focus-within:ring-[#1D5F5E]/20 focus-within:border-[#1D5F5E] focus-within:bg-white transition-all w-44 flex-shrink-0">
-          <div class="i-carbon-location text-gray-400 text-base mr-2 flex-shrink-0"></div>
-          <input v-model="locationSearch" type="text"
-            placeholder="Location…"
-            style="text-transform:uppercase"
-            class="bg-transparent outline-none w-full text-gray-700 font-medium placeholder-gray-400 text-sm">
-          <button v-if="locationSearch" @click="locationSearch = ''" class="ml-2 text-gray-300 hover:text-gray-500 transition-colors">
-            <div class="i-carbon-close text-sm"></div>
-          </button>
-        </div>
-      </div>
-
-      <!-- Progress range slider -->
-      <div v-if="allRows.length > 0" class="flex items-center gap-3 mt-2.5">
-        <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex-shrink-0">Progress</span>
-        <div class="flex items-center gap-2 flex-1 max-w-sm">
-          <span class="text-[11px] font-bold text-gray-600 w-8 text-right flex-shrink-0 tabular-nums">{{ progressMin }}%</span>
-          <div class="relative flex-1 h-5 flex items-center">
-            <div class="absolute w-full h-1.5 bg-gray-200 rounded-full"></div>
-            <div class="absolute h-1.5 bg-[#1D5F5E] rounded-full pointer-events-none"
-              :style="{ left: progressMin + '%', width: (progressMax - progressMin) + '%' }"></div>
-            <input type="range" min="0" max="100" step="1" v-model.number="progressMin"
-              @input="onMinInput" class="progress-thumb absolute w-full">
-            <input type="range" min="0" max="100" step="1" v-model.number="progressMax"
-              @input="onMaxInput" class="progress-thumb absolute w-full">
+        <!-- Search bars: 50-50 split -->
+        <div class="flex-1 flex gap-2">
+          <!-- Item search -->
+          <div class="flex-1 flex items-center bg-gray-50 border border-gray-200 rounded-2xl px-4 py-2.5 focus-within:ring-2 focus-within:ring-[#1D5F5E]/20 focus-within:border-[#1D5F5E] focus-within:bg-white transition-all">
+            <div class="i-carbon-search text-gray-400 text-base mr-3 flex-shrink-0"></div>
+            <input v-model="itemSearch" type="text"
+              placeholder="Search items by description, schedule, serial no…"
+              class="bg-transparent outline-none w-full text-gray-700 font-medium placeholder-gray-400 text-sm">
+            <button v-if="itemSearch" @click="itemSearch = ''" class="ml-2 text-gray-300 hover:text-gray-500 transition-colors">
+              <div class="i-carbon-close text-sm"></div>
+            </button>
           </div>
-          <span class="text-[11px] font-bold text-gray-600 w-8 flex-shrink-0 tabular-nums">{{ progressMax }}%</span>
+
+          <!-- Location search -->
+          <div class="flex-1 flex items-center bg-gray-50 border border-gray-200 rounded-2xl px-4 py-2.5 focus-within:ring-2 focus-within:ring-[#1D5F5E]/20 focus-within:border-[#1D5F5E] focus-within:bg-white transition-all">
+            <div class="i-carbon-location text-gray-400 text-base mr-2 flex-shrink-0"></div>
+            <input v-model="locationSearch" type="text"
+              placeholder="Search by location (e.g. ADI, ASV-NRD)…"
+              style="text-transform:uppercase"
+              class="bg-transparent outline-none w-full text-gray-700 font-medium placeholder-gray-400 text-sm">
+            <button v-if="locationSearch" @click="locationSearch = ''" class="ml-2 text-gray-300 hover:text-gray-500 transition-colors">
+              <div class="i-carbon-close text-sm"></div>
+            </button>
+          </div>
         </div>
-        <button @click="includeExcess = !includeExcess"
-          class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all flex-shrink-0"
-          :class="includeExcess ? 'bg-orange-50 border-orange-300 text-orange-700' : 'bg-white border-gray-200 text-gray-400 line-through'">
-          <div class="i-carbon-overflow-menu-horizontal text-[11px]"></div>
-          +Excess
-        </button>
-        <button v-if="progressFilterActive" @click="resetProgress"
-          class="flex items-center gap-1 text-[10px] font-semibold text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0">
-          <div class="i-carbon-reset text-[11px]"></div> Reset
-        </button>
       </div>
 
-      <!-- Stats pills -->
+      <!-- Stats pills + Export PDF button -->
       <div v-if="filteredRows.length > 0" class="flex flex-wrap items-center gap-3 mt-2.5">
         <div class="flex items-center gap-2 bg-violet-50 border border-violet-200 rounded-xl px-4 py-2">
           <div class="w-2 h-2 rounded-full bg-violet-500"></div>
@@ -361,19 +478,31 @@ onBeforeUnmount(() => { document.removeEventListener('click', closeDropdown); cl
             rows
           </span>
         </div>
+        <button @click="onExportClick" :disabled="isGeneratingPDF"
+          class="ml-auto flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all bg-white border-gray-200 text-gray-600 hover:border-[#1D5F5E] hover:text-[#1D5F5E] hover:bg-accent-soft disabled:opacity-50 disabled:cursor-not-allowed">
+          <div :class="isGeneratingPDF ? 'i-carbon-circle-dash animate-spin' : 'i-carbon-document-pdf'" class="text-sm"></div>
+          {{ isGeneratingPDF ? 'Generating…' : 'Export PDF' }}
+        </button>
       </div>
     </div>
 
+    <!-- Select a work prompt -->
+    <div v-if="noneSelected && !isLoadingData" class="flex-1 flex flex-col items-center justify-center py-24 text-center">
+      <div class="i-carbon-building text-5xl text-gray-200 mb-4"></div>
+      <p class="text-sm font-semibold text-gray-400">Select a work to view location data.</p>
+      <p class="text-xs text-gray-300 mt-1">Use the dropdown above to choose one or more works.</p>
+    </div>
+
     <!-- Loading -->
-    <div v-if="isLoadingData" class="flex-1 flex flex-col items-center justify-center py-24 text-center">
+    <div v-else-if="isLoadingData" class="flex-1 flex flex-col items-center justify-center py-24 text-center">
       <div class="i-carbon-circle-dash animate-spin text-4xl text-gray-300 mb-4"></div>
       <p class="text-sm font-semibold text-gray-400">Loading location data…</p>
     </div>
 
-    <!-- Empty -->
+    <!-- Empty — no entries for selected work(s) -->
     <div v-else-if="!isLoadingData && allRows.length === 0" class="flex-1 flex flex-col items-center justify-center py-24 text-center">
       <div class="i-carbon-location text-5xl text-gray-200 mb-4"></div>
-      <p class="text-sm font-semibold text-gray-400">No location data yet.</p>
+      <p class="text-sm font-semibold text-gray-400">No location data for selected work(s).</p>
       <p class="text-xs text-gray-300 mt-1">Execution entries with a location will appear here.</p>
     </div>
 
@@ -579,37 +708,34 @@ onBeforeUnmount(() => { document.removeEventListener('click', closeDropdown); cl
         </tbody>
       </table>
     </div>
+
+    <!-- PDF Export Modal -->
+    <Teleport to="body">
+      <div v-if="showPdfModal" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" @click.self="showPdfModal = false">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="w-10 h-10 rounded-xl bg-accent-soft flex items-center justify-center">
+              <div class="i-carbon-document-pdf text-accent text-xl"></div>
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-gray-900">Export PDF</h3>
+              <p class="text-xs text-gray-400">{{ filteredRows.length }} row{{ filteredRows.length !== 1 ? 's' : '' }} in current view</p>
+            </div>
+          </div>
+          <p class="text-sm text-gray-600 mb-5">Include individual entries in the PDF?</p>
+          <div class="flex gap-3">
+            <button @click="confirmPdfExport(true)"
+              class="flex-1 py-2.5 rounded-xl text-sm font-bold bg-accent text-white hover:bg-accent/90 transition-colors">
+              Yes, include entries
+            </button>
+            <button @click="confirmPdfExport(false)"
+              class="flex-1 py-2.5 rounded-xl text-sm font-bold border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">
+              Summary only
+            </button>
+          </div>
+          <button @click="showPdfModal = false" class="mt-3 w-full py-2 text-xs font-medium text-gray-400 hover:text-gray-600 transition-colors">Cancel</button>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
-
-<style scoped>
-.progress-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  pointer-events: none;
-  background: transparent;
-  height: 20px;
-}
-.progress-thumb::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  pointer-events: all;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #1D5F5E;
-  cursor: pointer;
-  border: 2px solid white;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-}
-.progress-thumb::-moz-range-thumb {
-  pointer-events: all;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #1D5F5E;
-  cursor: pointer;
-  border: 2px solid white;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-}
-</style>

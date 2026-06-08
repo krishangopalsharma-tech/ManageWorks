@@ -193,7 +193,7 @@ watch(selectedLoas, () => { fetchStats(); fetchTrend() }, { deep: true })
 watch(activePeriod, () => fetchTrend())
 // ── Drag-resize divider ────────────────────────────────────────────────────
 const STORAGE_KEY = 'mw_dashboard_left_pct'
-const leftPct  = ref(parseFloat(localStorage.getItem(STORAGE_KEY) || '60'))
+const leftPct  = ref(parseFloat(localStorage.getItem(STORAGE_KEY) || '72'))
 const isDragging = ref(false)
 const containerRef = ref(null)
 
