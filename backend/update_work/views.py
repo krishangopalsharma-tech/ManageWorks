@@ -88,9 +88,12 @@ class WorkUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
 
         return Response(serializer.data)
 
-    def perform_destroy(self, instance):
-        _check_can_modify_work(self.request.user)
-        instance.delete()
+    def destroy(self, _request, *args, **kwargs):
+        from rest_framework.response import Response
+        return Response(
+            {'error': 'Use DELETE /api/delete-log/works/<pk>/ with a reason to delete an LOA.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
 
 # ── Lot-entry submission ──────────────────────────────────────────────────────

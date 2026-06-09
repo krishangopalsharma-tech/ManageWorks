@@ -497,7 +497,11 @@ class LoaPartyView(APIView):
         }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
     def delete(self, request, work_id, mapping_id):
-        if not _is_admin(request.user):
+        is_admin = _is_admin(request.user)
+        is_consignee = _is_consignee(request.user)
+        if not is_admin and not is_consignee:
+            return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
+        if is_consignee and not is_admin and not _consignee_owns_loas(request.user, [int(work_id)]):
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
         try:
             mapping = WorkContractorTelegram.objects.get(pk=mapping_id, work_id=work_id)

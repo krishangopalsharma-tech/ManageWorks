@@ -112,6 +112,8 @@ const isSavingWork      = ref(false)
 const workSaveStatus    = ref('')
 const showDeleteConfirm = ref(false)
 const isDeletingWork    = ref(false)
+const deleteReason      = ref('')
+const deleteReasonError = ref('')
 
 // ── Batch PDF Modal ────────────────────────────────────────────────────────
 const batchModal      = ref(false)
@@ -562,7 +564,7 @@ const openEditWork = (work) => {
   workSaveStatus.value    = ''
   showDeleteConfirm.value = false
 }
-const closeEditWork = () => { editingWork.value = null; showDeleteConfirm.value = false; workSaveStatus.value = '' }
+const closeEditWork = () => { editingWork.value = null; showDeleteConfirm.value = false; workSaveStatus.value = ''; deleteReason.value = ''; deleteReasonError.value = '' }
 
 const addExtension = () => { editingWork.value.extensions.push({ extension_date: '' }) }
 const removeExtension = (idx) => { editingWork.value.extensions.splice(idx, 1) }
@@ -590,10 +592,19 @@ const saveWork = async () => {
 }
 
 const deleteWork = async () => {
+  deleteReasonError.value = ''
+  if (!deleteReason.value.trim()) {
+    deleteReasonError.value = 'Please enter a reason for deletion.'
+    return
+  }
   isDeletingWork.value = true
   try {
-    await axios.delete(`/api/update-work/works/${editingWork.value.id}/`, { headers: { 'X-CSRFToken': getCsrfToken() } })
+    await axios.delete(`/api/delete-log/works/${editingWork.value.id}/`, {
+      headers: { 'X-CSRFToken': getCsrfToken() },
+      data: { reason: deleteReason.value.trim() },
+    })
     allWorks.value = allWorks.value.filter(w => w.id !== editingWork.value.id)
+    deleteReason.value = ''
     closeEditWork()
   } catch (e) {
     console.error(e); workSaveStatus.value = 'error'
@@ -906,19 +917,32 @@ const deleteWork = async () => {
 
           <div class="px-7 pb-6 pt-3 flex items-center justify-between gap-3 border-t border-gray-100">
             <div>
-              <template v-if="canModifyWork">
+              <template v-if="isAdmin">
                 <button v-if="!showDeleteConfirm" @click="showDeleteConfirm = true"
                   class="px-4 py-2 rounded-xl bg-red-50 text-red-600 border border-red-200 text-xs font-semibold hover:bg-red-100 transition-colors flex items-center gap-1.5">
                   <div class="i-carbon-trash-can text-xs"></div> Delete Work
                 </button>
-                <div v-else class="flex items-center gap-2">
-                  <span class="text-xs font-semibold text-red-600">Delete this work?</span>
-                  <button @click="deleteWork" :disabled="isDeletingWork"
-                    class="px-4 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-colors disabled:opacity-50 flex items-center gap-1">
-                    <div v-if="isDeletingWork" class="i-carbon-circle-dash animate-spin"></div>
-                    <span v-else>Yes, Delete</span>
-                  </button>
-                  <button @click="showDeleteConfirm = false" class="px-4 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-semibold transition-colors">Cancel</button>
+                <div v-else class="flex flex-col gap-2 max-w-sm">
+                  <span class="text-xs font-semibold text-red-600">Delete this work? This cannot be undone.</span>
+                  <textarea
+                    v-model="deleteReason"
+                    placeholder="Enter reason for deletion…"
+                    rows="2"
+                    class="w-full text-xs border rounded-xl px-3 py-2 outline-none resize-none focus:ring-2 focus:ring-red-300 focus:border-red-400"
+                    :class="deleteReasonError ? 'border-red-400 bg-red-50' : 'border-gray-200 bg-gray-50'"
+                  ></textarea>
+                  <p v-if="deleteReasonError" class="text-xs text-red-500 -mt-1">{{ deleteReasonError }}</p>
+                  <div class="flex items-center gap-2">
+                    <button @click="deleteWork" :disabled="isDeletingWork"
+                      class="px-4 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-colors disabled:opacity-50 flex items-center gap-1">
+                      <div v-if="isDeletingWork" class="i-carbon-circle-dash animate-spin"></div>
+                      <span v-else>Yes, Delete</span>
+                    </button>
+                    <button @click="showDeleteConfirm = false; deleteReason = ''; deleteReasonError = ''"
+                      class="px-4 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-semibold transition-colors">
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               </template>
             </div>

@@ -51,6 +51,7 @@ const menuItems = ref([
       { name: 'Telegram Bot',    path: '/settings/telegram',        adminOnly: true },
       { name: 'Site Supervisors', path: '/settings/site-register-parties', consigneeOrAdmin: true },
       { name: 'Link Rly Official Telegram', path: '/settings/telegram-link' },
+      { name: 'Delete Log',                path: '/settings/delete-log',    adminOnly: true },
     ],
   },
 ])

@@ -21,6 +21,7 @@ import SiteRegisterParties   from '../views/SiteRegisterParties.vue'
 import AddSiteSupervisor     from '../views/AddSiteSupervisor.vue'
 import Notifications         from '../views/Notifications.vue'
 import Account               from '../views/Account.vue'
+import DeleteLog             from '../views/DeleteLog.vue'
 
 const routes = [
   { path: '/login',            name: 'Login',           component: Login,          meta: { public: true } },
@@ -42,6 +43,7 @@ const routes = [
   { path: '/settings/telegram-link',          name: 'Link Rly Official Telegram', component: TelegramLink },
   { path: '/settings/site-register-parties', name: 'LOA Parties',                component: SiteRegisterParties, meta: { siteRegisterAccess: true } },
   { path: '/settings/add-supervisor',         name: 'Add Site Supervisor',        component: AddSiteSupervisor,   meta: { siteRegisterAccess: true } },
+  { path: '/settings/delete-log',             name: 'Delete Log',                 component: DeleteLog,           meta: { adminOnly: true } },
   { path: '/installation-certificate',   name: 'Installation Certificate', component: InstallationCertificate },
   { path: '/notifications',            name: 'Notifications',            component: Notifications },
   { path: '/:pathMatch(.*)*',          name: 'Placeholder',              component: Placeholder },

@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     'telegram_settings',
     'email_service',
     'smtp_settings',
+    'delete_log',
 ]
 
 MIDDLEWARE = [
