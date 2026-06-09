@@ -6,7 +6,6 @@ import ItemProgress        from '../views/ItemProgress.vue'
 import LocationProgress   from '../views/LocationProgress.vue'
 import AddNewWork     from '../views/AddNewWork.vue'
 import UpdateWork     from '../views/UpdateWork.vue'
-import MBDetails      from '../views/MBDetails.vue'
 import Placeholder    from '../views/Placeholder.vue'
 import Login           from '../views/Login.vue'
 import Register        from '../views/Register.vue'
@@ -22,6 +21,7 @@ import AddSiteSupervisor     from '../views/AddSiteSupervisor.vue'
 import Notifications         from '../views/Notifications.vue'
 import Account               from '../views/Account.vue'
 import DeleteLog             from '../views/DeleteLog.vue'
+import FinancialProgress     from '../views/FinancialProgress.vue'
 
 const routes = [
   { path: '/login',            name: 'Login',           component: Login,          meta: { public: true } },
@@ -34,7 +34,7 @@ const routes = [
   { path: '/location-progress',       name: 'Location Progress', component: LocationProgress },
   { path: '/add-new-work',             name: 'Add New Work',     component: AddNewWork },
   { path: '/update-work',              name: 'Update Work',      component: UpdateWork },
-  { path: '/mb-details',               name: 'MB Details',       component: MBDetails },
+  { path: '/financial-progress',       name: 'Financial Progress', component: FinancialProgress },
   { path: '/site-register',               name: 'Site Register',            component: SiteRegister, meta: { siteRegisterAccess: true } },
   { path: '/settings/user-management',    name: 'User Management',          component: UserManagement,          meta: { adminOnly: true } },
   { path: '/settings/smtp',               name: 'SMTP Settings',            component: SmtpSettings,            meta: { adminOnly: true } },

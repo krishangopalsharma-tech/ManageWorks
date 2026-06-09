@@ -65,7 +65,7 @@ class SiteRegisterView(APIView):
             raise PermissionDenied("Access restricted to consignees and admins.")
 
         # Admins see all works; consignees only see works assigned to them
-        qs = Work.objects.prefetch_related("items", "mb_records").order_by("contractor_name")
+        qs = Work.objects.prefetch_related("items").order_by("contractor_name")
         if not _is_admin(request.user):
             qs = qs.filter(hrms_id=request.user.username)
 
@@ -97,7 +97,6 @@ class SiteRegisterView(APIView):
                 "consignee":          work.consignee or "",
                 "date_of_completion": work.date_of_completion or "",
                 "items":              items_detail[work.id],
-                "mb_count":           work.mb_records.count(),
             })
 
         # Fetch all SR threads for these works, with messages

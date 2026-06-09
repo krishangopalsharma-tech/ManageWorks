@@ -196,7 +196,7 @@ async function handleClick(n) {
   if (isDragging.value) return
   if (!n.is_read) await markRead(n.id)
   if (n.notif_type === 'new_sr')         router.push('/site-register')
-  else if (n.notif_type === 'financial') router.push('/mb-details')
+  else if (n.notif_type === 'financial') router.push('/financial-progress')
   else                                   router.push('/item-progress')
 }
 </script>

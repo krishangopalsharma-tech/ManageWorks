@@ -5,7 +5,7 @@ from django.utils import timezone
 from datetime import timedelta
 from rest_framework import status
 from works.models import Work, WorkItem, WorkItemEntry
-from mb_details.models import MBRecord, MBItem
+from financial_progress.models import BillRecord, BillItem
 from users.models import UserProfile
 
 @pytest.mark.django_db
@@ -36,9 +36,10 @@ class TestDashboard:
             qty=50.0, unit_rate_below=20.0, total_amount=1000.0, executed_quantity=25.0
         )
 
-        # Create MB and MB item billing
-        self.record = MBRecord.objects.create(work=self.work1, mb_number='MB-301', created_by=self.consignee)
-        MBItem.objects.create(mb_record=self.record, work_item=self.item_a, quantity=30.0, current_percentage=100) # Amount: 300
+        # Create bill with financial data (amt_total=300 → financial=300/2000=15%)
+        from datetime import date
+        bill = BillRecord.objects.create(work=self.work1, bill_number='Bill-1', bill_date=date(2026, 1, 1))
+        BillItem.objects.create(bill_record=bill, schedule_name='A1', item_number='1', agreement_rate=10.0, current_agmt_qty=30.0, amt_total=300.0)
 
     def test_dashboard_stats_admin(self):
         self.client.force_login(self.admin)

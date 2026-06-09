@@ -113,25 +113,3 @@ def on_work_saved(sender, instance, created, **kwargs):
     )
 
 
-@receiver(post_save, sender='mb_details.MBRecord')
-def on_mb_record_created(sender, instance, created, **kwargs):
-    if not created:
-        return
-    from .models import Notification
-    work = instance.work
-    loa = work.loa_number or f'LOA #{work.pk}'
-    md = instance.measurement_date
-    if md and isinstance(md, str):
-        from datetime import date as _date
-        try:
-            md = _date.fromisoformat(md)
-        except ValueError:
-            md = None
-    date_str = f' on {md.strftime("%d %b %Y")}' if md else ''
-    for user in _recipients(work):
-        Notification.objects.create(
-            user=user,
-            notif_type='financial',
-            title=f'Financial Update — {loa}',
-            body=f'MB #{instance.mb_number} recorded{date_str}',
-        )

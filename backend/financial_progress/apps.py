@@ -1,6 +1,6 @@
 from django.apps import AppConfig
 
 
-class MbDetailsConfig(AppConfig):
+class FinancialProgressConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'mb_details'
+    name = 'financial_progress'

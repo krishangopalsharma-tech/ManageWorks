@@ -58,7 +58,7 @@ class WorkExtensionSerializer(serializers.ModelSerializer):
 class WorkSerializer(serializers.ModelSerializer):
     items = WorkItemSerializer(many=True, read_only=True)
     extensions = WorkExtensionSerializer(many=True, read_only=True)
-    mb_billing = serializers.SerializerMethodField()
+    bill_billing = serializers.SerializerMethodField()
     contractor_nickname = serializers.SerializerMethodField()
     consignee_display = serializers.SerializerMethodField()
 
@@ -83,16 +83,34 @@ class WorkSerializer(serializers.ModelSerializer):
                 pass
         return obj.consignee or ''
 
-    def get_mb_billing(self, obj):
-        return [
+    def get_bill_billing(self, obj):
+        from financial_progress.models import BillItem
+        # Deduplicate to latest bill per (schedule, item), sum amt_total for financial total
+        all_items = (
+            BillItem.objects
+            .filter(bill_record__work_id=obj.id)
+            .select_related('bill_record')
+            .order_by('schedule_name', 'item_number', '-bill_record__bill_date', '-bill_record__id')
+        )
+        seen = set()
+        total_paid = 0
+        for item in all_items:
+            key = (item.schedule_name, item.item_number)
+            if key not in seen:
+                seen.add(key)
+                total_paid += (item.amt_total or 0)
+
+        bills = list(obj.bill_records.prefetch_related('items').order_by('bill_date', 'id'))
+        bills_data = [
             {
-                'date': str(mb.measurement_date) if mb.measurement_date else None,
-                'amount': round(sum(item.amount or 0 for item in mb.items.all()), 2),
-                'mb_number': mb.mb_number,
+                'date':        str(bill.bill_date) if bill.bill_date else None,
+                'amount':      round(sum(i.amt_total or 0 for i in bill.items.all()), 2),
+                'bill_number': bill.bill_number,
             }
-            for mb in obj.mb_records.all()
-            if mb.measurement_date
+            for bill in bills
+            if bill.bill_date
         ]
+        return {'total_paid': round(total_paid, 2), 'bills': bills_data}
 
 
 class WorkEditSerializer(serializers.ModelSerializer):

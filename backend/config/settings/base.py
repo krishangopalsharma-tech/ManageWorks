@@ -24,7 +24,6 @@ INSTALLED_APPS = [
     'users',
     'item_progress',
     'location_progress',
-    'mb_details',
     'installation_cert',
     'site_gsheet_settings',
     'site_register',
@@ -33,6 +32,7 @@ INSTALLED_APPS = [
     'email_service',
     'smtp_settings',
     'delete_log',
+    'financial_progress',
 ]
 
 MIDDLEWARE = [

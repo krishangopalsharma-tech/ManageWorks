@@ -119,7 +119,7 @@ describe('Notifications.vue', () => {
 
     // Already read, so markRead shouldn't be called
     expect(mockMarkRead).not.toHaveBeenCalled()
-    expect(mockPush).toHaveBeenCalledWith('/mb-details')
+    expect(mockPush).toHaveBeenCalledWith('/financial-progress')
   })
 
   it('renders Mark all read button only when unreadCount > 0', async () => {

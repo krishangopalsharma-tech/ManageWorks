@@ -2,10 +2,8 @@ import pytest
 from django.contrib.auth.models import User
 from django.test import Client
 from rest_framework import status
-from datetime import date
 from works.models import Work, WorkItem, WorkItemEntry
 from site_register.models import SiteRegisterThread
-from mb_details.models import MBRecord
 from notifications.models import Notification
 
 @pytest.mark.django_db
@@ -132,17 +130,6 @@ class TestNotificationSignals:
         )
         # Should not create any wi notifications
         assert Notification.objects.filter(notif_type__in=['ss_entry', 'si_entry', 'ee_entry']).count() == 0
-
-    def test_financial_notif(self):
-        mb = MBRecord.objects.create(
-            work=self.work,
-            mb_number='MB-999',
-            measurement_date=date(2026, 6, 1),
-            created_by=self.consignee
-        )
-        notifs = Notification.objects.filter(notif_type='financial')
-        assert notifs.count() == 2
-        assert 'MB #MB-999 recorded on 01 Jun 2026' in notifs.first().body
 
     def test_loa_unassigned_notif(self):
         # Change Work hrms_id to another user -> old consignee gets loa_unassigned

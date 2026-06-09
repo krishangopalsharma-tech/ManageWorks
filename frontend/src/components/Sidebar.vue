@@ -29,7 +29,7 @@ const menuItems = ref([
   { name: 'Location Progress', icon: 'i-carbon-location-filled', path: '/location-progress' },
   { name: 'Update Work',  icon: 'i-carbon-edit',      path: '/update-work' },
   { name: 'Site Register', icon: 'i-carbon-map',       path: '/site-register', siteRegisterOnly: true },
-  { name: 'MB Details',       icon: 'i-carbon-receipt',       path: '/mb-details' },
+  { name: 'Financial Progress', icon: 'i-carbon-chart-line',  path: '/financial-progress' },
   { name: 'Notifications',   icon: 'i-carbon-notification', path: '/notifications' },
   {
     name: 'Document Generator',

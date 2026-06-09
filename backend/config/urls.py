@@ -16,7 +16,6 @@ urlpatterns = [
     path('api/auth/', include('users.urls')),
     path('api/item-progress/',      include('item_progress.urls')),
     path('api/location-progress/', include('location_progress.urls')),
-    path('api/mb-details/', include('mb_details.urls')),
     path('api/installation-cert/', include('installation_cert.urls')),
     path('api/site-register/',    include('site_register.urls')),
     path('api/notifications/',    include('notifications.urls')),
@@ -24,4 +23,5 @@ urlpatterns = [
     path('api/settings/smtp/',        include('smtp_settings.urls')),
     path('api/settings/telegram/',    include('telegram_settings.urls')),
     path('api/delete-log/',           include('delete_log.urls')),
+    path('api/financial-progress/',   include('financial_progress.urls')),
 ]

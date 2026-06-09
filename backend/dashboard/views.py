@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from works.models import Work, WorkItem, WorkItemEntry
 from works.utils import contractor_nickname as _nickname
-from mb_details.models import MBItem, MBRecord
+from financial_progress.models import BillItem
 
 
 class DashboardStatsView(APIView):
@@ -51,18 +51,26 @@ class DashboardStatsView(APIView):
         overall_cnt = supply_count + exec_count
         overall_avg = ((supply_progress_sum + exec_progress_sum) / overall_cnt * 100) if overall_cnt > 0 else 0
 
-        # Financial progress — sourced from MB items
+        # Financial progress — sourced from bill items (latest per item, cumulative amt_total)
         if loa_ids_param and ids:
             total_work_amount = WorkItem.objects.filter(work_id__in=ids).aggregate(t=Sum('total_amount'))['t'] or 0
-            mb_total          = MBItem.objects.filter(mb_record__work_id__in=ids).aggregate(t=Sum('amount'))['t'] or 0
+            bill_items = BillItem.objects.filter(bill_record__work_id__in=ids).select_related('bill_record').order_by('schedule_name', 'item_number', '-bill_record__bill_date', '-bill_record__id')
         elif loa_id:
             total_work_amount = WorkItem.objects.filter(work_id=loa_id).aggregate(t=Sum('total_amount'))['t'] or 0
-            mb_total          = MBItem.objects.filter(mb_record__work_id=loa_id).aggregate(t=Sum('amount'))['t'] or 0
+            bill_items = BillItem.objects.filter(bill_record__work_id=loa_id).select_related('bill_record').order_by('schedule_name', 'item_number', '-bill_record__bill_date', '-bill_record__id')
         else:
             total_work_amount = WorkItem.objects.aggregate(t=Sum('total_amount'))['t'] or 0
-            mb_total          = MBItem.objects.aggregate(t=Sum('amount'))['t'] or 0
+            bill_items = BillItem.objects.all().select_related('bill_record').order_by('schedule_name', 'item_number', '-bill_record__bill_date', '-bill_record__id')
 
-        fin_prog = (mb_total / total_work_amount * 100) if total_work_amount > 0 else 0
+        seen = set()
+        bill_total = 0
+        for item in bill_items:
+            key = (item.bill_record.work_id, item.schedule_name, item.item_number)
+            if key not in seen:
+                seen.add(key)
+                bill_total += (item.amt_total or 0)
+
+        fin_prog = (bill_total / total_work_amount * 100) if total_work_amount > 0 else 0
 
         recent_cutoff = timezone.now() - timedelta(days=7)
         recent_supply_ids = set(
@@ -174,19 +182,19 @@ class ProgressTrendView(APIView):
         _acc(eq.annotate(bucket=cfg['trunc']('submitted_at'))
              .values('bucket').annotate(total=Sum('quantity')), exec_totals)
 
-        # Financial: MB items grouped by MB record's measurement_date
+        # Financial: BillItem grouped by bill_date
         total_work_amount = item_qs.aggregate(t=Sum('total_amount'))['t'] or 0
         fin_totals = {}
-        mb_qs = MBItem.objects.filter(mb_record__measurement_date__isnull=False)
+        fin_qs = BillItem.objects.filter(bill_record__bill_date__isnull=False)
         if loa_ids_param and ids:
-            mb_qs = mb_qs.filter(mb_record__work_id__in=ids)
+            fin_qs = fin_qs.filter(bill_record__work_id__in=ids)
         elif loa_id:
-            mb_qs = mb_qs.filter(mb_record__work_id=loa_id)
+            fin_qs = fin_qs.filter(bill_record__work_id=loa_id)
         if cutoff:
-            mb_qs = mb_qs.filter(mb_record__measurement_date__gte=cutoff.date())
-        for row in (mb_qs
-                    .annotate(bucket=cfg['trunc']('mb_record__measurement_date'))
-                    .values('bucket').annotate(total=Sum('amount'))):
+            fin_qs = fin_qs.filter(bill_record__bill_date__gte=cutoff.date())
+        for row in (fin_qs
+                    .annotate(bucket=cfg['trunc']('bill_record__bill_date'))
+                    .values('bucket').annotate(total=Sum('amt_total'))):
             if row['bucket'] is None:
                 continue
             k = row['bucket'].date() if hasattr(row['bucket'], 'date') and callable(row['bucket'].date) else row['bucket']

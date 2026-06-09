@@ -69,13 +69,13 @@ function workCardPct(work) {
     if (isA) { schAC += c; schAE += e }
     if (isB) { schBC += c; schBE += e }
   }
-  const mbTotal = (work.mb_billing || []).reduce((s, m) => s + (m.amount || 0), 0)
-  const clamp   = (v) => Math.min(Math.max(v, 0), 100)
+  const billTotal = (work.bill_billing?.total_paid || 0)
+  const clamp     = (v) => Math.min(Math.max(v, 0), 100)
   return {
     supply:    clamp(schAC > 0 ? schAE / schAC * 100 : 0),
     execution: clamp(schBC > 0 ? schBE / schBC * 100 : 0),
     overall:   clamp(total  > 0 ? (schAE + schBE) / total * 100 : 0),
-    financial: clamp(total  > 0 ? mbTotal / total * 100 : 0),
+    financial: clamp(total  > 0 ? billTotal / total * 100 : 0),
   }
 }
 
@@ -247,11 +247,11 @@ const analytics = computed(() => {
     }
   }
 
-  // MB Billing Velocity — only from uploaded MB records
-  for (const mb of (selectedWork.value.mb_billing || [])) {
-    if (!mb.date) continue
-    const month = mb.date.substring(0, 7)
-    mbByMonth[month] = (mbByMonth[month] || 0) + (mb.amount || 0)
+  // Bill Payment Velocity — from uploaded bill records
+  for (const bill of (selectedWork.value.bill_billing?.bills || [])) {
+    if (!bill.date) continue
+    const month = bill.date.substring(0, 7)
+    mbByMonth[month] = (mbByMonth[month] || 0) + (bill.amount || 0)
   }
 
   const top10 = [...items]
@@ -524,9 +524,9 @@ const initCharts = async () => {
   })
   chartInstances['chart-challan']?.resize()
 
-  // 8. MB Billing velocity — always render; show "No data" title when empty
+  // 8. Bill payment velocity — always render; show "No data" title when empty
   initOneChart('chart-earned', {
-    title: a.earnedMonths.length === 0 ? { text: 'No supply entries with dates recorded yet', left: 'center', top: 'middle', textStyle: { color: '#9ca3af', fontSize: 12, fontWeight: 'normal' } } : undefined,
+    title: a.earnedMonths.length === 0 ? { text: 'No bills uploaded yet', left: 'center', top: 'middle', textStyle: { color: '#9ca3af', fontSize: 12, fontWeight: 'normal' } } : undefined,
     tooltip: { trigger: 'axis', formatter: params => `${params[0].name}<br/>Cumulative: ₹${params[0].value} L` },
     grid: { top: 12, bottom: 52, left: 52, right: 8 },
     xAxis: { type: 'category', data: a.earnedMonths, axisLabel: { fontSize: 9, rotate: a.earnedMonths.length > 6 ? 45 : 0 } },
@@ -687,7 +687,7 @@ const generateWorkPDF = async () => {
       { id: 'chart-brand',     title: 'Pending Value by Inspection Agency' },
       { id: 'chart-unit',      title: 'Unit-type Contribution' },
       { id: 'chart-challan',   title: 'Challan Cadence' },
-      { id: 'chart-earned',    title: 'MB Billing Velocity' },
+      { id: 'chart-earned',    title: 'Bill Payment Velocity' },
     ]
 
     const chartImgs = chartDefs.map(({ id, title }) => {
@@ -1127,10 +1127,10 @@ const generateWorkPDF = async () => {
             </div>
           </div>
 
-          <!-- Row 4: MB Billing Velocity -->
+          <!-- Row 4: Bill Payment Velocity -->
           <div class="bg-white border border-gray-200 rounded-xl p-4">
             <div class="flex justify-between items-baseline mb-0.5">
-              <h3 class="text-sm font-bold text-gray-900">MB Billing Velocity</h3>
+              <h3 class="text-sm font-bold text-gray-900">Bill Payment Velocity</h3>
               <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Cumulative Earned ₹ L by Receipt Month</span>
             </div>
             <p class="text-[11px] text-gray-400 mb-2">Cumulative contract value earned as supply receipts arrive over time.</p>
