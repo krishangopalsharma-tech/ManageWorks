@@ -19,7 +19,6 @@ from reportlab.platypus import (
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT  # noqa: F401 — TA_CENTER used in table ALIGN
 
 from works.models import Work, WorkItem, WorkItemEntry
-from works.utils import is_assigned_consignee
 from .models import GeneratedCertificate
 
 
@@ -141,7 +140,7 @@ class EntriesPreviewView(APIView):
             .select_related('work_item')
         )
 
-        if not (_is_admin(request.user) or is_assigned_consignee(request.user, Work.objects.get(pk=loa_id))):
+        if not _is_admin(request.user):
             qs = qs.filter(submitted_by=request.user)
 
         if item_id:
@@ -201,6 +200,9 @@ class PreviewCertView(APIView):
         if not request.user.is_authenticated:
             return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
 
+        if _is_admin(request.user):
+            return Response({'error': 'Admins cannot generate installation certificates.'}, status=status.HTTP_403_FORBIDDEN)
+
         loa_id    = request.data.get('loa_id')
         entry_ids = request.data.get('entry_ids', [])
         cert_number = request.data.get('cert_number', '')
@@ -220,6 +222,8 @@ class PreviewCertView(APIView):
             .select_related('work_item')
             .order_by('work_item__schedule', 'work_item__serial_number', 'submitted_at')
         )
+
+        entries = entries.filter(submitted_by=request.user)
 
         if not entries.exists():
             return Response({'error': 'No eligible entries found.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -246,6 +250,9 @@ class GenerateCertView(APIView):
         if not request.user.is_authenticated:
             return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
 
+        if _is_admin(request.user):
+            return Response({'error': 'Admins cannot generate installation certificates.'}, status=status.HTTP_403_FORBIDDEN)
+
         loa_id      = request.data.get('loa_id')
         entry_ids   = request.data.get('entry_ids', [])
         cert_number = request.data.get('cert_number', '')
@@ -265,6 +272,8 @@ class GenerateCertView(APIView):
             .select_related('work_item')
             .order_by('work_item__schedule', 'work_item__serial_number', 'submitted_at')
         )
+
+        entries = entries.filter(submitted_by=request.user)
 
         if not entries.exists():
             return Response({'error': 'No eligible entries found.'}, status=status.HTTP_400_BAD_REQUEST)
