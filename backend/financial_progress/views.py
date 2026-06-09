@@ -234,3 +234,30 @@ class FinancialSummaryView(APIView):
             })
 
         return Response(result)
+
+
+# ── Works list (lightweight, for dropdowns) ───────────────────────────────────
+
+class WorkListView(APIView):
+    """GET /api/financial-progress/works/ — returns id, loa_number, name_of_work, contractor_name"""
+
+    def get(self, request):
+        if not _is_authenticated(request.user):
+            return Response({'error': 'Authentication required.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        qs = Work.objects.only('id', 'loa_number', 'name_of_work', 'contractor_name').order_by('loa_number')
+
+        # Consignees see only their assigned works
+        if not _is_admin(request.user):
+            qs = qs.filter(hrms_id=request.user.username)
+
+        data = [
+            {
+                'id':              w.id,
+                'loa_number':      w.loa_number or '',
+                'name_of_work':    w.name_of_work or '',
+                'contractor_name': w.contractor_name or '',
+            }
+            for w in qs
+        ]
+        return Response(data)

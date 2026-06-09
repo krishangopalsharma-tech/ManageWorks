@@ -22,7 +22,7 @@ const saveSuccess = ref('')
 // ── Fetch works list ──────────────────────────────────────────────────────────
 async function loadWorks() {
   try {
-    const { data } = await axios.get('/api/work-details/works/')
+    const { data } = await axios.get('/api/financial-progress/works/')
     works.value = data
   } catch {
     works.value = []
