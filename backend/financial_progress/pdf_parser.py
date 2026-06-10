@@ -2,8 +2,9 @@ import re
 import pdfplumber
 
 
-# Matches schedule headers like "Schedule B3-SCHEDULE" or "Schedule A1"
-SCHEDULE_RE = re.compile(r'Schedule\s+((?:A|B)\d+)(?:-SCHEDULE)?', re.IGNORECASE)
+# Matches "Schedule A", "Schedule B", "Schedule A1", "Schedule B3", etc.
+# Letter + optional digits, must be followed by non-alphanumeric (word boundary) to avoid "Schedule AMOUNT"
+SCHEDULE_RE = re.compile(r'Schedule\s+([A-Za-z]\d*)(?=[^A-Za-z0-9]|$)', re.IGNORECASE)
 # Matches item-type cell like "1 (I)" or "10 (I)"
 ITEM_NO_RE  = re.compile(r'^(\d+)\s*\(I\)$')
 
@@ -14,6 +15,23 @@ def _clean(val):
     return str(val).strip().replace('\n', ' ')
 
 
+def _unwrap_number(s):
+    """
+    Fix PDF line-wrapped numbers that pdfplumber returns with embedded spaces.
+
+    Examples (cell value spans two lines inside the PDF cell):
+      "1593387. 35"  → "1593387.35"   (digit-dot-space-digits)
+      "174775.7 1"   → "174775.71"    (digit-space-digit after decimal)
+      "8650. 0"      → "8650.0"
+      "1991734. 19"  → "1991734.19"
+    """
+    # Step 1: "NNN. DDD" – space immediately after the decimal point
+    s = re.sub(r'(\d+\.)\s+(\d)', r'\1\2', s)
+    # Step 2: "NNN.D DD" – space between decimal digit groups
+    s = re.sub(r'(\d)\s+(\d)', r'\1\2', s)
+    return s
+
+
 def _to_float(s):
     if not s:
         return 0.0
@@ -21,16 +39,23 @@ def _to_float(s):
     try:
         return float(s)
     except (ValueError, TypeError):
-        return 0.0
+        try:
+            return float(_unwrap_number(s))
+        except (ValueError, TypeError):
+            return 0.0
 
 
 def _is_numeric(s):
-    s = _clean(s).replace(',', '')
+    s = _clean(s).replace(',', '').strip()
     try:
         float(s)
         return True
     except (ValueError, TypeError):
-        return False
+        try:
+            float(_unwrap_number(s))
+            return True
+        except (ValueError, TypeError):
+            return False
 
 
 def _normalize_unit(raw):
@@ -93,6 +118,29 @@ def _parse_date(val):
     return val
 
 
+def _find_total_amt(cells):
+    """
+    Extract the CURRENT PERIOD payment (not cumulative) from amount columns.
+
+    Column layout (0-indexed):
+      10  Amt upto last Bill          ← previous bills cumulative
+      11  Amt since last Bill         ← current period, full rate
+      12  Amt since last Bill incl.   ← current period with special condition
+          special condition             (highlighted cyan in PDF = what to pay now)
+      13  Total Up to Date Amount     ← cumulative; NOT used (inflates multi-bill totals)
+
+    We want col 12 (highlighted cell) → fallback col 11.
+    """
+    n = len(cells)
+    # Preferred: col 12 = current period with special condition (highlighted cell)
+    if n > 12 and _is_numeric(cells[12]) and _to_float(cells[12]) > 0:
+        return _to_float(cells[12])
+    # Fallback: col 11 = current period without special condition
+    if n > 11 and _is_numeric(cells[11]) and _to_float(cells[11]) > 0:
+        return _to_float(cells[11])
+    return 0.0
+
+
 def _parse_item_row(cells, current_schedule):
     """
     Try to parse a table row as a bill item.
@@ -110,13 +158,13 @@ def _parse_item_row(cells, current_schedule):
       9  Qty Upto Date
       10 Amt upto last Bill
       11 Amt since last Bill
-      12 Amt since last Bill incl. special condition  (ignored)
+      12 Amt since last Bill incl. special condition
       13 Total Up to Date Amount   ← we want this
       14 Remarks (optional)
 
     Returns dict or None.
     """
-    if len(cells) < 14:
+    if len(cells) < 11:
         return None
 
     # Sr.No must be a plain integer
@@ -140,16 +188,13 @@ def _parse_item_row(cells, current_schedule):
     if not _is_numeric(cells[6]):
         return None
 
-    # Total Upto Date (col 13) must be numeric
-    if not _is_numeric(cells[13]):
-        return None
-
     unit = _normalize_unit(cells[2])
-    # If unit cell contains a long description (>40 chars), truncate to first word segment
     if len(unit) > 40:
         unit = unit[:40]
 
-    remarks = _clean(cells[14]) if len(cells) > 14 else ''
+    amt_total     = _find_total_amt(cells)
+    qty_upto_date = _to_float(cells[9]) if len(cells) > 9 and _is_numeric(cells[9]) else 0.0
+    remarks       = _clean(cells[14]) if len(cells) > 14 else ''
 
     return {
         'schedule_name':    current_schedule,
@@ -158,7 +203,8 @@ def _parse_item_row(cells, current_schedule):
         'unit':             unit,
         'agreement_rate':   _to_float(cells[4]),
         'current_agmt_qty': _to_float(cells[6]),
-        'amt_total':        _to_float(cells[13]),
+        'qty_upto_date':    qty_upto_date,
+        'amt_total':        amt_total,
         'remarks':          remarks,
     }
 
@@ -219,14 +265,16 @@ def parse_bill_pdf(file_obj):
 
             current_schedule = 'UNKNOWN'
             last_item = None
+            summary_page = None  # cache Schedule Summary page for cross-check
 
             # Pages 2 onwards: item tables
             for page_num, page in enumerate(pdf.pages[1:], start=2):
                 page_text = page.extract_text() or ''
 
-                # Skip Schedule Summary page (usually last page)
-                if 'Schedule Summary' in page_text and page_num >= len(pdf.pages) - 1:
-                    continue
+                # Detect Schedule Summary page (usually last); still process for items
+                if 'Schedule Summary' in page_text:
+                    summary_page = page
+                    # Don't skip — items 39/40 may be on this same page
 
                 tables = page.extract_tables() or []
                 for table in tables:
@@ -239,6 +287,9 @@ def parse_bill_pdf(file_obj):
 
                         # ── Schedule section header ──────────────────────────
                         sched_m = SCHEDULE_RE.search(row_text)
+                        if not sched_m:
+                            # Fallback: single-letter schedule like "Schedule A" or "Schedule B"
+                            sched_m = re.search(r'Schedule\s+([A-Za-z]\d*)(?=[^A-Za-z0-9]|$)', row_text, re.IGNORECASE)
                         if sched_m:
                             first = cells[0].strip().lower()
                             if not first.startswith('total'):
@@ -267,6 +318,10 @@ def parse_bill_pdf(file_obj):
                                 else:
                                     last_item['description'] = desc_text
 
+            # ── Cross-check against Schedule Summary ────────────────────────
+            if summary_page and result['items']:
+                _cross_check_summary(summary_page, result)
+
     except Exception as exc:
         result['warnings'].append(f'Parse error: {exc}')
 
@@ -274,3 +329,62 @@ def parse_bill_pdf(file_obj):
         result['warnings'].append('No item rows extracted. PDF format may differ from expected.')
 
     return result
+
+
+def _cross_check_summary(summary_page, result):
+    """
+    Parse the Schedule Summary table on the last page.
+    Extract the grand total from the "Total Amount(Rs.)" row — single comparison,
+    no per-schedule fragility (multi-line schedule names would break per-schedule regex).
+    """
+    grand_pdf = None
+
+    # Try table extraction first (more reliable than text for structured tables)
+    total_amount_fallback = None
+    for table in (summary_page.extract_tables() or []):
+        for row in (table or []):
+            cells = [_clean(c) for c in (row or [])]
+            row_text = ' '.join(cells).lower()
+            # "Bill Amount" = authoritative current-bill total (period payment only)
+            if 'bill amount' in row_text:
+                nums = [_to_float(c) for c in cells if _is_numeric(c) and _to_float(c) > 0]
+                if nums:
+                    grand_pdf = nums[-1]
+                    break
+            # "Total Amount(Rs.)" row — keep as fallback, use middle col (period) not last (cumulative)
+            if 'total amount' in row_text and 'rs' in row_text and total_amount_fallback is None:
+                nums = [_to_float(c) for c in cells if _is_numeric(c) and _to_float(c) > 0]
+                if len(nums) >= 2:
+                    total_amount_fallback = nums[-2]  # second-to-last = "Amt incl Special Condition"
+                elif nums:
+                    total_amount_fallback = nums[-1]
+        if grand_pdf is not None:
+            break
+
+    if grand_pdf is None:
+        grand_pdf = total_amount_fallback
+
+    # Fallback: scan page text for "Total Amount" line
+    if grand_pdf is None:
+        page_text = summary_page.extract_text() or ''
+        for line in page_text.splitlines():
+            ll = line.lower()
+            if 'total amount' in ll and 'rs' in ll:
+                nums = re.findall(r'\d[\d,]*\.?\d*', line)
+                positives = [float(n.replace(',', '')) for n in nums if float(n.replace(',', '')) > 0]
+                if positives:
+                    grand_pdf = positives[-1]
+                    break
+
+    if grand_pdf is None:
+        return
+
+    grand_parse = round(sum(item['amt_total'] for item in result['items']), 2)
+    grand_pdf   = round(grand_pdf, 2)
+    result['pdf_grand_total'] = grand_pdf
+
+    if abs(grand_parse - grand_pdf) > 1.0:
+        result['warnings'].append(
+            f'Grand total mismatch: PDF={grand_pdf:,.2f}, parsed={grand_parse:,.2f}. '
+            'Check items above.'
+        )

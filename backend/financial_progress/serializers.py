@@ -10,7 +10,7 @@ class BillItemSerializer(serializers.ModelSerializer):
         model  = BillItem
         fields = [
             'id', 'schedule_name', 'item_number', 'description',
-            'unit', 'agreement_rate', 'current_agmt_qty',
+            'unit', 'agreement_rate', 'current_agmt_qty', 'qty_upto_date',
             'amt_total', 'contract_value', 'progress_pct',
         ]
 

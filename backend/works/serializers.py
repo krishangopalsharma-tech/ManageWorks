@@ -85,20 +85,9 @@ class WorkSerializer(serializers.ModelSerializer):
 
     def get_bill_billing(self, obj):
         from financial_progress.models import BillItem
-        # Deduplicate to latest bill per (schedule, item), sum amt_total for financial total
-        all_items = (
-            BillItem.objects
-            .filter(bill_record__work_id=obj.id)
-            .select_related('bill_record')
-            .order_by('schedule_name', 'item_number', '-bill_record__bill_date', '-bill_record__id')
-        )
-        seen = set()
-        total_paid = 0
-        for item in all_items:
-            key = (item.schedule_name, item.item_number)
-            if key not in seen:
-                seen.add(key)
-                total_paid += (item.amt_total or 0)
+        from django.db.models import Sum as _Sum
+        # Sum all bills' period amounts (not latest-only) for true cumulative
+        total_paid = BillItem.objects.filter(bill_record__work_id=obj.id).aggregate(t=_Sum('amt_total'))['t'] or 0
 
         bills = list(obj.bill_records.prefetch_related('items').order_by('bill_date', 'id'))
         bills_data = [

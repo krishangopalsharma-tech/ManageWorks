@@ -51,24 +51,16 @@ class DashboardStatsView(APIView):
         overall_cnt = supply_count + exec_count
         overall_avg = ((supply_progress_sum + exec_progress_sum) / overall_cnt * 100) if overall_cnt > 0 else 0
 
-        # Financial progress — sourced from bill items (latest per item, cumulative amt_total)
+        # Financial progress — sum all bills' period amounts per item (not latest-only)
         if loa_ids_param and ids:
             total_work_amount = WorkItem.objects.filter(work_id__in=ids).aggregate(t=Sum('total_amount'))['t'] or 0
-            bill_items = BillItem.objects.filter(bill_record__work_id__in=ids).select_related('bill_record').order_by('schedule_name', 'item_number', '-bill_record__bill_date', '-bill_record__id')
+            bill_total = BillItem.objects.filter(bill_record__work_id__in=ids).aggregate(t=Sum('amt_total'))['t'] or 0
         elif loa_id:
             total_work_amount = WorkItem.objects.filter(work_id=loa_id).aggregate(t=Sum('total_amount'))['t'] or 0
-            bill_items = BillItem.objects.filter(bill_record__work_id=loa_id).select_related('bill_record').order_by('schedule_name', 'item_number', '-bill_record__bill_date', '-bill_record__id')
+            bill_total = BillItem.objects.filter(bill_record__work_id=loa_id).aggregate(t=Sum('amt_total'))['t'] or 0
         else:
             total_work_amount = WorkItem.objects.aggregate(t=Sum('total_amount'))['t'] or 0
-            bill_items = BillItem.objects.all().select_related('bill_record').order_by('schedule_name', 'item_number', '-bill_record__bill_date', '-bill_record__id')
-
-        seen = set()
-        bill_total = 0
-        for item in bill_items:
-            key = (item.bill_record.work_id, item.schedule_name, item.item_number)
-            if key not in seen:
-                seen.add(key)
-                bill_total += (item.amt_total or 0)
+            bill_total = BillItem.objects.aggregate(t=Sum('amt_total'))['t'] or 0
 
         fin_prog = (bill_total / total_work_amount * 100) if total_work_amount > 0 else 0
 
