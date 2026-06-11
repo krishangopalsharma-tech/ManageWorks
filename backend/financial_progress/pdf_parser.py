@@ -6,8 +6,7 @@ import pdfplumber
 # Letter + optional digits, must be followed by non-alphanumeric (word boundary) to avoid "Schedule AMOUNT"
 SCHEDULE_RE = re.compile(r'Schedule\s+([A-Za-z]\d*)(?=[^A-Za-z0-9]|$)', re.IGNORECASE)
 # Matches item-type cell like "1 (I)" or "10 (I)"
-ITEM_NO_RE  = re.compile(r'^(\d+)\s*\(I\)$')
-
+ITEM_NO_RE  = re.compile(r'^(\d+)\s*\([1Il]\)$', re.IGNORECASE)
 
 def _clean(val):
     if val is None:
@@ -122,26 +121,32 @@ def _find_total_amt(cells):
     """
     Extract the CURRENT PERIOD payment (not cumulative) from amount columns.
 
-    Column layout (0-indexed):
-      10  Amt upto last Bill          ← previous bills cumulative
-      11  Amt since last Bill         ← current period, full rate
-      12  Amt since last Bill incl.   ← current period with special condition
-          special condition             (highlighted cyan in PDF = what to pay now)
-      13  Total Up to Date Amount     ← cumulative; NOT used (inflates multi-bill totals)
+    Rightmost column layout (right-to-left):
+      Remarks (text, skip) | Total Up to Date | Amt incl. special condition | Amt since last Bill | ...
 
-    We want col 12 (highlighted cell) → fallback col 11.
+    Scan right-to-left through the last 6 cells, collect numerics:
+      offset 0 = Total Up to Date  (cumulative, skip)
+      offset 1 = Amt incl. special condition  ← prefer
+      offset 2 = Amt since last Bill           ← fallback
+
+    This approach is index-count-independent — robust when pdfplumber
+    produces varying column counts across different PDF layouts.
     """
-    n = len(cells)
-    # Preferred: col 12 = current period with special condition (highlighted cell)
-    if n > 12 and _is_numeric(cells[12]) and _to_float(cells[12]) > 0:
-        return _to_float(cells[12])
-    # Fallback: col 11 = current period without special condition
-    if n > 11 and _is_numeric(cells[11]) and _to_float(cells[11]) > 0:
-        return _to_float(cells[11])
+    tail = cells[-6:] if len(cells) >= 6 else cells
+    numerics_rtl = []
+    for c in reversed(tail):
+        s = c.strip() if c else ''
+        if s and _is_numeric(s):
+            numerics_rtl.append(_to_float(s))
+
+    if len(numerics_rtl) > 1 and numerics_rtl[1] > 0:
+        return numerics_rtl[1]
+    if len(numerics_rtl) > 2 and numerics_rtl[2] > 0:
+        return numerics_rtl[2]
     return 0.0
 
 
-def _parse_item_row(cells, current_schedule):
+def _parse_item_row(cells, current_schedule, warnings=None):
     """
     Try to parse a table row as a bill item.
 
@@ -176,6 +181,8 @@ def _parse_item_row(cells, current_schedule):
     item_raw = cells[1].strip()
     item_m = ITEM_NO_RE.match(item_raw)
     if not item_m:
+        if item_raw and warnings is not None:
+            warnings.append(f'Row sr={sr}: Item No "{item_raw}" failed regex — skipped.')
         return None
 
     item_no = item_m.group(1)
@@ -302,7 +309,7 @@ def parse_bill_pdf(file_obj):
                             continue
 
                         # ── Try to parse as item data row ────────────────────
-                        item = _parse_item_row(cells, current_schedule)
+                        item = _parse_item_row(cells, current_schedule, result['warnings'])
                         if item:
                             result['items'].append(item)
                             last_item = item

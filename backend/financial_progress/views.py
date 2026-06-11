@@ -90,6 +90,13 @@ def _is_admin(user):
     return profile is not None and profile.role == 'admin'
 
 
+def _can_access_work(user, work):
+    """Admin sees all LOAs. Assigned consignee sees only their LOA. Unassigned sees nothing."""
+    if _is_admin(user):
+        return True
+    return (work.hrms_id or '') == user.username
+
+
 # ── Parse (preview only, no save) ────────────────────────────────────────────
 
 class ParseBillPDFView(APIView):
@@ -114,6 +121,8 @@ class ParseBillPDFView(APIView):
                 work = Work.objects.get(pk=work_id)
             except Work.DoesNotExist:
                 return Response({'error': 'Work not found.'}, status=status.HTTP_404_NOT_FOUND)
+            if not _can_access_work(request.user, work):
+                return Response({'error': 'Access denied.'}, status=status.HTTP_403_FORBIDDEN)
 
         parsed = parse_bill_pdf(file_obj)
 
@@ -160,6 +169,8 @@ class LOAItemLookupView(APIView):
             work = Work.objects.get(pk=work_id)
         except Work.DoesNotExist:
             return Response({'error': 'Work not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if not _can_access_work(request.user, work):
+            return Response({'error': 'Access denied.'}, status=status.HTTP_403_FORBIDDEN)
 
         wi = WorkItem.objects.filter(  # type: ignore[attr-defined]
             work=work,
@@ -199,7 +210,14 @@ class BillListCreateView(APIView):
         if not work_id:
             return Response({'error': 'work_id required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        bills = BillRecord.objects.filter(work_id=work_id).prefetch_related('items')
+        try:
+            work = Work.objects.get(pk=work_id)
+        except Work.DoesNotExist:
+            return Response({'error': 'Work not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if not _can_access_work(request.user, work):
+            return Response({'error': 'Access denied.'}, status=status.HTTP_403_FORBIDDEN)
+
+        bills = BillRecord.objects.filter(work=work).prefetch_related('items')
         serializer = BillRecordSerializer(bills, many=True)
         return Response(serializer.data)
 
@@ -215,6 +233,8 @@ class BillListCreateView(APIView):
             work = Work.objects.get(pk=work_id)
         except Work.DoesNotExist:
             return Response({'error': 'Work not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if not _can_access_work(request.user, work):
+            return Response({'error': 'Access denied.'}, status=status.HTTP_403_FORBIDDEN)
 
         data = request.data
 
@@ -281,9 +301,11 @@ class BillDeleteView(APIView):
         if not _is_authenticated(request.user):
             return Response({'error': 'Authentication required.'}, status=status.HTTP_401_UNAUTHORIZED)
         try:
-            bill = BillRecord.objects.prefetch_related('items').get(pk=pk)
+            bill = BillRecord.objects.select_related('work').prefetch_related('items').get(pk=pk)
         except BillRecord.DoesNotExist:
             return Response({'error': 'Bill not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if not _can_access_work(request.user, bill.work):
+            return Response({'error': 'Access denied.'}, status=status.HTTP_403_FORBIDDEN)
         return Response(BillRecordSerializer(bill).data)
 
     def delete(self, request, pk):
@@ -347,6 +369,13 @@ class FinancialSummaryView(APIView):
         work_id = request.query_params.get('work_id')
         if not work_id:
             return Response({'error': 'work_id required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            work = Work.objects.get(pk=work_id)
+        except Work.DoesNotExist:
+            return Response({'error': 'Work not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if not _can_access_work(request.user, work):
+            return Response({'error': 'Access denied.'}, status=status.HTTP_403_FORBIDDEN)
 
         # All items for this work, ordered by bill date desc so latest comes first
         all_items = (
@@ -475,6 +504,13 @@ class LOATableView(APIView):
         work_id = request.query_params.get('work_id')
         if not work_id:
             return Response({'error': 'work_id required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            work = Work.objects.get(pk=work_id)
+        except Work.DoesNotExist:
+            return Response({'error': 'Work not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if not _can_access_work(request.user, work):
+            return Response({'error': 'Access denied.'}, status=status.HTTP_403_FORBIDDEN)
 
         bills = list(
             BillRecord.objects

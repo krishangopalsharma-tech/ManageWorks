@@ -6,6 +6,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
 from rest_framework import status
+from django.contrib.auth.models import User
 
 from works.models import Work
 from works.utils import contractor_nickname as _nickname
@@ -83,10 +84,19 @@ class SiteRegisterView(APIView):
                     "unit":      item.unit,
                 })
 
+        # Build username→display map for consignees in one query
+        usernames = [w.hrms_id for w in works if w.hrms_id]
+        user_map = {}
+        for u in User.objects.filter(username__in=usernames).select_related('profile'):
+            name = u.first_name or u.username
+            desig = getattr(getattr(u, 'profile', None), 'designation', None)
+            user_map[u.username] = f"{name} ({desig})" if desig else name
+
         # Build response: one object per work
         result = []
         for work in works:
             loa = work.loa_number or ""
+            consignee_display = user_map.get(work.hrms_id or '') or work.consignee or ''
             result.append({
                 "work_id":             work.id,
                 "loa_number":          loa,
@@ -94,7 +104,7 @@ class SiteRegisterView(APIView):
                 "contractor_nickname": _nickname(work.contractor_name or ""),
                 "name_of_work":        work.name_of_work or "",
                 "tender_number":      work.tender_number or "",
-                "consignee":          work.consignee or "",
+                "consignee":          consignee_display,
                 "date_of_completion": work.date_of_completion or "",
                 "items":              items_detail[work.id],
             })
