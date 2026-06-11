@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from works.models import Work, WorkItem, WorkItemEntry
 from works.utils import contractor_nickname as _nickname
-from financial_progress.models import BillItem
+from financial_progress.models import BillItem, BillRecord
 
 
 class DashboardStatsView(APIView):
@@ -51,16 +51,23 @@ class DashboardStatsView(APIView):
         overall_cnt = supply_count + exec_count
         overall_avg = ((supply_progress_sum + exec_progress_sum) / overall_cnt * 100) if overall_cnt > 0 else 0
 
-        # Financial progress — sum all bills' period amounts per item (not latest-only)
+        # Financial progress — sum all bills' period amounts; apply manual overrides
         if loa_ids_param and ids:
             total_work_amount = WorkItem.objects.filter(work_id__in=ids).aggregate(t=Sum('total_amount'))['t'] or 0
             bill_total = BillItem.objects.filter(bill_record__work_id__in=ids).aggregate(t=Sum('amt_total'))['t'] or 0
+            override_bills = BillRecord.objects.filter(work_id__in=ids, total_amount_override__isnull=False)
         elif loa_id:
             total_work_amount = WorkItem.objects.filter(work_id=loa_id).aggregate(t=Sum('total_amount'))['t'] or 0
             bill_total = BillItem.objects.filter(bill_record__work_id=loa_id).aggregate(t=Sum('amt_total'))['t'] or 0
+            override_bills = BillRecord.objects.filter(work_id=loa_id, total_amount_override__isnull=False)
         else:
             total_work_amount = WorkItem.objects.aggregate(t=Sum('total_amount'))['t'] or 0
             bill_total = BillItem.objects.aggregate(t=Sum('amt_total'))['t'] or 0
+            override_bills = BillRecord.objects.filter(total_amount_override__isnull=False)
+
+        for ob in override_bills:
+            parsed = BillItem.objects.filter(bill_record=ob).aggregate(t=Sum('amt_total'))['t'] or 0
+            bill_total += (ob.total_amount_override - parsed)
 
         fin_prog = (bill_total / total_work_amount * 100) if total_work_amount > 0 else 0
 

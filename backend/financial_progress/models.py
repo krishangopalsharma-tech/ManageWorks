@@ -5,12 +5,13 @@ from works.models import Work
 
 class BillRecord(models.Model):
     work             = models.ForeignKey(Work, on_delete=models.CASCADE, related_name='bill_records')
-    bill_number      = models.CharField(max_length=200)
-    bill_date        = models.DateField(null=True, blank=True)
-    loa_number       = models.CharField(max_length=200, blank=True)
-    agreement_number = models.CharField(max_length=200, blank=True)
-    uploaded_by      = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
-    uploaded_at      = models.DateTimeField(auto_now_add=True)
+    bill_number           = models.CharField(max_length=200)
+    bill_date             = models.DateField(null=True, blank=True)
+    loa_number            = models.CharField(max_length=200, blank=True)
+    agreement_number      = models.CharField(max_length=200, blank=True)
+    uploaded_by           = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
+    uploaded_at           = models.DateTimeField(auto_now_add=True)
+    total_amount_override = models.FloatField(null=True, blank=True, default=None)
 
     class Meta:
         ordering = ['bill_date', 'bill_number']

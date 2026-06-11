@@ -47,12 +47,13 @@ const tableLoading = ref(false)
 const tableError   = ref('')
 
 // Upload
-const fileInput    = ref(null)
-const uploading    = ref(false)
-const preview      = ref(null)
-const previewError = ref('')
-const saveError    = ref('')
-const saveSuccess  = ref('')
+const fileInput         = ref(null)
+const uploading         = ref(false)
+const preview           = ref(null)
+const previewError      = ref('')
+const saveError         = ref('')
+const saveSuccess       = ref('')
+const manualOverride    = ref('')   // manual total amount override (string input)
 
 // Bill items edit
 const editingBillId = ref(null)  // id of bill being edited (null = new upload)
@@ -158,6 +159,7 @@ async function selectWork(w) {
   saveSuccess.value   = ''
   tableError.value    = ''
   editingBillId.value = null
+  manualOverride.value = ''
   tableLoading.value  = true
   try {
     const { data } = await axios.get('/api/financial-progress/loa-table/', {
@@ -175,28 +177,41 @@ async function selectWork(w) {
 
 const visibleItems = computed(() => items.value.filter(i => i.cumulative_amount > 0))
 
+// Per-bill parsed totals (sum of items' amounts for each bill, from bill_data)
+const billParsedTotals = computed(() => {
+  const map = {}
+  for (const item of items.value) {
+    for (const [billId, bd] of Object.entries(item.bill_data || {})) {
+      map[billId] = (map[billId] || 0) + (bd.amount || 0)
+    }
+  }
+  return map
+})
+
 function goBack() {
-  tooltip.value       = null
-  selectedWork.value  = null
-  activeTab.value     = 'progress'
-  bills.value         = []
-  items.value         = []
-  totals.value        = null
-  preview.value       = null
-  previewError.value  = ''
-  saveError.value     = ''
-  saveSuccess.value   = ''
-  tableError.value    = ''
-  editingBillId.value = null
+  tooltip.value        = null
+  selectedWork.value   = null
+  activeTab.value      = 'progress'
+  bills.value          = []
+  items.value          = []
+  totals.value         = null
+  preview.value        = null
+  previewError.value   = ''
+  saveError.value      = ''
+  saveSuccess.value    = ''
+  tableError.value     = ''
+  editingBillId.value  = null
+  manualOverride.value = ''
 }
 
 // ── Upload ────────────────────────────────────────────────────────────────────
 function triggerUpload() {
-  preview.value       = null
-  previewError.value  = ''
-  saveError.value     = ''
-  saveSuccess.value   = ''
-  editingBillId.value = null
+  preview.value        = null
+  previewError.value   = ''
+  saveError.value      = ''
+  saveSuccess.value    = ''
+  editingBillId.value  = null
+  manualOverride.value = ''
   fileInput.value.click()
 }
 
@@ -269,22 +284,26 @@ async function confirmSave() {
   const editId    = editingBillId.value
   const isEditing = !!editId
   try {
+    const overrideAmt = parseFloat(manualOverride.value) || null
     if (isEditing) {
       await axios.patch(`/api/financial-progress/bills/${editId}/`, {
-        items: preview.value.items,
+        items:                preview.value.items,
+        total_amount_override: overrideAmt,
       })
     } else {
       await axios.post('/api/financial-progress/bills/', {
-        work_id:          selectedWork.value.id,
-        bill_number:      billNum,
-        bill_date:        preview.value.bill_date || null,
-        loa_number:       preview.value.loa_number,
-        agreement_number: preview.value.agreement_number,
-        items:            preview.value.items,
+        work_id:               selectedWork.value.id,
+        bill_number:           billNum,
+        bill_date:             preview.value.bill_date || null,
+        loa_number:            preview.value.loa_number,
+        agreement_number:      preview.value.agreement_number,
+        items:                 preview.value.items,
+        total_amount_override: overrideAmt,
       })
     }
-    preview.value       = null
-    editingBillId.value = null
+    preview.value        = null
+    editingBillId.value  = null
+    manualOverride.value = ''
     await selectWork(selectedWork.value)
     saveSuccess.value = isEditing
       ? `${billLabelFull(billNum)} updated.`
@@ -310,15 +329,17 @@ async function deleteBill(id, billNum) {
 
 // ── Edit bill items (re-opens preview editor for an existing bill) ────────────
 async function editBillItems(b) {
-  previewError.value  = ''
-  saveError.value     = ''
-  saveSuccess.value   = ''
-  editingKey.value    = null
-  showAddRow.value    = false
-  uploading.value     = true
+  previewError.value   = ''
+  saveError.value      = ''
+  saveSuccess.value    = ''
+  editingKey.value     = null
+  showAddRow.value     = false
+  uploading.value      = true
+  manualOverride.value = ''
   try {
     const { data } = await axios.get(`/api/financial-progress/bills/${b.id}/`)
-    editingBillId.value = b.id
+    editingBillId.value  = b.id
+    manualOverride.value = data.total_amount_override ? String(data.total_amount_override) : ''
     preview.value = {
       bill_number:      data.bill_number,
       bill_date:        data.bill_date || '',
@@ -689,17 +710,28 @@ onMounted(loadWorks)
                 class="border border-gray-100 rounded-xl px-4 py-3 hover:border-gray-200 transition-colors bg-white">
 
                 <div class="flex items-center gap-3">
-                  <div class="w-9 h-9 flex-shrink-0 rounded-xl flex items-center justify-center bg-teal-50 border border-teal-100">
-                    <div class="i-carbon-document text-teal-600 text-base"></div>
+                  <div class="w-9 h-9 flex-shrink-0 rounded-xl flex items-center justify-center"
+                    :class="b.total_amount_override != null ? 'bg-amber-50 border border-amber-200' : 'bg-teal-50 border border-teal-100'">
+                    <div class="text-base"
+                      :class="b.total_amount_override != null ? 'i-carbon-warning-alt text-amber-500' : 'i-carbon-document text-teal-600'"></div>
                   </div>
                   <div class="flex-1 min-w-0">
                     <p class="text-sm font-bold text-gray-800">{{ billLabelFull(b.bill_number) }}</p>
-                    <p class="text-[11px] text-gray-400 mt-0.5">{{ fmtDate(b.bill_date) }}</p>
+                    <div class="flex items-center gap-2 mt-0.5">
+                      <span class="text-[11px] text-gray-400">{{ fmtDate(b.bill_date) }}</span>
+                      <template v-if="b.total_amount_override != null">
+                        <span class="text-[10px] font-bold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full">Manual</span>
+                        <span class="text-[11px] font-semibold text-amber-700">{{ fmtAmt(b.total_amount_override) }}</span>
+                      </template>
+                      <template v-else-if="billParsedTotals[String(b.id)]">
+                        <span class="text-[11px] text-gray-500">{{ fmtAmt(billParsedTotals[String(b.id)]) }}</span>
+                      </template>
+                    </div>
                   </div>
                   <div class="flex items-center gap-1 flex-shrink-0">
                     <button @click="editBillItems(b)"
                       class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-[#1D5F5E] hover:bg-[#1D5F5E]/10 transition-all"
-                      title="Edit items">
+                      title="Edit items / set manual override">
                       <div class="i-carbon-edit text-sm"></div>
                     </button>
                     <button @click="deleteBill(b.id, b.bill_number)"
@@ -745,7 +777,7 @@ onMounted(loadWorks)
             <span class="text-[10px] text-gray-400 mt-0.5">{{ paidPreviewItems.length }} paid items · verify against PDF</span>
           </div>
           <div class="flex gap-2">
-            <button @click="preview = null; editingKey = null; showAddRow = false; editingBillId = null"
+            <button @click="preview = null; editingKey = null; showAddRow = false; editingBillId = null; manualOverride = ''"
               class="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 transition-colors">
               Cancel
             </button>
@@ -768,6 +800,37 @@ onMounted(loadWorks)
             class="flex items-center gap-1 text-xs font-semibold text-[#1D5F5E] hover:underline">
             <div class="i-carbon-add text-sm"></div> Add missing item
           </button>
+        </div>
+
+        <!-- Manual override strip -->
+        <div class="flex-shrink-0 px-4 py-2.5 border-b border-gray-100 flex items-center gap-3"
+          :class="manualOverride ? 'bg-amber-50' : 'bg-gray-50'">
+          <div class="i-carbon-warning-alt text-sm flex-shrink-0"
+            :class="manualOverride ? 'text-amber-500' : 'text-gray-400'"></div>
+          <span class="text-xs text-gray-500 flex-1">
+            Parsed total incorrect?
+            <span class="text-gray-400">Enter the correct bill total to override financial progress.</span>
+          </span>
+          <div class="flex items-center gap-1.5 flex-shrink-0">
+            <span class="text-xs text-gray-400 font-medium">₹</span>
+            <input
+              v-model="manualOverride"
+              type="number"
+              min="0"
+              placeholder="Manual total"
+              class="w-36 text-right text-xs border rounded-lg px-2 py-1.5 outline-none transition-colors"
+              :class="manualOverride
+                ? 'border-amber-400 bg-amber-50 text-amber-800 font-semibold focus:border-amber-500'
+                : 'border-gray-200 bg-white text-gray-700 focus:border-[#1D5F5E]'"
+            />
+            <button v-if="manualOverride" @click="manualOverride = ''"
+              class="text-gray-400 hover:text-gray-600 ml-0.5" title="Clear override">
+              <div class="i-carbon-close text-sm"></div>
+            </button>
+          </div>
+          <span v-if="manualOverride" class="text-xs font-bold text-amber-600 flex-shrink-0">
+            {{ fmtAmt(parseFloat(manualOverride)) }}
+          </span>
         </div>
 
         <!-- Items table -->

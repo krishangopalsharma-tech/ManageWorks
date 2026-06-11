@@ -255,13 +255,17 @@ class BillListCreateView(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
 
+        raw_override = data.get('total_amount_override')
+        override_val = float(raw_override) if raw_override not in (None, '', '0', 0) else None
+
         bill = BillRecord.objects.create(
-            work             = work,
-            bill_number      = bill_number,
-            bill_date        = data.get('bill_date') or None,
-            loa_number       = data.get('loa_number', ''),
-            agreement_number = data.get('agreement_number', ''),
-            uploaded_by      = request.user,
+            work                  = work,
+            bill_number           = bill_number,
+            bill_date             = data.get('bill_date') or None,
+            loa_number            = data.get('loa_number', ''),
+            agreement_number      = data.get('agreement_number', ''),
+            uploaded_by           = request.user,
+            total_amount_override = override_val,
         )
 
         items_data = data.get('items', [])
@@ -329,6 +333,9 @@ class BillDeleteView(APIView):
             bill.bill_number = str(request.data['bill_number']).strip()
         if 'bill_date' in request.data:
             bill.bill_date = request.data['bill_date'] or None
+        if 'total_amount_override' in request.data:
+            v = request.data['total_amount_override']
+            bill.total_amount_override = float(v) if v not in (None, '', '0', 0) else None
         bill.save()
         if 'items' in request.data:
             bill.items.all().delete()
@@ -516,7 +523,7 @@ class LOATableView(APIView):
             BillRecord.objects
             .filter(work_id=work_id)
             .order_by('bill_date', 'id')
-            .values('id', 'bill_number', 'bill_date')
+            .values('id', 'bill_number', 'bill_date', 'total_amount_override')
         )
 
         # All BillItems for this work, newest bill first (for cumulative = latest)
@@ -573,7 +580,20 @@ class LOATableView(APIView):
 
         total_paid     = round(sum(i['cumulative_amount'] for i in items), 2)
         total_contract = round(sum(i['contract_value']    for i in items), 2)
-        overall_pct    = round(total_paid / total_contract * 100, 2) if total_contract else 0
+
+        # Apply manual overrides: replace a bill's parsed contribution with override amount
+        override_map = {b['id']: b['total_amount_override'] for b in bills if b.get('total_amount_override') is not None}
+        if override_map:
+            bill_parsed = {}
+            for i in items:
+                for bid_str, bd in i['bill_data'].items():
+                    bid = int(bid_str)
+                    bill_parsed[bid] = bill_parsed.get(bid, 0) + (bd['amount'] or 0)
+            for bid, override_amt in override_map.items():
+                total_paid += override_amt - bill_parsed.get(bid, 0)
+            total_paid = round(total_paid, 2)
+
+        overall_pct = round(total_paid / total_contract * 100, 2) if total_contract else 0
 
         return Response({
             'bills':  bills,

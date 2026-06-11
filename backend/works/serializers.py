@@ -84,16 +84,20 @@ class WorkSerializer(serializers.ModelSerializer):
         return obj.consignee or ''
 
     def get_bill_billing(self, obj):
-        from financial_progress.models import BillItem
+        from financial_progress.models import BillItem, BillRecord
         from django.db.models import Sum as _Sum
-        # Sum all bills' period amounts (not latest-only) for true cumulative
+        # Sum all bills' period amounts; apply manual overrides
         total_paid = BillItem.objects.filter(bill_record__work_id=obj.id).aggregate(t=_Sum('amt_total'))['t'] or 0
+        for ob in BillRecord.objects.filter(work_id=obj.id, total_amount_override__isnull=False):
+            parsed = BillItem.objects.filter(bill_record=ob).aggregate(t=_Sum('amt_total'))['t'] or 0
+            total_paid += (ob.total_amount_override - parsed)
 
         bills = list(obj.bill_records.prefetch_related('items').order_by('bill_date', 'id'))
         bills_data = [
             {
                 'date':        str(bill.bill_date) if bill.bill_date else None,
-                'amount':      round(sum(i.amt_total or 0 for i in bill.items.all()), 2),
+                'amount':      round(bill.total_amount_override if bill.total_amount_override is not None
+                                     else sum(i.amt_total or 0 for i in bill.items.all()), 2),
                 'bill_number': bill.bill_number,
             }
             for bill in bills

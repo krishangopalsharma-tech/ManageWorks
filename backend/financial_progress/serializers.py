@@ -29,7 +29,8 @@ class BillRecordSerializer(serializers.ModelSerializer):
         model  = BillRecord
         fields = [
             'id', 'bill_number', 'bill_date', 'loa_number',
-            'agreement_number', 'uploaded_by_name', 'uploaded_at', 'items',
+            'agreement_number', 'uploaded_by_name', 'uploaded_at',
+            'total_amount_override', 'items',
         ]
 
     def get_uploaded_by_name(self, obj):
