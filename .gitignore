@@ -5,6 +5,7 @@ __pycache__/
 *.pyd
 *.so
 *.egg
+*.md
 *.egg-info/
 dist/
 build/
@@ -25,6 +26,14 @@ staticfiles/
 .gemini/
 .antigravitycli/
 .claude/
+start_backend.sh
+start_backend_prod.sh
+backend.log
+backend.pid
+backend.log
+telegram_bot.out
+TEST_REPORT.md
+TEST_PLAN.md
 
 # Django migrations (keep these tracked)
 # !*/migrations/*.py
