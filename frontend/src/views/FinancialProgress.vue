@@ -114,6 +114,16 @@ const loaMismatchError = computed(() =>
   (preview.value?.warnings || []).find(w => w.toLowerCase().startsWith('loa mismatch')) || null
 )
 
+// Extract "Grand total mismatch" warning and the PDF total from it
+const mismatchWarning = computed(() =>
+  (preview.value?.warnings || []).find(w => w.toLowerCase().startsWith('grand total mismatch')) || null
+)
+const mismatchPdfTotal = computed(() => {
+  if (!mismatchWarning.value) return null
+  const m = mismatchWarning.value.match(/PDF=([\d,]+\.?\d*)/)
+  return m ? parseFloat(m[1].replace(/,/g, '')) : null
+})
+
 const previewTotalAmount = computed(() =>
   paidPreviewItems.value.reduce((sum, i) => sum + (i.amt_total || 0), 0)
 )
@@ -803,16 +813,30 @@ onMounted(loadWorks)
         </div>
 
         <!-- Manual override strip -->
-        <div class="flex-shrink-0 px-4 py-2.5 border-b border-gray-100 flex items-center gap-3"
-          :class="manualOverride ? 'bg-amber-50' : 'bg-gray-50'">
+        <div class="flex-shrink-0 px-4 py-2.5 border-b flex items-center gap-3 flex-wrap"
+          :class="manualOverride
+            ? 'bg-amber-50 border-amber-200'
+            : mismatchWarning
+              ? 'bg-amber-50 border-amber-300'
+              : 'bg-gray-50 border-gray-100'">
           <div class="i-carbon-warning-alt text-sm flex-shrink-0"
-            :class="manualOverride ? 'text-amber-500' : 'text-gray-400'"></div>
-          <span class="text-xs text-gray-500 flex-1">
-            Parsed total incorrect?
-            <span class="text-gray-400">Enter the correct bill total to override financial progress.</span>
+            :class="(manualOverride || mismatchWarning) ? 'text-amber-500' : 'text-gray-400'"></div>
+          <span class="text-xs flex-1" :class="(manualOverride || mismatchWarning) ? 'text-amber-800' : 'text-gray-500'">
+            <template v-if="mismatchWarning && !manualOverride">
+              <strong>Total mismatch detected.</strong> Enter correct bill total to fix financial progress.
+            </template>
+            <template v-else>
+              Parsed total incorrect? Enter correct bill total to override financial progress.
+            </template>
           </span>
+          <!-- Quick-fill button when mismatch has a known PDF total -->
+          <button v-if="mismatchPdfTotal && !manualOverride"
+            @click="manualOverride = String(mismatchPdfTotal)"
+            class="flex-shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-amber-400 text-amber-700 bg-amber-100 hover:bg-amber-200 transition-colors whitespace-nowrap">
+            Use PDF total {{ fmtAmt(mismatchPdfTotal) }}
+          </button>
           <div class="flex items-center gap-1.5 flex-shrink-0">
-            <span class="text-xs text-gray-400 font-medium">₹</span>
+            <span class="text-xs font-medium" :class="(manualOverride || mismatchWarning) ? 'text-amber-600' : 'text-gray-400'">₹</span>
             <input
               v-model="manualOverride"
               type="number"
@@ -820,15 +844,17 @@ onMounted(loadWorks)
               placeholder="Manual total"
               class="w-36 text-right text-xs border rounded-lg px-2 py-1.5 outline-none transition-colors"
               :class="manualOverride
-                ? 'border-amber-400 bg-amber-50 text-amber-800 font-semibold focus:border-amber-500'
-                : 'border-gray-200 bg-white text-gray-700 focus:border-[#1D5F5E]'"
+                ? 'border-amber-400 bg-white text-amber-800 font-semibold focus:border-amber-500'
+                : mismatchWarning
+                  ? 'border-amber-300 bg-amber-50 text-gray-700 focus:border-amber-500'
+                  : 'border-gray-200 bg-white text-gray-700 focus:border-[#1D5F5E]'"
             />
             <button v-if="manualOverride" @click="manualOverride = ''"
               class="text-gray-400 hover:text-gray-600 ml-0.5" title="Clear override">
               <div class="i-carbon-close text-sm"></div>
             </button>
           </div>
-          <span v-if="manualOverride" class="text-xs font-bold text-amber-600 flex-shrink-0">
+          <span v-if="manualOverride" class="text-xs font-bold text-amber-700 flex-shrink-0">
             {{ fmtAmt(parseFloat(manualOverride)) }}
           </span>
         </div>

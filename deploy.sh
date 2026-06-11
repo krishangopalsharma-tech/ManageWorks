@@ -2,8 +2,8 @@
 set -e
 
 # ManageWorks Ubuntu Server Deployment Script
-# Installs: Python/Django backend, Vue3/Vite/UnoCSS frontend, PostgreSQL, Nginx
-# Repo: https://github.com/krishangopalsharma-tech/ManageWorks (update if different)
+# Stack  : Python/Django 6, Vue3/Vite/UnoCSS, PostgreSQL, Nginx
+# Services: manageworks (Django backend) + manageworks-bot (Telegram Bot)
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -17,18 +17,18 @@ warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 echo ""
-echo "================================================"
+echo "========================================================"
 echo "   ManageWorks Deployment Script"
-echo "================================================"
+echo "========================================================"
 echo ""
 
-# ── Collect inputs ────────────────────────────────────────────────────────────
+# ── Inputs ────────────────────────────────────────────────────────────────────
 
 read -rp "GitHub repo URL (e.g. https://github.com/user/ManageWorks): " REPO_URL
 [[ -z "$REPO_URL" ]] && error "Repo URL required."
 
-read -rp "Server IP / domain (used for Nginx server_name, e.g. 192.168.1.10): " SERVER_IP
-[[ -z "$SERVER_IP" ]] && error "Server IP required."
+read -rp "Server IP(s) / domain(s) for Nginx (space-separated, e.g. 192.168.1.10 example.com): " SERVER_NAMES
+[[ -z "$SERVER_NAMES" ]] && error "At least one IP or domain required."
 
 read -rp "OS username to run the app (default: $USER): " APP_USER
 APP_USER="${APP_USER:-$USER}"
@@ -37,59 +37,58 @@ read -rp "Deploy directory (default: /home/$APP_USER/ManageWorks): " DEPLOY_DIR
 DEPLOY_DIR="${DEPLOY_DIR:-/home/$APP_USER/ManageWorks}"
 
 echo ""
-info "--- Django Admin Credentials ---"
+info "--- Django Admin ---"
 read -rp "Admin username: " ADMIN_USER
 [[ -z "$ADMIN_USER" ]] && error "Admin username required."
-
 read -rp "Admin email: " ADMIN_EMAIL
 [[ -z "$ADMIN_EMAIL" ]] && error "Admin email required."
-
 read -rsp "Admin password: " ADMIN_PASSWORD
 echo ""
 [[ -z "$ADMIN_PASSWORD" ]] && error "Admin password required."
 
 echo ""
-info "--- PostgreSQL Database ---"
+info "--- PostgreSQL ---"
 read -rp "DB name (default: manageworks): " DB_NAME
 DB_NAME="${DB_NAME:-manageworks}"
-
 read -rp "DB user (default: managework): " DB_USER
 DB_USER="${DB_USER:-managework}"
-
 read -rsp "DB password: " DB_PASSWORD
 echo ""
 [[ -z "$DB_PASSWORD" ]] && error "DB password required."
 
 echo ""
-info "--- SMTP Email Settings ---"
-read -rp "SMTP host (e.g. smtp.gmail.com): " SMTP_HOST
-read -rp "SMTP port (default: 587): " SMTP_PORT
-SMTP_PORT="${SMTP_PORT:-587}"
-read -rp "SMTP username (email address): " SMTP_USER
-read -rsp "SMTP password / app password: " SMTP_PASSWORD
-echo ""
-read -rp "Default from-email (default: $SMTP_USER): " FROM_EMAIL
-FROM_EMAIL="${FROM_EMAIL:-$SMTP_USER}"
+info "--- Telegram Bot (optional) ---"
+read -rp "Enable Telegram Bot service? [y/N]: " ENABLE_BOT
+ENABLE_BOT="${ENABLE_BOT,,}"   # lowercase
 
 echo ""
 info "--- Django Secret Key ---"
-SECRET_KEY=$(python3 -c "import secrets, string; print(''.join(secrets.choice(string.ascii_letters + string.digits + '!@#$%^&*(-_=+)') for _ in range(50)))" 2>/dev/null || \
-             openssl rand -base64 37 | tr -d '\n=+/')
-echo "  Generated secret key."
+SECRET_KEY=$(python3 -c \
+  "import secrets,string; print(''.join(secrets.choice(string.ascii_letters+string.digits+'!@#\$%^&*(-_=+)') for _ in range(50)))" \
+  2>/dev/null || openssl rand -base64 37 | tr -d '\n=+/')
+echo "  Generated."
 
 echo ""
-echo "================================================"
+echo "========================================================"
 echo "  Summary"
-echo "================================================"
-echo "  Repo:       $REPO_URL"
-echo "  Deploy to:  $DEPLOY_DIR"
-echo "  Server IP:  $SERVER_IP"
-echo "  App user:   $APP_USER"
-echo "  DB:         $DB_NAME @ localhost (user: $DB_USER)"
-echo "  SMTP:       $SMTP_HOST:$SMTP_PORT as $SMTP_USER"
-echo "================================================"
+echo "========================================================"
+echo "  Repo       : $REPO_URL"
+echo "  Deploy dir : $DEPLOY_DIR"
+echo "  Server     : $SERVER_NAMES"
+echo "  App user   : $APP_USER"
+echo "  DB         : $DB_NAME @ localhost (user: $DB_USER)"
+echo "  Telegram   : $([ "$ENABLE_BOT" = "y" ] && echo "enabled" || echo "skipped")"
+echo "========================================================"
 read -rp "Proceed? [y/N]: " CONFIRM
 [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]] && { echo "Aborted."; exit 0; }
+
+# ── Derived paths ─────────────────────────────────────────────────────────────
+
+BACKEND_DIR="$DEPLOY_DIR/backend"
+FRONTEND_DIR="$DEPLOY_DIR/frontend"
+VENV_DIR="$BACKEND_DIR/venv"
+ENV_FILE="$BACKEND_DIR/.env"
+DJANGO="DJANGO_SETTINGS_MODULE=config.settings.prod $VENV_DIR/bin/python manage.py"
 
 # ── System packages ───────────────────────────────────────────────────────────
 
@@ -104,7 +103,7 @@ sudo apt-get install -y \
     > /dev/null
 success "System packages installed."
 
-# ── Node.js (LTS via NodeSource) ──────────────────────────────────────────────
+# ── Node.js 20 LTS ────────────────────────────────────────────────────────────
 
 if ! command -v node &>/dev/null || [[ $(node -v | cut -d. -f1 | tr -d 'v') -lt 20 ]]; then
     info "Installing Node.js 20 LTS..."
@@ -115,7 +114,7 @@ else
     success "Node.js $(node -v) already present."
 fi
 
-# ── Clone repo ────────────────────────────────────────────────────────────────
+# ── Clone or update repo ──────────────────────────────────────────────────────
 
 if [[ -d "$DEPLOY_DIR/.git" ]]; then
     warn "Repo already exists at $DEPLOY_DIR — pulling latest..."
@@ -126,9 +125,9 @@ else
     success "Repo cloned."
 fi
 
-# ── PostgreSQL setup ──────────────────────────────────────────────────────────
+# ── PostgreSQL ────────────────────────────────────────────────────────────────
 
-info "Setting up PostgreSQL database..."
+info "Setting up PostgreSQL..."
 sudo systemctl enable postgresql --now > /dev/null 2>&1
 
 sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER'" | grep -q 1 || \
@@ -140,75 +139,54 @@ sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'" |
 sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;" > /dev/null
 success "PostgreSQL ready: $DB_NAME / $DB_USER"
 
-# ── Python venv + pip install ─────────────────────────────────────────────────
-
-BACKEND_DIR="$DEPLOY_DIR/backend"
-VENV_DIR="$BACKEND_DIR/venv"
+# ── Python venv + packages ────────────────────────────────────────────────────
 
 info "Creating Python virtualenv..."
 python3 -m venv "$VENV_DIR"
 "$VENV_DIR/bin/pip" install --upgrade pip -q
-success "Venv created."
+success "Venv ready."
 
 info "Installing Python dependencies..."
 "$VENV_DIR/bin/pip" install -r "$BACKEND_DIR/requirements.txt" -q
 success "Python packages installed."
 
-# ── Django env file ───────────────────────────────────────────────────────────
+# ── .env file (read by systemd EnvironmentFile, not by Python directly) ───────
 
-ENV_FILE="$BACKEND_DIR/.env"
 info "Writing $ENV_FILE ..."
 cat > "$ENV_FILE" <<EOF
 SECRET_KEY=$SECRET_KEY
-DEBUG=False
-ALLOWED_HOSTS=$SERVER_IP,localhost,127.0.0.1
-
 DB_NAME=$DB_NAME
 DB_USER=$DB_USER
 DB_PASSWORD=$DB_PASSWORD
 DB_HOST=localhost
 DB_PORT=5432
-
-EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
-EMAIL_HOST=$SMTP_HOST
-EMAIL_PORT=$SMTP_PORT
-EMAIL_USE_TLS=True
-EMAIL_HOST_USER=$SMTP_USER
-EMAIL_HOST_PASSWORD=$SMTP_PASSWORD
-DEFAULT_FROM_EMAIL=$FROM_EMAIL
 EOF
 chmod 600 "$ENV_FILE"
 success ".env written."
 
-# ── Update prod settings to read .env (if not already) ───────────────────────
-# Inject python-dotenv loading at top of prod.py if missing
-if ! grep -q "dotenv" "$BACKEND_DIR/config/settings/prod.py"; then
-    info "Installing python-dotenv and patching prod.py..."
-    "$VENV_DIR/bin/pip" install python-dotenv -q
-    PROD_PY="$BACKEND_DIR/config/settings/prod.py"
-    TMPFILE=$(mktemp)
-    cat > "$TMPFILE" <<'PYEOF'
-import os
-from pathlib import Path
-from dotenv import load_dotenv
-load_dotenv(Path(__file__).resolve().parent.parent.parent / '.env')
-PYEOF
-    cat "$PROD_PY" >> "$TMPFILE"
-    mv "$TMPFILE" "$PROD_PY"
-    success "prod.py patched to load .env"
+# ── Patch prod.py: read SECRET_KEY from env (one-time, idempotent) ─────────────
+
+PROD_PY="$BACKEND_DIR/config/settings/prod.py"
+if ! grep -q "SECRET_KEY.*os.environ" "$PROD_PY"; then
+    info "Patching prod.py to override SECRET_KEY from environment..."
+    # Append after the 'import os' and 'from .base import *' block
+    printf "\nSECRET_KEY = os.environ.get('SECRET_KEY', SECRET_KEY)\n" >> "$PROD_PY"
+    success "prod.py patched."
+else
+    success "prod.py already reads SECRET_KEY from env."
 fi
 
-# ── Django migrate + static + superuser ──────────────────────────────────────
+# ── Django: migrate, collectstatic, superuser ─────────────────────────────────
 
-info "Running Django migrations..."
+info "Running migrations..."
 cd "$BACKEND_DIR"
-DJANGO_SETTINGS_MODULE=config.settings.prod "$VENV_DIR/bin/python" manage.py migrate --noinput
+DB_PASSWORD="$DB_PASSWORD" $DJANGO migrate --noinput
 
 info "Collecting static files..."
-DJANGO_SETTINGS_MODULE=config.settings.prod "$VENV_DIR/bin/python" manage.py collectstatic --noinput -v 0
+DB_PASSWORD="$DB_PASSWORD" $DJANGO collectstatic --noinput -v 0
 
-info "Creating Django superuser..."
-DJANGO_SETTINGS_MODULE=config.settings.prod "$VENV_DIR/bin/python" manage.py shell -c "
+info "Creating superuser (if not exists)..."
+DB_PASSWORD="$DB_PASSWORD" $DJANGO shell -c "
 from django.contrib.auth import get_user_model
 User = get_user_model()
 if not User.objects.filter(username='$ADMIN_USER').exists():
@@ -221,21 +199,24 @@ success "Django setup done."
 
 # ── Frontend build ────────────────────────────────────────────────────────────
 
-FRONTEND_DIR="$DEPLOY_DIR/frontend"
-info "Installing Node packages (npm ci)..."
+info "Installing Node packages..."
 cd "$FRONTEND_DIR"
-npm ci --silent
+# Use npm ci if lockfile present (faster, exact), otherwise npm install
+if [[ -f "package-lock.json" ]]; then
+    npm ci --silent
+else
+    npm install --silent
+fi
 success "Node packages installed."
 
-info "Building frontend (vite build)..."
+info "Building frontend..."
 npm run build
 success "Frontend built → $FRONTEND_DIR/dist"
 
-# ── Systemd service ───────────────────────────────────────────────────────────
+# ── Systemd: manageworks (Django backend) ────────────────────────────────────
 
-SERVICE_FILE="/etc/systemd/system/manageworks.service"
-info "Writing systemd service to $SERVICE_FILE ..."
-sudo tee "$SERVICE_FILE" > /dev/null <<EOF
+info "Writing manageworks.service..."
+sudo tee /etc/systemd/system/manageworks.service > /dev/null <<EOF
 [Unit]
 Description=ManageWorks Django Backend
 After=network.target postgresql.service
@@ -260,22 +241,63 @@ sudo systemctl enable manageworks
 sudo systemctl restart manageworks
 success "manageworks service started."
 
-# ── Nginx config ──────────────────────────────────────────────────────────────
+# ── Systemd: manageworks-bot (Telegram Bot) ───────────────────────────────────
+
+if [[ "$ENABLE_BOT" == "y" ]]; then
+    info "Writing manageworks-bot.service..."
+    sudo tee /etc/systemd/system/manageworks-bot.service > /dev/null <<EOF
+[Unit]
+Description=ManageWorks Telegram Bot
+After=network.target postgresql.service manageworks.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=$APP_USER
+WorkingDirectory=$BACKEND_DIR
+EnvironmentFile=$ENV_FILE
+Environment=DJANGO_SETTINGS_MODULE=config.settings.prod
+Environment=PYTHONUNBUFFERED=1
+ExecStart=$VENV_DIR/bin/python -u manage.py run_telegram_bot
+Restart=always
+RestartSec=10
+StandardOutput=append:$BACKEND_DIR/telegram_bot.out
+StandardError=append:$BACKEND_DIR/telegram_bot.out
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    sudo systemctl daemon-reload
+    sudo systemctl enable manageworks-bot
+    sudo systemctl restart manageworks-bot
+    success "manageworks-bot service started."
+    warn "Configure the Telegram bot token via Django Admin → Telegram Settings after deployment."
+else
+    info "Telegram bot service skipped. Enable later with:"
+    info "  sudo systemctl enable --now manageworks-bot"
+fi
+
+# ── Nginx ─────────────────────────────────────────────────────────────────────
 
 NGINX_CONF="/etc/nginx/sites-available/manageworks"
 info "Writing Nginx config..."
 sudo tee "$NGINX_CONF" > /dev/null <<EOF
 server {
     listen 80;
-    server_name $SERVER_IP;
+    server_name $SERVER_NAMES;
 
     client_max_body_size 50m;
 
+    # Frontend (Vue SPA)
     location / {
         root $FRONTEND_DIR/dist;
         try_files \$uri \$uri/ /index.html;
+        expires 1h;
+        add_header Cache-Control "public";
     }
 
+    # API
     location /api/ {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host \$host;
@@ -283,8 +305,10 @@ server {
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_read_timeout 120s;
+        proxy_connect_timeout 10s;
     }
 
+    # Django Admin
     location /admin/ {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host \$host;
@@ -293,8 +317,11 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
     }
 
+    # Django collected static files
     location /static/ {
         alias $BACKEND_DIR/staticfiles/;
+        expires 7d;
+        add_header Cache-Control "public";
     }
 }
 EOF
@@ -306,27 +333,86 @@ sudo systemctl enable nginx
 sudo systemctl restart nginx
 success "Nginx configured and restarted."
 
-# ── Firewall (ufw) ────────────────────────────────────────────────────────────
+# ── Firewall ──────────────────────────────────────────────────────────────────
 
 if command -v ufw &>/dev/null; then
-    info "Opening ports 22, 80 in ufw..."
-    sudo ufw allow 22/tcp   > /dev/null
-    sudo ufw allow 80/tcp   > /dev/null
+    info "Opening firewall ports 22 (SSH) and 80 (HTTP)..."
+    sudo ufw allow 22/tcp  > /dev/null
+    sudo ufw allow 80/tcp  > /dev/null
     sudo ufw --force enable > /dev/null
     success "ufw rules applied."
+fi
+
+# ── Verify services ───────────────────────────────────────────────────────────
+
+echo ""
+info "Verifying services..."
+sleep 3
+
+VERIFY_OK=true
+
+if systemctl is-active --quiet manageworks; then
+    success "manageworks      — running"
+else
+    warn "manageworks      — NOT running  (check: sudo journalctl -u manageworks -n 50)"
+    VERIFY_OK=false
+fi
+
+if systemctl is-active --quiet nginx; then
+    success "nginx            — running"
+else
+    warn "nginx            — NOT running  (check: sudo journalctl -u nginx -n 20)"
+    VERIFY_OK=false
+fi
+
+if [[ "$ENABLE_BOT" == "y" ]]; then
+    if systemctl is-active --quiet manageworks-bot; then
+        success "manageworks-bot  — running"
+    else
+        warn "manageworks-bot  — NOT running  (check: sudo journalctl -u manageworks-bot -n 50)"
+        VERIFY_OK=false
+    fi
 fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 
 echo ""
-echo "================================================"
-echo -e "  ${GREEN}Deployment complete!${NC}"
-echo "================================================"
-echo "  App:    http://$SERVER_IP"
-echo "  Admin:  http://$SERVER_IP/admin"
-echo "  User:   $ADMIN_USER"
+echo "========================================================"
+if [[ "$VERIFY_OK" == "true" ]]; then
+    echo -e "  ${GREEN}Deployment complete — all services running!${NC}"
+else
+    echo -e "  ${YELLOW}Deployment done — some services need attention (see warnings above).${NC}"
+fi
+echo "========================================================"
+echo "  App URL   :  http://$(echo $SERVER_NAMES | awk '{print $1}')"
+echo "  Admin     :  http://$(echo $SERVER_NAMES | awk '{print $1}')/admin"
+echo "  Admin user:  $ADMIN_USER"
 echo ""
-echo "  Check backend:  sudo systemctl status manageworks"
-echo "  Check nginx:    sudo systemctl status nginx"
-echo "  Backend logs:   sudo journalctl -u manageworks -f"
-echo "================================================"
+echo "  Post-deployment steps:"
+echo "    1. Log into Django Admin and configure:"
+echo "       - SMTP Settings  (Admin → Smtp settings)"
+if [[ "$ENABLE_BOT" == "y" ]]; then
+echo "       - Telegram Token (Admin → Telegram settings)"
+fi
+echo "    2. Create user accounts and assign roles (Admin → Users)"
+echo ""
+echo "  Service commands:"
+echo "    sudo systemctl status manageworks"
+echo "    sudo systemctl status nginx"
+if [[ "$ENABLE_BOT" == "y" ]]; then
+echo "    sudo systemctl status manageworks-bot"
+echo "    tail -f $BACKEND_DIR/telegram_bot.out"
+fi
+echo ""
+echo "  Logs:"
+echo "    sudo journalctl -u manageworks -f"
+echo "    sudo journalctl -u nginx -f"
+echo ""
+echo "  Re-deploy after code update:"
+echo "    git -C $DEPLOY_DIR pull"
+echo "    cd $FRONTEND_DIR && npm install && npm run build"
+echo "    sudo systemctl restart manageworks"
+if [[ "$ENABLE_BOT" == "y" ]]; then
+echo "    sudo systemctl restart manageworks-bot"
+fi
+echo "========================================================"
