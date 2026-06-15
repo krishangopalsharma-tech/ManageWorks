@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useAuth } from '../composables/useAuth'
+import ManageWorksIcon from '../components/ManageWorksIcon.vue'
 
 const { forgotPassword } = useAuth()
 
@@ -29,9 +30,9 @@ async function handleSubmit() {
   <div class="min-h-screen w-full bg-light-bg dark:bg-gray-900 flex items-center justify-center p-6">
     <div class="w-full max-w-md">
       <!-- Logo -->
-      <div class="flex items-center gap-3 mb-10 justify-center">
-        <div class="i-carbon-flash text-3xl text-[#1D5F5E]"></div>
-        <span class="text-2xl font-bold text-gray-800 dark:text-white tracking-tight">ManageWorks</span>
+      <div class="flex items-center gap-2.5 mb-10 justify-center">
+        <ManageWorksIcon :size="28" style="color: #141414;" class="shrink-0" />
+        <span class="text-xl font-bold tracking-tight" style="color: #141414;">ManageWorks</span>
       </div>
 
       <!-- Success state -->
