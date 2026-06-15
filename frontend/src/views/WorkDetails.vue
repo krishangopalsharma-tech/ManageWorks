@@ -212,6 +212,9 @@ const analytics = computed(() => {
   let contractTotal = 0, earnedTotal = 0
   let schAContract = 0, schAEarned = 0, schACount = 0
   let schBContract = 0, schBEarned = 0, schBCount = 0
+  // Qty-based progress (avg of per-item ratios) — matches dashboard logic
+  let schAQtySum = 0, schAQtyCount = 0
+  let schBQtySum = 0, schBQtyCount = 0
   const statusA = { Completed: 0, 'In Progress': 0, 'Not Started': 0 }
   const statusB = { Completed: 0, 'In Progress': 0, 'Not Started': 0 }
   const brandMap   = {}
@@ -231,8 +234,14 @@ const analytics = computed(() => {
 
     contractTotal += contract
     earnedTotal   += earned
-    if (isA) { schAContract += contract; schAEarned += earned; schACount++ }
-    if (isB) { schBContract += contract; schBEarned += earned; schBCount++ }
+    if (isA) {
+      schAContract += contract; schAEarned += earned; schACount++
+      if (item.qty > 0) { schAQtySum += (item.supplied_quantity || 0) / item.qty; schAQtyCount++ }
+    }
+    if (isB) {
+      schBContract += contract; schBEarned += earned; schBCount++
+      if (item.qty > 0) { schBQtySum += (item.executed_quantity || 0) / item.qty; schBQtyCount++ }
+    }
 
     const sg = isA ? statusA : isB ? statusB : null
     if (sg) {
@@ -304,9 +313,12 @@ const analytics = computed(() => {
     return parseFloat((cumulative / 100000).toFixed(2))
   })
 
-  const schAPct = schAContract > 0 ? schAEarned / schAContract * 100 : 0
-  const schBPct = schBContract > 0 ? schBEarned / schBContract * 100 : 0
+  const schAPct    = schAContract > 0 ? schAEarned / schAContract * 100 : 0
+  const schBPct    = schBContract > 0 ? schBEarned / schBContract * 100 : 0
   const overallPct = contractTotal > 0 ? earnedTotal / contractTotal * 100 : 0
+  // Qty-based (avg of per-item ratios) — used for donut display, matches dashboard
+  const schAQtyPct = schAQtyCount > 0 ? schAQtySum / schAQtyCount * 100 : 0
+  const schBQtyPct = schBQtyCount > 0 ? schBQtySum / schBQtyCount * 100 : 0
 
   // Insights
   const insights = []
@@ -350,6 +362,7 @@ const analytics = computed(() => {
     schAContract, schAEarned, schACount,
     schBContract, schBEarned, schBCount,
     schAPct, schBPct, overallPct,
+    schAQtyPct, schBQtyPct,
     statusA, statusB,
     top10, brands,
     unitMap,
@@ -396,7 +409,7 @@ const initCharts = async () => {
   await new Promise(r => requestAnimationFrame(r))
   const a = analytics.value
 
-  // 1a. Schedule A — Supply donut
+  // 1a. Schedule A — Supply donut (qty-based: avg supplied/qty per item)
   initOneChart('chart-sch-a', {
     tooltip: { trigger: 'item', formatter: p => `${p.name}: ${p.value.toFixed(1)}%` },
     legend: { bottom: 4, textStyle: { fontSize: 10 }, itemWidth: 10, itemHeight: 10 },
@@ -406,17 +419,17 @@ const initCharts = async () => {
       label: { show: false },
       emphasis: { label: { show: true, fontSize: 12, fontWeight: 700 } },
       data: [
-        { value: Math.max(a.schAPct, 0),       name: 'Earned',  itemStyle: { color: TEAL } },
-        { value: Math.max(100 - a.schAPct, 0), name: 'Pending', itemStyle: { color: '#D4E4E2' } },
+        { value: Math.max(a.schAQtyPct, 0),         name: 'Supplied', itemStyle: { color: '#1D5F5E' } },
+        { value: Math.max(100 - a.schAQtyPct, 0),   name: 'Pending',  itemStyle: { color: '#e5e5ea' } },
       ],
     }],
     graphic: [
-      { type: 'text', left: 'center', top: '34%', style: { text: `${a.schAPct.toFixed(0)}%`, fill: TEAL, fontSize: 22, fontWeight: 700, textAlign: 'center' } },
+      { type: 'text', left: 'center', top: '34%', style: { text: `${a.schAQtyPct.toFixed(0)}%`, fill: '#1D5F5E', fontSize: 22, fontWeight: 700, textAlign: 'center' } },
       { type: 'text', left: 'center', top: '50%', style: { text: 'supply', fill: '#9ca3af', fontSize: 10, textAlign: 'center' } },
     ],
   })
 
-  // 1b. Schedule B — Execution donut
+  // 1b. Schedule B — Execution donut (qty-based: avg executed/qty per item)
   initOneChart('chart-sch-b', {
     tooltip: { trigger: 'item', formatter: p => `${p.name}: ${p.value.toFixed(1)}%` },
     legend: { bottom: 4, textStyle: { fontSize: 10 }, itemWidth: 10, itemHeight: 10 },
@@ -426,12 +439,12 @@ const initCharts = async () => {
       label: { show: false },
       emphasis: { label: { show: true, fontSize: 12, fontWeight: 700 } },
       data: [
-        { value: Math.max(a.schBPct, 0),       name: 'Earned',  itemStyle: { color: AMBER } },
-        { value: Math.max(100 - a.schBPct, 0), name: 'Pending', itemStyle: { color: '#F2DFCC' } },
+        { value: Math.max(a.schBQtyPct, 0),         name: 'Executed', itemStyle: { color: '#34c759' } },
+        { value: Math.max(100 - a.schBQtyPct, 0),   name: 'Pending',  itemStyle: { color: '#e5e5ea' } },
       ],
     }],
     graphic: [
-      { type: 'text', left: 'center', top: '34%', style: { text: `${a.schBPct.toFixed(0)}%`, fill: AMBER, fontSize: 22, fontWeight: 700, textAlign: 'center' } },
+      { type: 'text', left: 'center', top: '34%', style: { text: `${a.schBQtyPct.toFixed(0)}%`, fill: '#34c759', fontSize: 22, fontWeight: 700, textAlign: 'center' } },
       { type: 'text', left: 'center', top: '50%', style: { text: 'execution', fill: '#9ca3af', fontSize: 10, textAlign: 'center' } },
     ],
   })
@@ -512,13 +525,13 @@ const initCharts = async () => {
       label: { show: false },
       emphasis: { label: { show: true, fontSize: 12, fontWeight: 700 } },
       data: [
-        { value: allComplete, name: 'Completed',   itemStyle: { color: TEAL } },
-        { value: allInProg,   name: 'In Progress', itemStyle: { color: AMBER } },
-        { value: allNotStart, name: 'Not Started', itemStyle: { color: '#e5e7eb' } },
+        { value: allComplete, name: 'Completed',   itemStyle: { color: '#5856d6' } },
+        { value: allInProg,   name: 'In Progress', itemStyle: { color: '#a5a3eb' } },
+        { value: allNotStart, name: 'Not Started', itemStyle: { color: '#e5e5ea' } },
       ].filter(d => d.value > 0),
     }],
     graphic: [
-      { type: 'text', left: 'center', top: '34%', style: { text: `${allTotal > 0 ? Math.round(allComplete / allTotal * 100) : 0}%`, fill: TEAL, fontSize: 22, fontWeight: 700, textAlign: 'center' } },
+      { type: 'text', left: 'center', top: '34%', style: { text: `${allTotal > 0 ? Math.round(allComplete / allTotal * 100) : 0}%`, fill: '#5856d6', fontSize: 22, fontWeight: 700, textAlign: 'center' } },
       { type: 'text', left: 'center', top: '50%', style: { text: 'complete', fill: '#9ca3af', fontSize: 10, textAlign: 'center' } },
     ],
   })
@@ -532,12 +545,12 @@ const initCharts = async () => {
       label: { show: false },
       emphasis: { label: { show: true, fontSize: 11, fontWeight: 700 } },
       data: [
-        { value: a.earnedTotal,                             name: 'Earned',  itemStyle: { color: TEAL } },
-        { value: Math.max(a.pendingTotal, 0),               name: 'Pending', itemStyle: { color: '#fca5a5' } },
+        { value: a.earnedTotal,               name: 'Earned',  itemStyle: { color: '#ff9500' } },
+        { value: Math.max(a.pendingTotal, 0), name: 'Pending', itemStyle: { color: '#e5e5ea' } },
       ].filter(d => d.value > 0),
     }],
     graphic: [
-      { type: 'text', left: 'center', top: '34%', style: { text: `${a.overallPct.toFixed(0)}%`, fill: TEAL, fontSize: 22, fontWeight: 700, textAlign: 'center' } },
+      { type: 'text', left: 'center', top: '34%', style: { text: `${a.overallPct.toFixed(0)}%`, fill: '#ff9500', fontSize: 22, fontWeight: 700, textAlign: 'center' } },
       { type: 'text', left: 'center', top: '50%', style: { text: 'earned', fill: '#9ca3af', fontSize: 10, textAlign: 'center' } },
     ],
   })
