@@ -5,6 +5,7 @@ from .views import (
     LoaPartiesListView, LinkedUsersView, LoaPartyView,
     SupervisorInviteView,
     RlyLinkedUsersView, RlyOfficialInviteView,
+    ThreadStatsView,
 )
 
 urlpatterns = [
@@ -25,4 +26,6 @@ urlpatterns = [
     path('rly-linked-users/<int:link_id>/', RlyLinkedUsersView.as_view(), name='rly_linked_user_detail'),
     path('rly-invite/',              RlyOfficialInviteView.as_view(), name='rly_invite_create'),
     path('rly-invite/<str:code>/',   RlyOfficialInviteView.as_view(), name='rly_invite_status'),
+
+    path('thread-stats/', ThreadStatsView.as_view(), name='thread_stats'),
 ]

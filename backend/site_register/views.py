@@ -670,3 +670,31 @@ class RlyOfficialInviteView(APIView):
             lnk = invite.used_by_link
             return Response({'used': True, 'linked_user': _serialize_rly_link(lnk)})
         return Response({'used': False})
+
+
+class ThreadStatsView(APIView):
+    """GET /api/site-register/thread-stats/?work_id=X — SR analytics for WorkDetails page."""
+    def get(self, request):
+        if not request.user.is_authenticated:
+            raise PermissionDenied()
+        work_id = request.query_params.get('work_id')
+        empty = {'total': 0, 'by_category': {}, 'by_month': {}, 'by_status': {}}
+        if not work_id:
+            return Response(empty)
+        by_category = {}
+        by_month    = {}
+        by_status   = {}
+        qs = SiteRegisterThread.objects.filter(work_id=work_id).values('category', 'status', 'created_at')
+        for t in qs:
+            cat = t['category']
+            by_category[cat] = by_category.get(cat, 0) + 1
+            month = t['created_at'].strftime('%Y-%m')
+            by_month[month] = by_month.get(month, 0) + 1
+            st = t['status']
+            by_status[st] = by_status.get(st, 0) + 1
+        return Response({
+            'total':       qs.count(),
+            'by_category': by_category,
+            'by_month':    dict(sorted(by_month.items())),
+            'by_status':   by_status,
+        })

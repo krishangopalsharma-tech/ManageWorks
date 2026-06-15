@@ -105,6 +105,18 @@ const loadWorks = async () => {
 }
 onMounted(loadWorks)
 
+// ── Site Register stats (lazy-loaded on work select) ──────────────────────
+const srStats = ref(null)
+const loadSrStats = async (workId) => {
+  if (!workId) { srStats.value = null; return }
+  try {
+    const res = await axios.get(`/api/site-register/thread-stats/?work_id=${workId}`)
+    srStats.value = res.data
+  } catch {
+    srStats.value = { total: 0, by_category: {}, by_month: {}, by_status: {} }
+  }
+}
+
 // Re-animate when navigating back to list
 watch(selectedWork, (val) => { if (!val) triggerDonutAnimation() })
 
@@ -184,6 +196,8 @@ const selectWork = (work) => {
   activeTab.value    = 'analytics'
   resetWdProgress()
   selectedWork.value = work
+  srStats.value      = null
+  loadSrStats(work?.id)
 }
 
 const toggleExpand = (itemId) => {
@@ -382,34 +396,43 @@ const initCharts = async () => {
   await new Promise(r => requestAnimationFrame(r))
   const a = analytics.value
 
-  // 1. Twin donut gauges
-  initOneChart('chart-gauges', {
-    tooltip: { trigger: 'item', formatter: p => `${p.seriesName} — ${p.name}: ${p.value.toFixed(1)}%` },
-    series: [
-      {
-        name: 'Supply', type: 'pie',
-        radius: ['52%', '78%'], center: ['25%', '52%'], startAngle: 90,
-        data: [
-          { value: Math.max(a.schAPct, 0), name: 'Earned', itemStyle: { color: TEAL } },
-          { value: Math.max(100 - a.schAPct, 0), name: 'Pending', itemStyle: { color: '#D4E4E2' } },
-        ],
-        label: { show: true, position: 'center', formatter: () => `${a.schAPct.toFixed(0)}%`, fontSize: 20, fontWeight: 700, color: TEAL },
-        emphasis: { label: { show: true } },
-      },
-      {
-        name: 'Execution', type: 'pie',
-        radius: ['52%', '78%'], center: ['75%', '52%'], startAngle: 90,
-        data: [
-          { value: Math.max(a.schBPct, 0), name: 'Earned', itemStyle: { color: AMBER } },
-          { value: Math.max(100 - a.schBPct, 0), name: 'Pending', itemStyle: { color: '#F2DFCC' } },
-        ],
-        label: { show: true, position: 'center', formatter: () => `${a.schBPct.toFixed(0)}%`, fontSize: 20, fontWeight: 700, color: AMBER },
-        emphasis: { label: { show: true } },
-      },
-    ],
+  // 1a. Schedule A — Supply donut
+  initOneChart('chart-sch-a', {
+    tooltip: { trigger: 'item', formatter: p => `${p.name}: ${p.value.toFixed(1)}%` },
+    legend: { bottom: 4, textStyle: { fontSize: 10 }, itemWidth: 10, itemHeight: 10 },
+    series: [{
+      name: 'Supply', type: 'pie',
+      radius: ['52%', '74%'], center: ['50%', '46%'], startAngle: 90,
+      label: { show: false },
+      emphasis: { label: { show: true, fontSize: 12, fontWeight: 700 } },
+      data: [
+        { value: Math.max(a.schAPct, 0),       name: 'Earned',  itemStyle: { color: TEAL } },
+        { value: Math.max(100 - a.schAPct, 0), name: 'Pending', itemStyle: { color: '#D4E4E2' } },
+      ],
+    }],
     graphic: [
-      { type: 'text', left: '12%', bottom: 8, style: { text: 'Schedule A · Supply',  fill: '#6b7280', fontSize: 10, fontWeight: 600 } },
-      { type: 'text', left: '60%', bottom: 8, style: { text: 'Schedule B · Execution', fill: '#6b7280', fontSize: 10, fontWeight: 600 } },
+      { type: 'text', left: 'center', top: '34%', style: { text: `${a.schAPct.toFixed(0)}%`, fill: TEAL, fontSize: 22, fontWeight: 700, textAlign: 'center' } },
+      { type: 'text', left: 'center', top: '50%', style: { text: 'supply', fill: '#9ca3af', fontSize: 10, textAlign: 'center' } },
+    ],
+  })
+
+  // 1b. Schedule B — Execution donut
+  initOneChart('chart-sch-b', {
+    tooltip: { trigger: 'item', formatter: p => `${p.name}: ${p.value.toFixed(1)}%` },
+    legend: { bottom: 4, textStyle: { fontSize: 10 }, itemWidth: 10, itemHeight: 10 },
+    series: [{
+      name: 'Execution', type: 'pie',
+      radius: ['52%', '74%'], center: ['50%', '46%'], startAngle: 90,
+      label: { show: false },
+      emphasis: { label: { show: true, fontSize: 12, fontWeight: 700 } },
+      data: [
+        { value: Math.max(a.schBPct, 0),       name: 'Earned',  itemStyle: { color: AMBER } },
+        { value: Math.max(100 - a.schBPct, 0), name: 'Pending', itemStyle: { color: '#F2DFCC' } },
+      ],
+    }],
+    graphic: [
+      { type: 'text', left: 'center', top: '34%', style: { text: `${a.schBPct.toFixed(0)}%`, fill: AMBER, fontSize: 22, fontWeight: 700, textAlign: 'center' } },
+      { type: 'text', left: 'center', top: '50%', style: { text: 'execution', fill: '#9ca3af', fontSize: 10, textAlign: 'center' } },
     ],
   })
 
@@ -476,70 +499,94 @@ const initCharts = async () => {
     ],
   })
 
-  // 5. Pending Value by Inspection Agency
-  const brandRev = [...a.brands].reverse()
-  initOneChart('chart-brand', {
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    legend: { bottom: 0, textStyle: { fontSize: 10 }, itemWidth: 10, itemHeight: 10 },
-    grid: { top: 8, bottom: 40, left: 160, right: 8 },
-    xAxis: { type: 'value', axisLabel: { formatter: v => `₹${v}L`, fontSize: 9 }, splitLine: { lineStyle: { type: 'dashed', color: '#f3f4f6' } } },
-    yAxis: {
-      type: 'category',
-      data: brandRev.map(([,v]) => v.label.length > 20 ? v.label.substring(0, 20) + '…' : v.label),
-      axisLabel: { fontSize: 9, width: 145, overflow: 'truncate' },
-    },
-    series: [
-      { name: 'Earned',  type: 'bar', stack: 'v', barMaxWidth: 14, itemStyle: { color: TEAL  }, data: brandRev.map(([,v]) => L(v.earned))              },
-      { name: 'Pending', type: 'bar', stack: 'v', barMaxWidth: 14, itemStyle: { color: '#fca5a5' }, data: brandRev.map(([,v]) => L(v.contract - v.earned)) },
+  // 5. Overall progress donut (item count: completed / in-progress / not started)
+  const allComplete = (a.statusA.Completed     || 0) + (a.statusB.Completed     || 0)
+  const allInProg   = (a.statusA['In Progress'] || 0) + (a.statusB['In Progress'] || 0)
+  const allNotStart = (a.statusA['Not Started'] || 0) + (a.statusB['Not Started'] || 0)
+  const allTotal    = allComplete + allInProg + allNotStart
+  initOneChart('chart-overall-donut', {
+    tooltip: { trigger: 'item', formatter: p => `${p.name}: ${p.value} items (${p.percent}%)` },
+    legend: { bottom: 4, textStyle: { fontSize: 10 }, itemWidth: 10, itemHeight: 10 },
+    series: [{
+      type: 'pie', radius: ['52%', '74%'], center: ['50%', '46%'], startAngle: 90,
+      label: { show: false },
+      emphasis: { label: { show: true, fontSize: 12, fontWeight: 700 } },
+      data: [
+        { value: allComplete, name: 'Completed',   itemStyle: { color: TEAL } },
+        { value: allInProg,   name: 'In Progress', itemStyle: { color: AMBER } },
+        { value: allNotStart, name: 'Not Started', itemStyle: { color: '#e5e7eb' } },
+      ].filter(d => d.value > 0),
+    }],
+    graphic: [
+      { type: 'text', left: 'center', top: '34%', style: { text: `${allTotal > 0 ? Math.round(allComplete / allTotal * 100) : 0}%`, fill: TEAL, fontSize: 22, fontWeight: 700, textAlign: 'center' } },
+      { type: 'text', left: 'center', top: '50%', style: { text: 'complete', fill: '#9ca3af', fontSize: 10, textAlign: 'center' } },
     ],
   })
 
-  // 6. Unit-type treemap
-  const unitEntries = Object.entries(a.unitMap).filter(([,v]) => v > 0).sort((x, y) => y[1] - x[1])
-  if (unitEntries.length > 0) {
-    initOneChart('chart-unit', {
-      tooltip: { formatter: p => `${p.name}<br/>${fmtCr(p.value)}` },
-      series: [{
-        type: 'treemap', roam: false, nodeClick: false,
-        breadcrumb: { show: false },
-        label: { fontSize: 11, fontWeight: 700 },
-        itemStyle: { borderColor: '#fff', borderWidth: 2, gapWidth: 2 },
-        data: unitEntries.map(([name, value], idx) => ({
-          name, value,
-          itemStyle: { color: PALETTE[idx % PALETTE.length] },
-          label: { formatter: p => `${p.name}\n${fmtCr(p.value)}` },
-        })),
-      }],
-    })
-  }
+  // 6. Financial progress donut (₹ earned vs pending)
+  initOneChart('chart-finance-donut', {
+    tooltip: { trigger: 'item', formatter: p => `${p.name}: ₹${(p.value / 100000).toFixed(2)} L (${p.percent}%)` },
+    legend: { bottom: 4, textStyle: { fontSize: 10 }, itemWidth: 10, itemHeight: 10 },
+    series: [{
+      type: 'pie', radius: ['52%', '74%'], center: ['50%', '46%'], startAngle: 90,
+      label: { show: false },
+      emphasis: { label: { show: true, fontSize: 11, fontWeight: 700 } },
+      data: [
+        { value: a.earnedTotal,                             name: 'Earned',  itemStyle: { color: TEAL } },
+        { value: Math.max(a.pendingTotal, 0),               name: 'Pending', itemStyle: { color: '#fca5a5' } },
+      ].filter(d => d.value > 0),
+    }],
+    graphic: [
+      { type: 'text', left: 'center', top: '34%', style: { text: `${a.overallPct.toFixed(0)}%`, fill: TEAL, fontSize: 22, fontWeight: 700, textAlign: 'center' } },
+      { type: 'text', left: 'center', top: '50%', style: { text: 'earned', fill: '#9ca3af', fontSize: 10, textAlign: 'center' } },
+    ],
+  })
 
-  // 7. Challan cadence — always render; show "No data" title when empty
-  initOneChart('chart-challan', {
-    title: a.challanMonths.length === 0 ? { text: 'No receipt entries recorded yet', left: 'center', top: 'middle', textStyle: { color: '#9ca3af', fontSize: 12, fontWeight: 'normal' } } : undefined,
+  await initSrCharts()
+}
+
+const SR_CAT_LABELS = {
+  order: 'Rly Order', progress: 'Progress', hindrance: 'Hindrance',
+  inspection_request: 'Inspection', document_submission: 'Document', general_remark: 'Remark',
+}
+
+const initSrCharts = async () => {
+  if (activeTab.value !== 'analytics') return
+  await nextTick()
+  const sr = srStats.value || { by_category: {}, by_month: {} }
+
+  // 7. SR entries by category — donut
+  const catEntries = Object.entries(sr.by_category).filter(([,v]) => v > 0)
+  initOneChart('chart-sr-category', {
+    title: catEntries.length === 0
+      ? { text: 'No site register entries yet', left: 'center', top: 'middle', textStyle: { color: '#9ca3af', fontSize: 12, fontWeight: 'normal' } }
+      : undefined,
+    tooltip: { trigger: 'item', formatter: p => `${p.name}: ${p.value} (${p.percent}%)` },
+    legend: catEntries.length > 0 ? { bottom: 4, textStyle: { fontSize: 10 }, itemWidth: 10, itemHeight: 10 } : { show: false },
+    series: catEntries.length > 0 ? [{
+      type: 'pie', radius: ['48%', '70%'], center: ['50%', '46%'],
+      label: { show: false },
+      emphasis: { label: { show: true, fontSize: 11, fontWeight: 700 } },
+      data: catEntries.map(([k, v], idx) => ({
+        name: SR_CAT_LABELS[k] || k, value: v,
+        itemStyle: { color: PALETTE[idx % PALETTE.length] },
+      })),
+    }] : [],
+  })
+
+  // 8. SR entries by month — bar
+  const srMonths = Object.keys(sr.by_month).sort()
+  const srCounts = srMonths.map(m => sr.by_month[m])
+  initOneChart('chart-sr-timeline', {
+    title: srMonths.length === 0
+      ? { text: 'No entries recorded yet', left: 'center', top: 'middle', textStyle: { color: '#9ca3af', fontSize: 12, fontWeight: 'normal' } }
+      : undefined,
     tooltip: { trigger: 'axis', formatter: params => `${params[0].name}: ${params[0].value} entries` },
     grid: { top: 12, bottom: 52, left: 36, right: 8 },
-    xAxis: { type: 'category', data: a.challanMonths, axisLabel: { fontSize: 9, rotate: a.challanMonths.length > 6 ? 45 : 0 } },
+    xAxis: { type: 'category', data: srMonths, axisLabel: { fontSize: 9, rotate: srMonths.length > 6 ? 45 : 0 } },
     yAxis: { type: 'value', name: 'Entries', nameTextStyle: { fontSize: 9 }, axisLabel: { fontSize: 9 }, minInterval: 1, splitLine: { lineStyle: { type: 'dashed', color: '#f3f4f6' } } },
-    series: [{ type: 'bar', barMaxWidth: 36, itemStyle: { color: TEAL, borderRadius: [3, 3, 0, 0] }, data: a.challanCounts, label: { show: true, position: 'top', fontSize: 10, color: '#374151' } }],
+    series: [{ type: 'bar', barMaxWidth: 36, itemStyle: { color: TEAL, borderRadius: [3, 3, 0, 0] }, data: srCounts, label: { show: true, position: 'top', fontSize: 10, color: '#374151' } }],
   })
-  chartInstances['chart-challan']?.resize()
-
-  // 8. Bill payment velocity — always render; show "No data" title when empty
-  initOneChart('chart-earned', {
-    title: a.earnedMonths.length === 0 ? { text: 'No bills uploaded yet', left: 'center', top: 'middle', textStyle: { color: '#9ca3af', fontSize: 12, fontWeight: 'normal' } } : undefined,
-    tooltip: { trigger: 'axis', formatter: params => `${params[0].name}<br/>Cumulative: ₹${params[0].value} L` },
-    grid: { top: 12, bottom: 52, left: 52, right: 8 },
-    xAxis: { type: 'category', data: a.earnedMonths, axisLabel: { fontSize: 9, rotate: a.earnedMonths.length > 6 ? 45 : 0 } },
-    yAxis: { type: 'value', axisLabel: { formatter: v => `₹${v}L`, fontSize: 9 }, splitLine: { lineStyle: { type: 'dashed', color: '#f3f4f6' } } },
-    series: [{
-      type: 'line', smooth: true, symbol: 'circle', symbolSize: 6,
-      itemStyle: { color: TEAL }, lineStyle: { width: 2 },
-      areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(29,95,94,0.25)' }, { offset: 1, color: 'rgba(29,95,94,0)' }] } },
-      data: a.cumulativeEarned,
-      label: { show: a.earnedMonths.length <= 8 && a.earnedMonths.length > 0, position: 'top', fontSize: 9, formatter: p => `₹${p.value}L` },
-    }],
-  })
-  chartInstances['chart-earned']?.resize()
 }
 
 watch([activeTab, selectedWork], () => {
@@ -547,6 +594,10 @@ watch([activeTab, selectedWork], () => {
     destroyCharts()
     initCharts()
   }
+})
+
+watch(srStats, () => {
+  if (activeTab.value === 'analytics') initSrCharts()
 })
 
 onMounted(() => window.addEventListener('resize', handleResize))
@@ -680,14 +731,15 @@ const generateWorkPDF = async () => {
 
     // ── PAGE 2+: Charts ──────────────────────────────────────────────────────
     const chartDefs = [
-      { id: 'chart-gauges',    title: 'Schedule A vs B — Progress' },
-      { id: 'chart-waterfall', title: 'Financial Progress — Waterfall' },
-      { id: 'chart-status',    title: 'Item Status' },
-      { id: 'chart-top10',     title: 'Top 10 Items by Contract Value' },
-      { id: 'chart-brand',     title: 'Pending Value by Inspection Agency' },
-      { id: 'chart-unit',      title: 'Unit-type Contribution' },
-      { id: 'chart-challan',   title: 'Challan Cadence' },
-      { id: 'chart-earned',    title: 'Bill Payment Velocity' },
+      { id: 'chart-sch-a',          title: 'Schedule A — Supply Progress' },
+      { id: 'chart-sch-b',          title: 'Schedule B — Execution Progress' },
+      { id: 'chart-overall-donut',  title: 'Overall Progress (Item Completion)' },
+      { id: 'chart-finance-donut',  title: 'Financial Progress (₹ Earned vs Pending)' },
+      { id: 'chart-waterfall',      title: 'Financial Progress — Waterfall' },
+      { id: 'chart-status',         title: 'Item Status' },
+      { id: 'chart-top10',          title: 'Top 10 Items by Contract Value' },
+      { id: 'chart-sr-category',    title: 'Site Register — Entry Types' },
+      { id: 'chart-sr-timeline',    title: 'Site Register — Entries by Month' },
     ]
 
     const chartImgs = chartDefs.map(({ id, title }) => {
@@ -1053,37 +1105,65 @@ const generateWorkPDF = async () => {
             </div>
           </div>
 
-          <!-- Row 1: Gauges + Waterfall + Status -->
+          <!-- Row 1: Four donuts — equal width (3 cols each) -->
           <div class="grid grid-cols-12 gap-3">
-            <div class="col-span-12 lg:col-span-5 bg-white border border-gray-200 rounded-xl p-4">
+            <div class="col-span-12 lg:col-span-3 bg-white border border-gray-200 rounded-xl p-4">
               <div class="flex justify-between items-baseline mb-0.5">
-                <h3 class="text-sm font-bold text-gray-900">Schedule A vs B — Progress</h3>
+                <h3 class="text-sm font-bold text-gray-900">Schedule A — Supply</h3>
                 <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Value %</span>
               </div>
-              <p class="text-[11px] text-gray-400 mb-2">Supply ships first; execution cannot outrun it.</p>
-              <div id="chart-gauges" style="height:210px"></div>
+              <p class="text-[11px] text-gray-400 mb-2">Supply progress across Schedule A items.</p>
+              <div id="chart-sch-a" style="height:220px"></div>
             </div>
-            <div class="col-span-12 lg:col-span-4 bg-white border border-gray-200 rounded-xl p-4">
+            <div class="col-span-12 lg:col-span-3 bg-white border border-gray-200 rounded-xl p-4">
+              <div class="flex justify-between items-baseline mb-0.5">
+                <h3 class="text-sm font-bold text-gray-900">Schedule B — Execution</h3>
+                <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Value %</span>
+              </div>
+              <p class="text-[11px] text-gray-400 mb-2">Execution progress across Schedule B items.</p>
+              <div id="chart-sch-b" style="height:220px"></div>
+            </div>
+            <div class="col-span-12 lg:col-span-3 bg-white border border-gray-200 rounded-xl p-4">
+              <div class="flex justify-between items-baseline mb-0.5">
+                <h3 class="text-sm font-bold text-gray-900">Overall Progress</h3>
+                <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Item Completion</span>
+              </div>
+              <p class="text-[11px] text-gray-400 mb-2">Items completed, in progress, and not started across all schedules.</p>
+              <div id="chart-overall-donut" style="height:220px"></div>
+            </div>
+            <div class="col-span-12 lg:col-span-3 bg-white border border-gray-200 rounded-xl p-4">
+              <div class="flex justify-between items-baseline mb-0.5">
+                <h3 class="text-sm font-bold text-gray-900">Financial Progress</h3>
+                <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest">₹ Earned vs Pending</span>
+              </div>
+              <p class="text-[11px] text-gray-400 mb-2">Overall contract value earned against total contract amount.</p>
+              <div id="chart-finance-donut" style="height:220px"></div>
+            </div>
+          </div>
+
+          <!-- Row 2: Waterfall + Item Status -->
+          <div class="grid grid-cols-12 gap-3">
+            <div class="col-span-12 lg:col-span-6 bg-white border border-gray-200 rounded-xl p-4">
               <div class="flex justify-between items-baseline mb-0.5">
                 <h3 class="text-sm font-bold text-gray-900">Financial Progress — Waterfall</h3>
                 <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest">₹ Lakhs</span>
               </div>
               <p class="text-[11px] text-gray-400 mb-2">Contract value earned vs pending by schedule.</p>
-              <div id="chart-waterfall" style="height:210px"></div>
+              <div id="chart-waterfall" style="height:220px"></div>
             </div>
-            <div class="col-span-12 lg:col-span-3 bg-white border border-gray-200 rounded-xl p-4">
+            <div class="col-span-12 lg:col-span-6 bg-white border border-gray-200 rounded-xl p-4">
               <div class="flex justify-between items-baseline mb-0.5">
                 <h3 class="text-sm font-bold text-gray-900">Item Status</h3>
                 <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Item Count</span>
               </div>
               <p class="text-[11px] text-gray-400 mb-2">≥99% done · 1–98% · 0%, by schedule.</p>
-              <div id="chart-status" style="height:210px"></div>
+              <div id="chart-status" style="height:220px"></div>
             </div>
           </div>
 
-          <!-- Row 2: Top 10 + Brand supply -->
+          <!-- Row 3: Top 10 (wide) + SR entry types -->
           <div class="grid grid-cols-12 gap-3">
-            <div class="col-span-12 lg:col-span-7 bg-white border border-gray-200 rounded-xl p-4">
+            <div class="col-span-12 lg:col-span-8 bg-white border border-gray-200 rounded-xl p-4">
               <div class="flex justify-between items-baseline mb-0.5">
                 <h3 class="text-sm font-bold text-gray-900">Top 10 Items by Contract Value</h3>
                 <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest">₹ Earned vs Pending</span>
@@ -1093,49 +1173,24 @@ const generateWorkPDF = async () => {
                 <div v-if="!analytics?.top10?.length" class="flex items-center justify-center h-full text-gray-300 text-xs">No financial data available</div>
               </div>
             </div>
-            <div class="col-span-12 lg:col-span-5 bg-white border border-gray-200 rounded-xl p-4">
-              <div class="flex justify-between items-baseline mb-0.5">
-                <h3 class="text-sm font-bold text-gray-900">Pending Value by Inspection Agency</h3>
-                <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest">₹ Lakhs</span>
-              </div>
-              <p class="text-[11px] text-gray-400 mb-2">Agency-wise earned vs pending contract value.</p>
-              <div id="chart-brand" style="height:310px">
-                <div v-if="!analytics?.brands?.length" class="flex items-center justify-center h-full text-gray-300 text-xs">No inspection agency data available</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Row 3: Unit treemap + Challan cadence -->
-          <div class="grid grid-cols-12 gap-3">
             <div class="col-span-12 lg:col-span-4 bg-white border border-gray-200 rounded-xl p-4">
               <div class="flex justify-between items-baseline mb-0.5">
-                <h3 class="text-sm font-bold text-gray-900">Unit-type Contribution</h3>
-                <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest">By Contract Value</span>
+                <h3 class="text-sm font-bold text-gray-900">Site Register — Entry Types</h3>
+                <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest">By Category</span>
               </div>
-              <p class="text-[11px] text-gray-400 mb-2">Numbers, Metre, Set, Lumpsum — shape of the work.</p>
-              <div id="chart-unit" style="height:230px">
-                <div v-if="!Object.keys(analytics?.unitMap || {}).length" class="flex items-center justify-center h-full text-gray-300 text-xs">No unit data</div>
-              </div>
-            </div>
-            <div class="col-span-12 lg:col-span-8 bg-white border border-gray-200 rounded-xl p-4">
-              <div class="flex justify-between items-baseline mb-0.5">
-                <h3 class="text-sm font-bold text-gray-900">Challan Cadence</h3>
-                <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Entries per Month</span>
-              </div>
-              <p class="text-[11px] text-gray-400 mb-2">Supply receipt tempo over time.</p>
-              <div id="chart-challan" style="height:230px"></div>
+              <p class="text-[11px] text-gray-400 mb-2">Distribution of site register entries across order types.</p>
+              <div id="chart-sr-category" style="height:310px"></div>
             </div>
           </div>
 
-          <!-- Row 4: Bill Payment Velocity -->
+          <!-- Row 4: SR timeline — full width -->
           <div class="bg-white border border-gray-200 rounded-xl p-4">
             <div class="flex justify-between items-baseline mb-0.5">
-              <h3 class="text-sm font-bold text-gray-900">Bill Payment Velocity</h3>
-              <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Cumulative Earned ₹ L by Receipt Month</span>
+              <h3 class="text-sm font-bold text-gray-900">Site Register — Entries by Month</h3>
+              <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Entry Count</span>
             </div>
-            <p class="text-[11px] text-gray-400 mb-2">Cumulative contract value earned as supply receipts arrive over time.</p>
-            <div id="chart-earned" style="height:220px">
-            </div>
+            <p class="text-[11px] text-gray-400 mb-2">Telegram-based site register activity over time.</p>
+            <div id="chart-sr-timeline" style="height:220px"></div>
           </div>
 
           <!-- Auto-generated Insights -->
