@@ -559,14 +559,14 @@ const openEditWork = (work) => {
     name_of_work: work.name_of_work || '',
     contractor_name: work.contractor_name || '', contractor_address: work.contractor_address || '',
     date_of_completion: work.date_of_completion || '', consignee: work.consignee || '',
-    extensions: (work.extensions || []).map(e => ({ ...e })),
+    extensions: (work.extensions || []).map(e => ({ ld_type: 'without_ld', ld_amount: '', ...e })),
   }
   workSaveStatus.value    = ''
   showDeleteConfirm.value = false
 }
 const closeEditWork = () => { editingWork.value = null; showDeleteConfirm.value = false; workSaveStatus.value = ''; deleteReason.value = ''; deleteReasonError.value = '' }
 
-const addExtension = () => { editingWork.value.extensions.push({ extension_date: '' }) }
+const addExtension = () => { editingWork.value.extensions.push({ extension_date: '', ld_type: 'without_ld', ld_amount: '' }) }
 const removeExtension = (idx) => { editingWork.value.extensions.splice(idx, 1) }
 
 const saveWork = async () => {
@@ -576,7 +576,11 @@ const saveWork = async () => {
     const { id, extensions, ...fields } = editingWork.value
     const payload = {
       ...fields,
-      extensions: extensions.filter(e => (e.extension_date || '').trim()).map(e => ({ extension_date: e.extension_date.trim() })),
+      extensions: extensions.filter(e => (e.extension_date || '').trim()).map(e => ({
+        extension_date: e.extension_date.trim(),
+        ld_type: e.ld_type || 'without_ld',
+        ld_amount: (e.ld_type === 'with_ld') ? (e.ld_amount || '').trim() : '',
+      })),
     }
     await axios.patch(`/api/update-work/works/${id}/`, payload, { headers: { 'X-CSRFToken': getCsrfToken() } })
     const idx = allWorks.value.findIndex(w => w.id === id)
@@ -902,14 +906,25 @@ const deleteWork = async () => {
               </div>
               <div v-if="editingWork.extensions.length === 0" class="text-center py-3 text-[11px] text-gray-400 font-medium">No extensions yet.</div>
               <div v-else class="flex flex-col gap-2">
-                <div v-for="(ext, idx) in editingWork.extensions" :key="idx" class="flex items-center gap-2">
-                  <span class="text-[11px] font-bold text-gray-500 w-16 flex-shrink-0">{{ romanOrdinal(idx + 1) }} Ext.</span>
-                  <input v-model="ext.extension_date" type="text" placeholder="e.g. 2027-09-04"
-                    class="flex-1 bg-white border border-gray-200 rounded-xl px-3.5 py-2 text-sm font-medium text-gray-800 outline-none focus:border-[#1D5F5E] focus:ring-2 focus:ring-[#1D5F5E]/10 transition-all">
-                  <button @click="removeExtension(idx)"
-                    class="flex-shrink-0 w-7 h-7 rounded-full bg-white border border-gray-200 hover:border-[#ff3b30]/50 hover:text-[#ff3b30] text-gray-400 flex items-center justify-center transition-all">
-                    <div class="i-carbon-close text-xs"></div>
-                  </button>
+                <div v-for="(ext, idx) in editingWork.extensions" :key="idx" class="flex flex-col gap-1.5">
+                  <div class="flex items-center gap-2">
+                    <span class="text-[11px] font-bold text-gray-500 w-16 flex-shrink-0">{{ romanOrdinal(idx + 1) }} Ext.</span>
+                    <input v-model="ext.extension_date" type="text" placeholder="e.g. 2027-09-04"
+                      class="flex-1 bg-white border border-gray-200 rounded-xl px-3.5 py-2 text-sm font-medium text-gray-800 outline-none focus:border-[#1D5F5E] focus:ring-2 focus:ring-[#1D5F5E]/10 transition-all">
+                    <select v-model="ext.ld_type"
+                      class="bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm font-medium text-gray-800 outline-none focus:border-[#1D5F5E] focus:ring-2 focus:ring-[#1D5F5E]/10 transition-all cursor-pointer">
+                      <option value="without_ld">Without LD</option>
+                      <option value="with_ld">With LD</option>
+                    </select>
+                    <button @click="removeExtension(idx)"
+                      class="flex-shrink-0 w-7 h-7 rounded-full bg-white border border-gray-200 hover:border-[#ff3b30]/50 hover:text-[#ff3b30] text-gray-400 flex items-center justify-center transition-all">
+                      <div class="i-carbon-close text-xs"></div>
+                    </button>
+                  </div>
+                  <div v-if="ext.ld_type === 'with_ld'" class="flex items-center gap-2 pl-[4.5rem]">
+                    <input v-model="ext.ld_amount" type="text" placeholder="LD amount (e.g. ₹5000/week or ₹10000/month)"
+                      class="flex-1 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-2 text-sm font-medium text-gray-800 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/10 transition-all">
+                  </div>
                 </div>
               </div>
             </div>

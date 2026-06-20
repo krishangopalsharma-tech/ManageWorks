@@ -84,7 +84,14 @@ class WorkUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
             for ext in request.data.get('extensions', []):
                 date_val = (ext.get('extension_date') or '').strip()
                 if date_val:
-                    WorkExtension.objects.create(work=instance, extension_date=date_val)
+                    ld_type = (ext.get('ld_type') or 'without_ld').strip()
+                    ld_amount = (ext.get('ld_amount') or '').strip()
+                    WorkExtension.objects.create(
+                        work=instance,
+                        extension_date=date_val,
+                        ld_type=ld_type,
+                        ld_amount=ld_amount if ld_type == 'with_ld' else '',
+                    )
 
         return Response(serializer.data)
 

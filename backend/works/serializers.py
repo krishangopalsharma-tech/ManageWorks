@@ -53,7 +53,7 @@ class WorkItemSerializer(serializers.ModelSerializer):
 class WorkExtensionSerializer(serializers.ModelSerializer):
     class Meta:
         model = WorkExtension
-        fields = ['id', 'extension_date']
+        fields = ['id', 'extension_date', 'ld_type', 'ld_amount']
 
 class WorkSerializer(serializers.ModelSerializer):
     items = WorkItemSerializer(many=True, read_only=True)

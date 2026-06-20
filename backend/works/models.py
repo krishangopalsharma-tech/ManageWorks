@@ -133,8 +133,14 @@ class WorkItemEntry(models.Model):
 
 class WorkExtension(models.Model):
     """Time extensions granted when a work overshoots its completion date."""
+    LD_WITHOUT = 'without_ld'
+    LD_WITH = 'with_ld'
+    LD_CHOICES = [(LD_WITHOUT, 'Without LD'), (LD_WITH, 'With LD')]
+
     work = models.ForeignKey(Work, on_delete=models.CASCADE, related_name='extensions')
     extension_date = models.CharField(max_length=255)
+    ld_type = models.CharField(max_length=20, choices=LD_CHOICES, default=LD_WITHOUT)
+    ld_amount = models.CharField(max_length=255, blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
