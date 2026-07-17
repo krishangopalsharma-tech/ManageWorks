@@ -11,6 +11,8 @@ urlpatterns = [
     path('api/dashboard/', include('dashboard.urls')),
     path('api/work-details/', include('work_details.urls')),
     path('api/update-work/', include('update_work.urls')),
+    path('api/supply-details/',    include('supply_details.urls')),
+    path('api/execution-details/', include('execution_details.urls')),
     path('api/add-work/', include('add_work.urls')),
     path('api/documents/', include('documents.urls')),
     path('api/auth/', include('users.urls')),

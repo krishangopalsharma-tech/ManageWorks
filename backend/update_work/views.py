@@ -1,5 +1,3 @@
-from django.db import models as db_models
-from django.db.models import Sum
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, generics
@@ -7,36 +5,10 @@ from rest_framework.exceptions import PermissionDenied
 
 from django.db.models import Q
 
-from works.models import Work, WorkItem, WorkItemEntry, WorkExtension
-from works.serializers import WorkItemEntrySerializer, WorkEditSerializer, WorkSerializer
-from works.utils import is_admin_user as _is_admin
+from works.models import Work, WorkExtension
+from works.serializers import WorkEditSerializer, WorkSerializer
+from works.utils import is_admin_user as _is_admin, is_assigned_consignee as _is_work_consignee
 from work_details.views import _base_queryset
-from .pdf_parser import parse_receipt_pdf
-
-
-def _pad_loa(raw):
-    """Normalise LOA to 14 digits — mirrors excel_parser logic."""
-    s = str(raw or '').strip()
-    if not s:
-        return s
-    if '.' in s:
-        try:
-            s = str(int(float(s)))
-        except (ValueError, TypeError):
-            pass
-    if s.isdigit() and len(s) < 14:
-        s = s.zfill(14)
-    return s
-
-
-def _check_authenticated(user):
-    if not user.is_authenticated:
-        raise PermissionDenied("Authentication required.")
-
-
-def _is_work_consignee(user, work):
-    """True when the logged-in user is the primary consignee assigned to this work."""
-    return bool(work.hrms_id) and work.hrms_id == user.username
 
 
 def _check_can_modify_work(user, work):
@@ -51,38 +23,18 @@ def _check_can_modify_work(user, work):
     raise PermissionDenied("You are not authorised to update this work.")
 
 
-def _sync_item_quantities(work_item):
-    """Recompute and save supplied_quantity and executed_quantity from current entries."""
-    supply_total = (
-        WorkItemEntry.objects
-        .filter(work_item=work_item, entry_type='supply')
-        .aggregate(t=Sum('quantity'))['t'] or 0
-    )
-    exec_total = (
-        WorkItemEntry.objects
-        .filter(work_item=work_item, entry_type='execution')
-        .aggregate(t=Sum('quantity'))['t'] or 0
-    )
-    work_item.supplied_quantity = supply_total
-    work_item.executed_quantity = exec_total
-    work_item.save(update_fields=['supplied_quantity', 'executed_quantity'])
-
-
-# ── Work list — deliberately unscoped (for now) ───────────────────────────────
-# Any logged-in consignee (assigned or not) must be able to find and open any
-# LOA here to submit an execution entry — execution entries have no ownership
-# restriction (see WorkItemEntryView.post below), only supply entries do.
-# _check_can_modify_work (metadata edit/delete) IS now scoped to admin/own-LOA-
-# only, separately from this search/retrieve pair. Once entry submission moves
-# to the new supply_details/execution_details apps, this view will be scoped
-# the same way (admin -> all LOA, assigned consignee -> own LOA, unassigned ->
-# no access) since it will no longer need to stay open for entry submission.
+# ── Work list — now scoped, since entry submission has moved to the new
+# supply_details/execution_details apps and no longer needs this to stay open
+# for every consignee. Admin sees everything; assigned consignee sees only
+# their own LOA; unassigned consignee sees nothing (empty list / 404).
 
 class UpdateWorkSearchView(generics.ListAPIView):
     serializer_class = WorkSerializer
 
     def get_queryset(self):
         queryset = _base_queryset()
+        if not _is_admin(self.request.user):
+            queryset = queryset.filter(hrms_id=self.request.user.username)
         query = self.request.query_params.get('q', None)
         if query:
             queryset = queryset.filter(
@@ -100,12 +52,17 @@ class UpdateWorkSearchView(generics.ListAPIView):
 
 class UpdateWorkRetrieveView(generics.RetrieveAPIView):
     serializer_class = WorkSerializer
-    queryset = _base_queryset()
 
     def retrieve(self, request, *args, **kwargs):
         if not request.user.is_authenticated:
             return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
         return super().retrieve(request, *args, **kwargs)
+
+    def get_queryset(self):
+        queryset = _base_queryset()
+        if not _is_admin(self.request.user):
+            queryset = queryset.filter(hrms_id=self.request.user.username)
+        return queryset
 
 
 # ── Work-level edit / delete ──────────────────────────────────────────────────

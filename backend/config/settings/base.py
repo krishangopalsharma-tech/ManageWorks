@@ -34,6 +34,8 @@ INSTALLED_APPS = [
     'delete_log',
     'financial_progress',
     'profile_settings',
+    'supply_details',
+    'execution_details',
 ]
 
 MIDDLEWARE = [
