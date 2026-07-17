@@ -7,7 +7,7 @@ from rest_framework.exceptions import PermissionDenied
 
 from works.models import Work, WorkItem, WorkItemEntry
 from works.serializers import WorkItemEntrySerializer, WorkSerializer
-from works.utils import is_admin_user, is_assigned_consignee
+from works.utils import is_assigned_consignee
 from work_details.views import _base_queryset
 from .pdf_parser import parse_receipt_pdf
 
@@ -125,8 +125,9 @@ class SupplyEntryView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # SS and the supply-portion of SI items are restricted to the assigned consignee.
-        if not is_admin_user(request.user) and not is_assigned_consignee(request.user, work):
+        # Supply Details is view-only for Admin/Super Admin — only the assigned
+        # consignee may submit SS / SI-supply-portion entries, on their own LOA.
+        if not is_assigned_consignee(request.user, work):
             return Response(
                 {'error': 'Only the assigned consignee for this work can submit supply entries.'},
                 status=status.HTTP_403_FORBIDDEN,
@@ -172,17 +173,18 @@ class SupplyEntryUpdateView(APIView):
         except WorkItemEntry.DoesNotExist:
             return Response({'error': 'Entry not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        if entry.submitted_by_id != request.user.id and not is_admin_user(request.user):
+        # Supply Details is view-only for Admin/Super Admin — no create, no edit.
+        # Only the original submitter can edit their own entry.
+        if entry.submitted_by_id != request.user.id:
             raise PermissionDenied("Only the consignee who submitted this entry can edit it.")
 
-        # Supply entries also require the user to still be the primary consignee of the
-        # work. If the work was reassigned, the previous consignee loses edit access.
-        if not is_admin_user(request.user):
-            work = entry.work_item.work
-            if not is_assigned_consignee(request.user, work):
-                raise PermissionDenied(
-                    "This work has been reassigned. You no longer have permission to edit supply entries."
-                )
+        # Also requires the user to still be the primary consignee of the work.
+        # If the work was reassigned, the previous consignee loses edit access.
+        work = entry.work_item.work
+        if not is_assigned_consignee(request.user, work):
+            raise PermissionDenied(
+                "This work has been reassigned. You no longer have permission to edit supply entries."
+            )
 
         if 'quantity' in request.data:
             try:

@@ -104,8 +104,15 @@ class ExecutionEntryView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Execution entries (EE, and the execution-portion of SI items) have no
-        # ownership restriction — any authenticated consignee/admin may submit.
+        # Execution Details is view-only for Admin/Super Admin. Any consignee
+        # (assigned here, assigned elsewhere, or fully unassigned) may submit —
+        # execution entries have no ownership restriction among consignees.
+        if is_admin_user(request.user):
+            return Response(
+                {'error': 'Admins cannot submit execution entries — view only.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         entry = WorkItemEntry.objects.create(
             work_item=work_item,
             entry_type='execution',
@@ -122,7 +129,8 @@ class ExecutionEntryView(APIView):
 
 
 class ExecutionEntryUpdateView(APIView):
-    """PATCH /api/execution-details/entries/<entry_id>/ — only submitter or admin may edit."""
+    """PATCH /api/execution-details/entries/<entry_id>/ — only the submitter may edit.
+    Admin/Super Admin is view-only on Execution Details — no create, no edit."""
 
     def patch(self, request, entry_id):
         if not request.user.is_authenticated:
@@ -133,7 +141,7 @@ class ExecutionEntryUpdateView(APIView):
         except WorkItemEntry.DoesNotExist:
             return Response({'error': 'Entry not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        if entry.submitted_by_id != request.user.id and not is_admin_user(request.user):
+        if entry.submitted_by_id != request.user.id:
             raise PermissionDenied("Only the consignee who submitted this entry can edit it.")
 
         if 'quantity' in request.data:
