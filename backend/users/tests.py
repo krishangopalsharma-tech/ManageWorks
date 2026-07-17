@@ -4,6 +4,7 @@ from django.contrib.auth.models import User
 from django.test import Client
 from rest_framework import status
 from users.models import UserProfile
+from works.models import Work
 
 @pytest.mark.django_db
 class TestUsersAuthAndRBAC:
@@ -28,6 +29,16 @@ class TestUsersAuthAndRBAC:
             designation='Consignee Grade 1',
             is_approved=True,
             role='consignee',
+            plain_password='password123'
+        )
+
+        # Plain admin — role='admin' but NOT the super-admin username, NOT is_staff
+        self.plain_admin = User.objects.create_user(username='admin2', password='password123', email='admin2@example.com')
+        UserProfile.objects.create(
+            user=self.plain_admin,
+            designation='Regional Admin',
+            is_approved=True,
+            role='admin',
             plain_password='password123'
         )
 
@@ -174,6 +185,49 @@ class TestUsersAuthAndRBAC:
         self.profile.refresh_from_db()
         assert self.profile.is_approved is False
 
+    # ── Plain Admin is NOT Super Admin: approve/reject/revoke/role-change are super-admin-only ──
+
+    def test_plain_admin_cannot_approve(self):
+        self.client.force_login(self.plain_admin)
+        response = self.client.post(f'/api/auth/approve/{self.pending_user.pk}/')
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_plain_admin_cannot_reject(self):
+        self.client.force_login(self.plain_admin)
+        response = self.client.delete(f'/api/auth/reject/{self.pending_user.pk}/')
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_plain_admin_cannot_revoke(self):
+        self.client.force_login(self.plain_admin)
+        response = self.client.post(f'/api/auth/revoke/{self.consignee.pk}/')
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_plain_admin_cannot_update_role(self):
+        self.client.force_login(self.plain_admin)
+        response = self.client.patch(f'/api/auth/role/{self.consignee.pk}/', {
+            'role': 'admin'
+        }, content_type='application/json')
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_plain_admin_cannot_update_role_via_update_user_view(self):
+        self.client.force_login(self.plain_admin)
+        response = self.client.patch(f'/api/auth/update/{self.consignee.pk}/', {
+            'role': 'admin'
+        }, content_type='application/json')
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_plain_admin_can_still_view_users(self):
+        self.client.force_login(self.plain_admin)
+        assert self.client.get('/api/auth/pending/').status_code == status.HTTP_200_OK
+        assert self.client.get('/api/auth/all/').status_code == status.HTTP_200_OK
+
+    def test_plain_admin_can_still_edit_designation(self):
+        self.client.force_login(self.plain_admin)
+        response = self.client.patch(f'/api/auth/update/{self.consignee.pk}/', {
+            'designation': 'Updated Designation'
+        }, content_type='application/json')
+        assert response.status_code == status.HTTP_200_OK
+
     @patch('users.views.send_password_email')
     def test_forgot_password_unknown_hrms(self, mock_send_email):
         response = self.client.post('/api/auth/forgot-password/', {
@@ -197,3 +251,79 @@ class TestUsersAuthAndRBAC:
             hrms_id='consignee1',
             plain_password='password123'
         )
+
+
+@pytest.mark.django_db
+class TestAdminAutoConvertToConsignee:
+    """Assigning a Work/LOA to an Admin auto-converts them to Consignee (one-way).
+    Super Admin (username='admin') is never auto-converted. Reassigning away from
+    an existing consignee must not change that consignee's role."""
+
+    @pytest.fixture(autouse=True)
+    def setup_data(self):
+        self.client = Client()
+
+        self.super_admin = User.objects.create_superuser(username='admin', password='password123')
+        UserProfile.objects.create(user=self.super_admin, designation='Super Admin', is_approved=True, role='admin')
+
+        self.zero_loa_admin = User.objects.create_user(username='admin2', password='password123')
+        self.zero_loa_admin_profile = UserProfile.objects.create(
+            user=self.zero_loa_admin, designation='Regional Admin', is_approved=True, role='admin'
+        )
+
+        self.consignee = User.objects.create_user(username='consignee1', password='password123')
+        self.consignee_profile = UserProfile.objects.create(
+            user=self.consignee, designation='Consignee', is_approved=True, role='consignee'
+        )
+
+        self.work = Work.objects.create(loa_number='LOA-CONVERT-1', contractor_name='Apex')
+
+    def test_assigning_work_converts_admin_to_consignee(self):
+        self.client.force_login(self.super_admin)
+        response = self.client.post('/api/auth/assign-work/', {
+            'work_id': self.work.pk,
+            'hrms_id': 'admin2',
+        }, content_type='application/json')
+        assert response.status_code == status.HTTP_200_OK
+        self.zero_loa_admin_profile.refresh_from_db()
+        assert self.zero_loa_admin_profile.role == 'consignee'
+
+    def test_super_admin_never_auto_converted(self):
+        self.client.force_login(self.super_admin)
+        response = self.client.post('/api/auth/assign-work/', {
+            'work_id': self.work.pk,
+            'hrms_id': 'admin',
+        }, content_type='application/json')
+        assert response.status_code == status.HTTP_200_OK
+        super_admin_profile = UserProfile.objects.get(user=self.super_admin)
+        assert super_admin_profile.role == 'admin'
+
+    def test_reassigning_away_does_not_change_old_consignees_role(self):
+        self.work.hrms_id = 'consignee1'
+        self.work.save(update_fields=['hrms_id'])
+        self.consignee_profile.refresh_from_db()
+        assert self.consignee_profile.role == 'consignee'
+
+        self.client.force_login(self.super_admin)
+        response = self.client.post('/api/auth/assign-work/', {
+            'work_id': self.work.pk,
+            'hrms_id': '',
+        }, content_type='application/json')
+        assert response.status_code == status.HTTP_200_OK
+        self.consignee_profile.refresh_from_db()
+        assert self.consignee_profile.role == 'consignee'
+
+    def test_creating_work_with_admin_hrms_id_converts_immediately(self):
+        Work.objects.create(loa_number='LOA-CONVERT-2', contractor_name='Builders', hrms_id='admin2')
+        self.zero_loa_admin_profile.refresh_from_db()
+        assert self.zero_loa_admin_profile.role == 'consignee'
+
+    def test_assigning_work_to_existing_consignee_is_a_noop(self):
+        self.client.force_login(self.super_admin)
+        response = self.client.post('/api/auth/assign-work/', {
+            'work_id': self.work.pk,
+            'hrms_id': 'consignee1',
+        }, content_type='application/json')
+        assert response.status_code == status.HTTP_200_OK
+        self.consignee_profile.refresh_from_db()
+        assert self.consignee_profile.role == 'consignee'

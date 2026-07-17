@@ -9,7 +9,7 @@ from rest_framework import status
 from django.contrib.auth.models import User
 
 from works.models import Work
-from works.utils import contractor_nickname as _nickname
+from works.utils import contractor_nickname as _nickname, is_admin_user as _is_admin
 from .models import (
     TelegramLinkOTP, TelegramUserLink, WorkContractorTelegram, SupervisorInvite,
     RlyTelegramLink, RlyOfficialInvite, SiteRegisterThread,
@@ -23,15 +23,6 @@ SR_CATEGORY_LABELS = {
     'document_submission': 'Document Submission',
     'general_remark':      'General Remark',
 }
-
-
-def _is_admin(user):
-    if not user.is_authenticated:
-        return False
-    if user.is_staff:
-        return True
-    profile = getattr(user, 'profile', None)
-    return profile is not None and profile.role == 'admin'
 
 
 def _is_consignee(user):
@@ -448,7 +439,11 @@ class LoaPartyView(APIView):
     → remove mapping
     """
     def post(self, request, work_id):
-        if not _is_admin(request.user):
+        is_admin = _is_admin(request.user)
+        is_consignee = _is_consignee(request.user)
+        if not is_admin and not is_consignee:
+            return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
+        if is_consignee and not is_admin and not _consignee_owns_loas(request.user, [int(work_id)]):
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
 
         link_id = request.data.get('link_id')

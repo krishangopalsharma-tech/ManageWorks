@@ -10,8 +10,10 @@ from users.models import UserProfile
 from site_register.models import (
     SiteRegisterThread, SiteRegisterMessage,
     TelegramLinkOTP, TelegramUserLink,
-    SupervisorInvite, WorkContractorTelegram
+    SupervisorInvite, WorkContractorTelegram,
+    RlyOfficialInvite, RlyTelegramLink, BotSession,
 )
+from site_register.management.commands.run_telegram_bot import handle_rly_invite_onboard
 
 @pytest.mark.django_db
 class TestSiteRegister:
@@ -156,7 +158,113 @@ class TestSiteRegister:
             is_verified=True
         )
         self.client.force_login(self.consignee1)
-        
+
         response = self.client.delete('/api/site-register/telegram/unlink/')
         assert response.status_code == status.HTTP_200_OK
         assert not TelegramUserLink.objects.filter(pk=tg_link.pk).exists()
+
+
+@pytest.mark.django_db
+class TestLoaPartyAddRemoveSymmetry:
+    """Adding a site supervisor to an LOA follows the same ownership rule as removing
+    one: admin -> any LOA, assigned consignee -> own LOA only, else -> forbidden."""
+
+    @pytest.fixture(autouse=True)
+    def setup_data(self):
+        self.client = Client()
+
+        self.admin = User.objects.create_superuser(username='admin', password='password123')
+        UserProfile.objects.create(user=self.admin, designation='Admin', is_approved=True, role='admin')
+
+        self.consignee1 = User.objects.create_user(username='consignee1', password='password123')
+        UserProfile.objects.create(user=self.consignee1, designation='Consignee 1', is_approved=True, role='consignee')
+
+        self.consignee2 = User.objects.create_user(username='consignee2', password='password123')
+        UserProfile.objects.create(user=self.consignee2, designation='Consignee 2', is_approved=True, role='consignee')
+
+        self.work1 = Work.objects.create(loa_number='LOA-PARTY-001', contractor_name='Apex', hrms_id='consignee1')
+
+        supervisor_user = User.objects.create_user(username='supervisor1', password='password123')
+        self.tg_link = TelegramUserLink.objects.create(
+            user=supervisor_user, telegram_user_id=555, telegram_chat_id=666, is_verified=True,
+        )
+
+    def test_admin_can_add_supervisor_to_any_loa(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            f'/api/site-register/parties/{self.work1.pk}/',
+            {'link_id': self.tg_link.pk},
+            content_type='application/json',
+        )
+        assert response.status_code in (status.HTTP_200_OK, status.HTTP_201_CREATED)
+
+    def test_assigned_consignee_can_add_supervisor_to_own_loa(self):
+        self.client.force_login(self.consignee1)
+        response = self.client.post(
+            f'/api/site-register/parties/{self.work1.pk}/',
+            {'link_id': self.tg_link.pk},
+            content_type='application/json',
+        )
+        assert response.status_code in (status.HTTP_200_OK, status.HTTP_201_CREATED)
+
+    def test_other_consignee_cannot_add_supervisor_to_non_owned_loa(self):
+        self.client.force_login(self.consignee2)
+        response = self.client.post(
+            f'/api/site-register/parties/{self.work1.pk}/',
+            {'link_id': self.tg_link.pk},
+            content_type='application/json',
+        )
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+class TestRlyOfficialInviteSelfLink:
+    """Non-admin invite generators can only redeem their own invite as themselves;
+    Admin/Super-Admin generated invites have no such restriction."""
+
+    @pytest.fixture(autouse=True)
+    def setup_data(self):
+        self.admin = User.objects.create_superuser(username='admin', password='password123')
+        UserProfile.objects.create(user=self.admin, designation='Admin', is_approved=True, role='admin')
+
+        self.consignee1 = User.objects.create_user(username='consignee1', password='password123')
+        UserProfile.objects.create(user=self.consignee1, designation='JE-1', is_approved=True, role='consignee')
+
+        self.consignee2 = User.objects.create_user(username='consignee2', password='password123')
+        UserProfile.objects.create(user=self.consignee2, designation='JE-2', is_approved=True, role='consignee')
+
+    def _session_for(self, invite, chat_id):
+        restrict_to = None if invite.created_by.username == self.admin.username else invite.created_by.username
+        return BotSession.objects.create(
+            telegram_chat_id=chat_id,
+            state='rly_invite_hrms',
+            context={'pending_rly_invite_code': invite.code, 'restrict_to_username': restrict_to},
+        )
+
+    def test_consignee_invite_rejected_for_other_users_id(self):
+        invite  = RlyOfficialInvite.generate(created_by=self.consignee1)
+        session = self._session_for(invite, chat_id=111)
+
+        handle_rly_invite_onboard('fake-token', session, tg_user_id=999, chat_id=111, text='consignee2')
+
+        session.refresh_from_db()
+        assert session.state == 'idle'
+        assert not RlyTelegramLink.objects.filter(telegram_user_id=999).exists()
+
+    def test_consignee_invite_accepted_for_own_id(self):
+        invite  = RlyOfficialInvite.generate(created_by=self.consignee1)
+        session = self._session_for(invite, chat_id=222)
+
+        handle_rly_invite_onboard('fake-token', session, tg_user_id=888, chat_id=222, text='consignee1')
+
+        session.refresh_from_db()
+        assert session.state == 'rly_invite_confirm'
+
+    def test_admin_invite_not_restricted(self):
+        invite  = RlyOfficialInvite.generate(created_by=self.admin)
+        session = self._session_for(invite, chat_id=333)
+
+        handle_rly_invite_onboard('fake-token', session, tg_user_id=777, chat_id=333, text='consignee2')
+
+        session.refresh_from_db()
+        assert session.state == 'rly_invite_confirm'

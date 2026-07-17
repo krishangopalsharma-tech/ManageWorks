@@ -5,7 +5,8 @@ from django.db.models import Max, Count
 from django.contrib.auth.models import User
 
 from works.models import Work, WorkItem
-from works.utils import contractor_nickname as _nickname
+from works.utils import contractor_nickname as _nickname, is_admin_user as _is_admin, is_assigned_consignee
+from users.views import _is_super_admin
 from .models import BillRecord, BillItem
 from .serializers import BillRecordSerializer, BillItemSerializer
 from .pdf_parser import parse_bill_pdf
@@ -79,15 +80,6 @@ def _is_authenticated(user):
     if not user.is_authenticated:
         return False
     return True
-
-
-def _is_admin(user):
-    if not user.is_authenticated:
-        return False
-    if user.is_staff:
-        return True
-    profile = getattr(user, 'profile', None)
-    return profile is not None and profile.role == 'admin'
 
 
 def _can_access_work(user, work):
@@ -294,11 +286,17 @@ class BillListCreateView(APIView):
 
 # ── Bill delete ───────────────────────────────────────────────────────────────
 
+def _can_delete_or_edit_bill(user, work):
+    """Super Admin can delete/edit any bill. Assigned consignee can delete/edit their own LOA's bill.
+    Plain Admin (view-only per spec) and unassigned consignees get no delete/edit rights."""
+    return _is_super_admin(user) or is_assigned_consignee(user, work)
+
+
 class BillDeleteView(APIView):
     """
     GET    /api/financial-progress/bills/<id>/  — returns bill + items
-    DELETE /api/financial-progress/bills/<id>/  — admin only
-    PATCH  /api/financial-progress/bills/<id>/  — admin only; accepts items[] to replace all items
+    DELETE /api/financial-progress/bills/<id>/  — super admin (any LOA) or assigned consignee (own LOA)
+    PATCH  /api/financial-progress/bills/<id>/  — same as DELETE; accepts items[] to replace all items
     """
 
     def get(self, request, pk):
@@ -313,22 +311,22 @@ class BillDeleteView(APIView):
         return Response(BillRecordSerializer(bill).data)
 
     def delete(self, request, pk):
-        if not _is_admin(request.user):
-            return Response({'error': 'Admin only.'}, status=status.HTTP_403_FORBIDDEN)
         try:
-            bill = BillRecord.objects.get(pk=pk)
+            bill = BillRecord.objects.select_related('work').get(pk=pk)
         except BillRecord.DoesNotExist:
             return Response({'error': 'Bill not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if not _can_delete_or_edit_bill(request.user, bill.work):
+            return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
         bill.delete()
         return Response({'message': 'Bill deleted.'})
 
     def patch(self, request, pk):
-        if not _is_admin(request.user):
-            return Response({'error': 'Admin only.'}, status=status.HTTP_403_FORBIDDEN)
         try:
-            bill = BillRecord.objects.get(pk=pk)
+            bill = BillRecord.objects.select_related('work').get(pk=pk)
         except BillRecord.DoesNotExist:
             return Response({'error': 'Bill not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if not _can_delete_or_edit_bill(request.user, bill.work):
+            return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
         if 'bill_number' in request.data:
             bill.bill_number = str(request.data['bill_number']).strip()
         if 'bill_date' in request.data:

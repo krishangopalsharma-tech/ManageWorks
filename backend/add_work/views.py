@@ -90,7 +90,7 @@ class UploadWorkView(APIView):
                     tmp.write(chunk)
                 tmp_path = tmp.name
             try:
-                result = parse_and_save_work_excel(tmp_path)
+                result = parse_and_save_work_excel(tmp_path, uploader=request.user)
                 os.remove(tmp_path)
                 data, http_status = _parse_response(result)
                 return Response(data, status=http_status)
@@ -106,7 +106,7 @@ class UploadWorkView(APIView):
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
                     tmp_path = tmp.name
                 _download_google_sheet(sheet_id, tmp_path)
-                result = parse_and_save_work_excel(tmp_path)
+                result = parse_and_save_work_excel(tmp_path, uploader=request.user)
                 os.remove(tmp_path)
                 data, http_status = _parse_response(result)
                 return Response(data, status=http_status)

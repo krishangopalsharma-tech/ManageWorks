@@ -8,6 +8,7 @@ from rest_framework import status
 
 from .models import UserProfile
 from works.models import Work
+from works.utils import is_admin_user as _is_admin
 from email_service.mailer import send_password_email
 
 
@@ -33,6 +34,7 @@ def _user_data(user):
         'mobile_number':   profile.mobile_number if profile else '',
         'role':            profile.role         if profile else ('admin' if user.is_staff else 'consignee'),
         'is_approved':     profile.is_approved  if profile else user.is_staff,
+        'is_assigned':     Work.objects.filter(hrms_id=user.username).exists(),
         'telegram_linked': tg_linked,
         'telegram_chat_id': tg_chat_id,
     }
@@ -154,7 +156,7 @@ class PendingUsersView(APIView):
 
 class ApproveUserView(APIView):
     def post(self, request, user_id):
-        if not _is_admin(request.user):
+        if not _is_super_admin(request.user):
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
         try:
             profile = UserProfile.objects.get(user_id=user_id)
@@ -167,7 +169,7 @@ class ApproveUserView(APIView):
 
 class RejectUserView(APIView):
     def delete(self, request, user_id):
-        if not _is_admin(request.user):
+        if not _is_super_admin(request.user):
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
         try:
             user = User.objects.get(id=user_id)
@@ -201,7 +203,7 @@ class AllUsersView(APIView):
 
 class UpdateRoleView(APIView):
     def patch(self, request, user_id):
-        if not _is_admin(request.user):
+        if not _is_super_admin(request.user):
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
         role = request.data.get('role', '').strip()
         if role not in ('consignee', 'admin'):
@@ -217,7 +219,7 @@ class UpdateRoleView(APIView):
 
 class RevokeUserView(APIView):
     def post(self, request, user_id):
-        if not _is_admin(request.user):
+        if not _is_super_admin(request.user):
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
         try:
             profile = UserProfile.objects.get(user_id=user_id)
@@ -226,15 +228,6 @@ class RevokeUserView(APIView):
         profile.is_approved = False
         profile.save()
         return Response({'message': 'Access revoked.'})
-
-
-def _is_admin(user):
-    if not user.is_authenticated:
-        return False
-    if user.is_staff:
-        return True
-    profile = getattr(user, 'profile', None)
-    return profile is not None and profile.role == 'admin'
 
 
 def _is_super_admin(user):
@@ -255,6 +248,8 @@ class UpdateUserView(APIView):
         if 'designation' in request.data:
             profile.designation = (request.data['designation'] or '').strip()
         if 'role' in request.data:
+            if not _is_super_admin(request.user):
+                return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
             role = (request.data['role'] or '').strip()
             if role not in ('consignee', 'admin'):
                 return Response({'error': 'Invalid role.'}, status=status.HTTP_400_BAD_REQUEST)

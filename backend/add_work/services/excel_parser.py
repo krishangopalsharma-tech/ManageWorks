@@ -1,5 +1,6 @@
 import pandas as pd
 from works.models import Work, WorkItem
+from works.utils import is_admin_user
 
 
 _HEADER_KEYWORDS = ('sch', 'serial', 's.no', 'item desc', 'description', 'qty', 'quantity', 'catagory', 'category')
@@ -187,7 +188,7 @@ def _parse_single_sheet(xf):
            contractor_name, contractor_address, completion_date, consignee, hrms_id, sheet_items
 
 
-def parse_and_save_work_excel(file_path):
+def parse_and_save_work_excel(file_path, uploader=None):
     xf = pd.ExcelFile(file_path)
 
     if len(xf.sheet_names) >= 2:
@@ -198,6 +199,15 @@ def parse_and_save_work_excel(file_path):
     (loa_number, tender_number, date, contract_agreement, name_of_work,
      contractor_name, contractor_address, completion_date, consignee, hrms_id,
      sheet_items) = result
+
+    # Consignee-level uploaders (assigned or unassigned) may only upload work where
+    # the sheet's own consignee User ID matches their own — prevents claiming/assigning
+    # work on behalf of someone else. Admin/Super Admin are exempt.
+    if uploader is not None and not is_admin_user(uploader):
+        if (hrms_id or '').strip().lower() != uploader.username.lower():
+            raise ValueError(
+                "Upload rejected: the consignee User ID in this sheet does not match your own User ID."
+            )
 
     # ── Upsert: create new work OR update existing ────────────────────────────
     # Match padded OR stripped form — works saved before this fix may lack leading zeros.

@@ -19,17 +19,11 @@ from reportlab.platypus import (
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT  # noqa: F401 — TA_CENTER used in table ALIGN
 
 from works.models import Work, WorkItem, WorkItemEntry
+from works.utils import is_admin_user as _is_admin
 from .models import GeneratedCertificate
 
 
 EXCLUDED_CATEGORIES = {WorkItem.CATEGORY_SUPPLY}
-
-
-def _is_admin(user):
-    if user.is_staff:
-        return True
-    profile = getattr(user, 'profile', None)
-    return profile is not None and profile.role == 'admin'
 
 
 def _all_works():

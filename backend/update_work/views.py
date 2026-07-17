@@ -9,6 +9,7 @@ from django.db.models import Q
 
 from works.models import Work, WorkItem, WorkItemEntry, WorkExtension
 from works.serializers import WorkItemEntrySerializer, WorkEditSerializer, WorkSerializer
+from works.utils import is_admin_user as _is_admin
 from work_details.views import _base_queryset
 from .pdf_parser import parse_receipt_pdf
 
@@ -38,16 +39,16 @@ def _is_work_consignee(user, work):
     return bool(work.hrms_id) and work.hrms_id == user.username
 
 
-def _check_can_modify_work(user):
-    """Only admin (is_staff or role='admin') and consignee may update or delete works."""
+def _check_can_modify_work(user, work):
+    """Admin (is_staff or role='admin') can modify any work's metadata.
+    Assigned consignee can modify only their own LOA's metadata. Everyone else is forbidden."""
     if not user.is_authenticated:
         raise PermissionDenied("Authentication required.")
-    if user.is_staff:
+    if _is_admin(user):
         return
-    profile = getattr(user, 'profile', None)
-    if profile and profile.role in ('admin', 'consignee'):
+    if _is_work_consignee(user, work):
         return
-    raise PermissionDenied("Only admins and consignees are authorised to update or delete works.")
+    raise PermissionDenied("You are not authorised to update this work.")
 
 
 def _sync_item_quantities(work_item):
@@ -67,13 +68,15 @@ def _sync_item_quantities(work_item):
     work_item.save(update_fields=['supplied_quantity', 'executed_quantity'])
 
 
-# ── Work list — deliberately unscoped ─────────────────────────────────────────
+# ── Work list — deliberately unscoped (for now) ───────────────────────────────
 # Any logged-in consignee (assigned or not) must be able to find and open any
 # LOA here to submit an execution entry — execution entries have no ownership
-# restriction (see WorkItemEntryView.post below), only supply entries do. This
-# mirrors _check_can_modify_work, which already allows any consignee to edit
-# any work. Do not add the admin/hrms_id filter used by work_details.views —
-# that scoping is specific to the read-only Work Details page.
+# restriction (see WorkItemEntryView.post below), only supply entries do.
+# _check_can_modify_work (metadata edit/delete) IS now scoped to admin/own-LOA-
+# only, separately from this search/retrieve pair. Once entry submission moves
+# to the new supply_details/execution_details apps, this view will be scoped
+# the same way (admin -> all LOA, assigned consignee -> own LOA, unassigned ->
+# no access) since it will no longer need to stay open for entry submission.
 
 class UpdateWorkSearchView(generics.ListAPIView):
     serializer_class = WorkSerializer
@@ -113,8 +116,8 @@ class WorkUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = WorkEditSerializer
 
     def partial_update(self, request, *args, **kwargs):
-        _check_can_modify_work(request.user)
         instance = self.get_object()
+        _check_can_modify_work(request.user, instance)
 
         serializer = WorkEditSerializer(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
@@ -251,15 +254,6 @@ class WorkItemEntryView(APIView):
 
 
 # ── Entry edit ────────────────────────────────────────────────────────────────
-
-def _is_admin(user):
-    if not user.is_authenticated:
-        return False
-    if user.is_staff:
-        return True
-    profile = getattr(user, 'profile', None)
-    return profile is not None and profile.role == 'admin'
-
 
 class WorkItemEntryUpdateView(APIView):
     """PATCH /api/update-work/entries/<entry_id>/  – only submitter or admin may edit."""

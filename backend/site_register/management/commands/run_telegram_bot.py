@@ -60,6 +60,7 @@ from site_register.models import (
 )
 from telegram_settings.models import TelegramBotConfig
 from works.models import WorkItem
+from works.utils import is_admin_user
 
 logger = logging.getLogger(__name__)
 
@@ -2000,6 +2001,15 @@ def handle_rly_invite_onboard(token: str, session: BotSession,
 
     if state == 'rly_invite_hrms':
         hrms_id = text.strip()
+
+        restrict_to = ctx.get('restrict_to_username')
+        if restrict_to and hrms_id.lower() != restrict_to.lower():
+            send(token, chat_id,
+                 "❌ This invite can only be used to link your own User ID. "
+                 "Ask an admin for an invite if you need to add someone else.")
+            reset_session(session)
+            return
+
         ctx['hrms_id'] = hrms_id
         try:
             sys_user = DjUser.objects.select_related('profile').get(username=hrms_id)
@@ -2221,9 +2231,13 @@ def try_link_otp(token: str, chat_id: int, tg_user_id: int, code: str, tg_from: 
             send(token, chat_id, "⚠️ Your Telegram is already registered as a Railway Official delegate.")
             return True
 
+        # Non-admin generators (assigned or unassigned consignees) can only invite
+        # themselves — the redeemer's User ID must match the generator's own.
+        restrict_to = None if is_admin_user(rly_invite.created_by) else rly_invite.created_by.username
+
         session = get_session(chat_id)
         session.state   = 'rly_invite_hrms'
-        session.context = {'pending_rly_invite_code': code}
+        session.context = {'pending_rly_invite_code': code, 'restrict_to_username': restrict_to}
         session.save(update_fields=['state', 'context', 'updated_at'])
 
         send(token, chat_id,

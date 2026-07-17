@@ -2,16 +2,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from works.models import Work
+from works.utils import is_admin_user as _is_admin
 from .models import WorkDeleteLog
-
-
-def _is_admin(user):
-    if not user.is_authenticated:
-        return False
-    if user.is_staff:
-        return True
-    profile = getattr(user, 'profile', None)
-    return profile is not None and profile.role == 'admin'
 
 
 class WorkDeleteView(APIView):
