@@ -25,7 +25,6 @@ class TestSiteRegister:
         UserProfile.objects.create(
             user=self.admin,
             designation='Admin Designation',
-            pf_number='PF-ADM001',
             is_approved=True,
             role='admin'
         )
@@ -34,7 +33,6 @@ class TestSiteRegister:
         UserProfile.objects.create(
             user=self.consignee1,
             designation='JE-1',
-            pf_number='PF-CON1',
             is_approved=True,
             role='consignee'
         )
@@ -43,7 +41,6 @@ class TestSiteRegister:
         UserProfile.objects.create(
             user=self.consignee2,
             designation='JE-2',
-            pf_number='PF-CON2',
             is_approved=True,
             role='consignee'
         )

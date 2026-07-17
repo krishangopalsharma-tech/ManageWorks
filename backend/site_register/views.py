@@ -618,7 +618,10 @@ class RlyLinkedUsersView(APIView):
         if not request.user.is_authenticated:
             return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
         try:
-            lnk = RlyTelegramLink.objects.get(pk=link_id, added_by=request.user)
+            if _is_admin(request.user):
+                lnk = RlyTelegramLink.objects.get(pk=link_id)
+            else:
+                lnk = RlyTelegramLink.objects.get(pk=link_id, added_by=request.user)
         except RlyTelegramLink.DoesNotExist:
             return Response({'error': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
         fields = []
@@ -634,7 +637,10 @@ class RlyLinkedUsersView(APIView):
         if not request.user.is_authenticated:
             return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
         try:
-            lnk = RlyTelegramLink.objects.get(pk=link_id, added_by=request.user)
+            if _is_admin(request.user):
+                lnk = RlyTelegramLink.objects.get(pk=link_id)
+            else:
+                lnk = RlyTelegramLink.objects.get(pk=link_id, added_by=request.user)
         except RlyTelegramLink.DoesNotExist:
             return Response({'error': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
         # Delete ghost user if it was created for this link (no real account)

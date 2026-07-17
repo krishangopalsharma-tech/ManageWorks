@@ -19,6 +19,11 @@ const fmtDateTime = (val) => {
   const d = new Date(val)
   return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
+const fmtDate = (val) => {
+  if (!val) return '—'
+  const d = new Date(val)
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+}
 
 // ── Works dropdown ─────────────────────────────────────────────────────────────
 const loadWorks = async () => {
@@ -646,60 +651,39 @@ onBeforeUnmount(() => { document.removeEventListener('click', closeDropdown); cl
               <td colspan="10" class="px-6 pb-5 pt-0 border-b border-accent/10">
                 <div class="rounded-xl border border-gray-100 bg-white overflow-hidden mt-3 shadow-sm">
 
-                  <!-- Panel header -->
-                  <div class="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-3 flex-wrap">
-                    <span :class="row.location_type === 'section' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-green-50 text-green-600 border-green-200'"
-                      class="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border">
-                      {{ row.location_type }}
-                    </span>
-                    <span class="text-sm font-bold text-gray-800 tracking-wide">{{ row.location }}</span>
-                    <span class="rounded-md px-2 py-0.5 text-[10px] font-bold bg-accent-b-soft text-accent-b">{{ row.schedule }}</span>
-                    <span class="text-[10px] font-semibold text-gray-400">S.No {{ row.serial_number }}</span>
-                    <span class="text-[11px] font-semibold text-accent bg-accent-soft px-2 py-0.5 rounded-full">{{ row.loa_number }}</span>
-                    <p class="text-xs font-semibold text-gray-700 line-clamp-1 ml-1 flex-1">{{ row.item_desc }}</p>
-                    <div class="flex items-center gap-3 flex-shrink-0">
-                      <span class="text-[10px] text-gray-500">Executed here: <strong class="text-accent-b">{{ row.executed_here }}</strong> <span class="text-gray-400">{{ row.unit }}</span></span>
-                      <span class="text-gray-200">·</span>
-                      <span class="text-[10px] text-gray-500">Total scope: <strong class="text-gray-700">{{ row.scope }}</strong> <span class="text-gray-400">{{ row.unit }}</span></span>
-                    </div>
-                    <span class="text-[10px] text-gray-400 font-medium flex-shrink-0">
-                      {{ row.entries.length }} visible entr{{ row.entries.length === 1 ? 'y' : 'ies' }}
-                      <span v-if="row.visible_entries_count < row.entries_count" class="text-gray-300"> of {{ row.entries_count }}</span>
-                    </span>
-                  </div>
-
                   <!-- No entries -->
                   <div v-if="!row.entries.length" class="px-4 py-8 text-center text-xs text-gray-400 font-medium">
                     No entries to display.
                   </div>
 
-                  <!-- Entries grid -->
-                  <div v-else class="p-3 flex flex-wrap gap-2">
-                    <div v-for="(entry, idx) in [...row.entries].reverse()" :key="entry.id"
-                      class="border border-gray-100 rounded-xl px-3 py-2.5 min-w-[200px] flex-1 max-w-[280px] hover:border-accent/30 transition-colors">
-                      <div class="flex items-center gap-2 mb-1.5">
-                        <span class="w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center flex-shrink-0 bg-accent-b-soft text-accent-b">
-                          {{ row.entries.length - idx }}
-                        </span>
-                        <span class="text-xs font-bold text-gray-800">
-                          {{ entry.quantity }} <span class="text-gray-400 font-normal text-[10px]">{{ row.unit }}</span>
-                        </span>
-                        <span class="ml-auto text-[10px] text-gray-400 font-medium flex-shrink-0">
-                          {{ fmtDateTime(entry.submitted_at) }}
-                        </span>
-                      </div>
-                      <div class="flex flex-col gap-0.5 pl-7">
-                        <span class="flex items-center gap-1 text-[10px] text-gray-500 font-medium">
-                          <div class="i-carbon-user text-gray-400" style="font-size:10px;"></div>
-                          {{ entry.submitted_by_name || '—' }}
-                          <span v-if="entry.submitted_by_designation" class="text-gray-400"> · {{ entry.submitted_by_designation }}</span>
-                        </span>
-                        <span v-if="entry.remarks" class="flex items-center gap-1 text-[10px] text-gray-500 font-medium line-clamp-1">
-                          <div class="i-carbon-chat text-gray-300" style="font-size:10px;"></div>
-                          {{ entry.remarks }}
-                        </span>
-                      </div>
-                    </div>
+                  <!-- Entries table -->
+                  <div v-else class="overflow-x-auto">
+                    <table class="w-full text-xs">
+                      <thead class="bg-gray-50 text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+                        <tr>
+                          <th class="px-4 py-2 text-left w-10">#</th>
+                          <th class="px-4 py-2 text-left w-24">Date</th>
+                          <th class="px-4 py-2 text-left">Entry By</th>
+                          <th class="px-4 py-2 text-left">Remarks</th>
+                          <th class="px-4 py-2 text-right w-28">Quantity</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-gray-50">
+                        <tr v-for="(entry, idx) in [...row.entries].reverse()" :key="entry.id"
+                          class="hover:bg-gray-50/50 transition-colors">
+                          <td class="px-4 py-2.5 text-gray-400 font-semibold">{{ row.entries.length - idx }}</td>
+                          <td class="px-4 py-2.5 text-gray-500 font-medium whitespace-nowrap">{{ fmtDate(entry.submitted_at) }}</td>
+                          <td class="px-4 py-2.5">
+                            <span class="block font-semibold text-gray-800">{{ entry.submitted_by_name || '—' }}</span>
+                            <span v-if="entry.submitted_by_designation" class="block text-[10px] text-gray-400">{{ entry.submitted_by_designation }}</span>
+                          </td>
+                          <td class="px-4 py-2.5 text-gray-500 font-medium">{{ entry.remarks || '—' }}</td>
+                          <td class="px-4 py-2.5 text-right font-bold text-gray-800">
+                            {{ entry.quantity }} <span class="text-gray-400 font-normal">{{ row.unit }}</span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               </td>

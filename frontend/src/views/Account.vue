@@ -1,10 +1,23 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
+import { useAuth } from '../composables/useAuth'
+
+const { updateProfile } = useAuth()
 
 const me    = ref(null)
 const works = ref([])
 const loading = ref(true)
+
+const editing  = ref(false)
+const saving   = ref(false)
+const editForm = ref({ email: '', designation: '', mobile_number: '' })
+const toast    = ref({ show: false, msg: '', type: 'success' })
+
+function showToast(msg, type = 'success') {
+  toast.value = { show: true, msg, type }
+  setTimeout(() => { toast.value.show = false }, 3000)
+}
 
 async function load() {
   loading.value = true
@@ -17,6 +30,33 @@ async function load() {
     works.value = worksRes.data
   } catch { /* ignore */ } finally {
     loading.value = false
+  }
+}
+
+function startEdit() {
+  editForm.value = {
+    email:         me.value.email || '',
+    designation:   me.value.designation || '',
+    mobile_number: me.value.mobile_number || '',
+  }
+  editing.value = true
+}
+
+function cancelEdit() {
+  editing.value = false
+}
+
+async function saveProfile() {
+  saving.value = true
+  try {
+    const data = await updateProfile(editForm.value)
+    me.value = { ...me.value, ...data }
+    editing.value = false
+    showToast('Profile updated.')
+  } catch {
+    showToast('Update failed.', 'error')
+  } finally {
+    saving.value = false
   }
 }
 
@@ -44,18 +84,23 @@ onMounted(load)
             <div class="w-12 h-12 rounded-full bg-[#1D5F5E]/10 flex items-center justify-center shrink-0">
               <span class="text-[#1D5F5E] text-xl font-bold">{{ (me.name || me.hrms_id || '?')[0].toUpperCase() }}</span>
             </div>
-            <div class="min-w-0">
+            <div class="min-w-0 flex-1">
               <p class="text-base font-bold text-gray-800 dark:text-white truncate">{{ me.name || '—' }}</p>
               <span class="text-xs font-semibold px-2 py-0.5 rounded-full capitalize"
                 :class="me.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'">
                 {{ me.role }}
               </span>
             </div>
+            <button v-if="!editing" @click="startEdit"
+              class="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-[#3a3a3c] text-gray-500 text-xs font-semibold hover:text-[#1D5F5E] hover:border-[#1D5F5E] transition-colors">
+              <div class="i-carbon-edit text-xs"></div> Edit
+            </button>
           </div>
 
-          <div class="divide-y divide-gray-50 dark:divide-[#2c2c2e]">
+          <!-- View mode -->
+          <div v-if="!editing" class="divide-y divide-gray-50 dark:divide-[#2c2c2e]">
             <div class="px-5 py-3 flex items-center gap-4">
-              <span class="text-xs text-gray-400 w-28 shrink-0">HRMS ID</span>
+              <span class="text-xs text-gray-400 w-28 shrink-0">User ID</span>
               <span class="text-sm font-mono font-semibold text-gray-800 dark:text-white">{{ me.hrms_id || '—' }}</span>
             </div>
             <div class="px-5 py-3 flex items-center gap-4">
@@ -63,8 +108,8 @@ onMounted(load)
               <span class="text-sm text-gray-700 dark:text-gray-200">{{ me.designation || '—' }}</span>
             </div>
             <div class="px-5 py-3 flex items-center gap-4">
-              <span class="text-xs text-gray-400 w-28 shrink-0">PF Number</span>
-              <span class="text-sm font-mono text-gray-700 dark:text-gray-200">{{ me.pf_number || '—' }}</span>
+              <span class="text-xs text-gray-400 w-28 shrink-0">Mobile Number</span>
+              <span class="text-sm font-mono text-gray-700 dark:text-gray-200">{{ me.mobile_number || '—' }}</span>
             </div>
             <div class="px-5 py-3 flex items-center gap-4">
               <span class="text-xs text-gray-400 w-28 shrink-0">Email</span>
@@ -88,7 +133,54 @@ onMounted(load)
               </div>
             </div>
           </div>
+
+          <!-- Edit mode -->
+          <div v-else class="divide-y divide-gray-50 dark:divide-[#2c2c2e]">
+            <div class="px-5 py-3 flex items-center gap-4">
+              <span class="text-xs text-gray-400 w-28 shrink-0">User ID</span>
+              <span class="text-sm font-mono font-semibold text-gray-400">{{ me.hrms_id || '—' }}</span>
+            </div>
+            <div class="px-5 py-3 flex items-center gap-4">
+              <span class="text-xs text-gray-400 w-28 shrink-0">Designation</span>
+              <input v-model="editForm.designation"
+                class="flex-1 text-sm px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-[#3a3a3c] bg-white dark:bg-[#2c2c2e] outline-none focus:border-[#1D5F5E]"
+                placeholder="Designation" />
+            </div>
+            <div class="px-5 py-3 flex items-center gap-4">
+              <span class="text-xs text-gray-400 w-28 shrink-0">Mobile Number</span>
+              <input v-model="editForm.mobile_number"
+                class="flex-1 text-sm px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-[#3a3a3c] bg-white dark:bg-[#2c2c2e] outline-none focus:border-[#1D5F5E]"
+                placeholder="Mobile Number" />
+            </div>
+            <div class="px-5 py-3 flex items-center gap-4">
+              <span class="text-xs text-gray-400 w-28 shrink-0">Email</span>
+              <input v-model="editForm.email" type="email"
+                class="flex-1 text-sm px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-[#3a3a3c] bg-white dark:bg-[#2c2c2e] outline-none focus:border-[#1D5F5E]"
+                placeholder="Email" />
+            </div>
+            <div class="px-5 py-3 flex items-center justify-end gap-2">
+              <button @click="cancelEdit"
+                class="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-[#3a3a3c] text-gray-500 text-xs font-semibold hover:bg-gray-100 dark:hover:bg-[#3a3a3c] transition-colors">
+                Cancel
+              </button>
+              <button @click="saveProfile" :disabled="saving"
+                class="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#1D5F5E] text-white text-xs font-semibold hover:bg-[#174E4D] disabled:opacity-50 transition-colors">
+                <div v-if="saving" class="i-carbon-circle-dash animate-spin text-xs"></div>
+                <div v-else class="i-carbon-checkmark text-xs"></div>
+                Save
+              </button>
+            </div>
+          </div>
         </div>
+
+        <!-- Toast -->
+        <Transition name="fade">
+          <div v-if="toast.show"
+            class="fixed bottom-6 right-6 px-4 py-2.5 rounded-xl shadow-lg text-sm font-semibold z-50"
+            :class="toast.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'">
+            {{ toast.msg }}
+          </div>
+        </Transition>
 
         <!-- Assigned LOAs -->
         <div class="bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-100 dark:border-[#3a3a3c] shadow-sm overflow-hidden">

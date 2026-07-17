@@ -37,8 +37,8 @@ const routes = [
   { path: '/financial-progress',       name: 'Financial Progress', component: FinancialProgress },
   { path: '/site-register',               name: 'Site Register',            component: SiteRegister, meta: { siteRegisterAccess: true } },
   { path: '/settings/user-management',    name: 'User Management',          component: UserManagement,          meta: { adminOnly: true } },
-  { path: '/settings/smtp',               name: 'SMTP Settings',            component: SmtpSettings,            meta: { adminOnly: true } },
-  { path: '/settings/telegram',           name: 'Telegram Settings',        component: TelegramSettings,        meta: { adminOnly: true } },
+  { path: '/settings/smtp',               name: 'SMTP Settings',            component: SmtpSettings,            meta: { superAdminOnly: true } },
+  { path: '/settings/telegram',           name: 'Telegram Settings',        component: TelegramSettings,        meta: { superAdminOnly: true } },
   { path: '/settings/account',                name: 'My Account',                 component: Account },
   { path: '/settings/telegram-link',          name: 'Link Rly Official Telegram', component: TelegramLink },
   { path: '/settings/site-register-parties', name: 'LOA Parties',                component: SiteRegisterParties, meta: { siteRegisterAccess: true } },
@@ -78,6 +78,10 @@ router.beforeEach(async (to) => {
   if (to.meta.adminOnly) {
     const isAdmin = state.user?.role === 'admin' || state.user?.is_staff
     if (!isAdmin) return '/'
+  }
+
+  if (to.meta.superAdminOnly) {
+    if (state.user?.hrms_id !== 'admin') return '/'
   }
 
   if (to.meta.siteRegisterAccess) {

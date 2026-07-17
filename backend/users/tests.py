@@ -16,7 +16,6 @@ class TestUsersAuthAndRBAC:
         UserProfile.objects.create(
             user=self.admin,
             designation='Admin Officer',
-            pf_number='PF-ADM001',
             is_approved=True,
             role='admin',
             plain_password='password123'
@@ -27,7 +26,6 @@ class TestUsersAuthAndRBAC:
         self.profile = UserProfile.objects.create(
             user=self.consignee,
             designation='Consignee Grade 1',
-            pf_number='PF-CON001',
             is_approved=True,
             role='consignee',
             plain_password='password123'
@@ -38,7 +36,6 @@ class TestUsersAuthAndRBAC:
         self.pending_profile = UserProfile.objects.create(
             user=self.pending_user,
             designation='Assistant Consignee',
-            pf_number='PF-PEND01',
             is_approved=False,
             role='consignee',
             plain_password='password123'
@@ -84,7 +81,6 @@ class TestUsersAuthAndRBAC:
             'name': 'New User',
             'designation': 'Junior Engineer',
             'hrms_id': 'newuser123',
-            'pf_number': 'PF-NEW999',
             'password': 'password123',
             'email': 'new@example.com'
         }, content_type='application/json')
@@ -112,7 +108,6 @@ class TestUsersAuthAndRBAC:
             'name': 'Duplicate',
             'designation': 'Eng',
             'hrms_id': 'consignee1',
-            'pf_number': 'PF-DUP',
             'password': 'password',
             'email': 'dup@example.com'
         }, content_type='application/json')
@@ -186,7 +181,7 @@ class TestUsersAuthAndRBAC:
         }, content_type='application/json')
         # Returns 200 with generic message for privacy
         assert response.status_code == status.HTTP_200_OK
-        assert 'If that HRMS ID exists' in response.json()['message']
+        assert 'If that User ID exists' in response.json()['message']
         mock_send_email.assert_not_called()
 
     @patch('users.views.send_password_email')
@@ -195,7 +190,7 @@ class TestUsersAuthAndRBAC:
             'hrms_id': 'consignee1'
         }, content_type='application/json')
         assert response.status_code == status.HTTP_200_OK
-        assert 'If that HRMS ID exists' in response.json()['message']
+        assert 'If that User ID exists' in response.json()['message']
         mock_send_email.assert_called_once_with(
             to_email='c1@example.com',
             user_name='consignee1',

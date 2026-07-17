@@ -7,7 +7,7 @@ from django.core.mail import EmailMessage
 from django.core.mail.backends.smtp import EmailBackend
 
 from .models import SmtpConfig
-from users.views import _is_admin
+from users.views import _is_super_admin
 
 
 def _get_config():
@@ -18,7 +18,7 @@ def _get_config():
 @method_decorator(csrf_exempt, name='dispatch')
 class SmtpTestView(APIView):
     def post(self, request):
-        if not _is_admin(request.user):
+        if not _is_super_admin(request.user):
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
         to_email = (request.data.get('to_email') or '').strip()
         if not to_email:
@@ -49,7 +49,7 @@ class SmtpTestView(APIView):
 @method_decorator(csrf_exempt, name='dispatch')
 class SmtpConfigView(APIView):
     def get(self, request):
-        if not _is_admin(request.user):
+        if not _is_super_admin(request.user):
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
         cfg = _get_config()
         return Response({
@@ -63,7 +63,7 @@ class SmtpConfigView(APIView):
         })
 
     def patch(self, request):
-        if not _is_admin(request.user):
+        if not _is_super_admin(request.user):
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
         cfg = _get_config()
         data = request.data

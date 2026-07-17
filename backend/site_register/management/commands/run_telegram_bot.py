@@ -459,7 +459,7 @@ def _get_admin_telegram_users(exclude_chat_id: int | None = None) -> list[dict]:
 
 
 def _search_rly_officials(query: str) -> list[dict]:
-    """Search railway officials by name, HRMS ID, or designation."""
+    """Search railway officials by name, User ID, or designation."""
     q = query.strip().lower()
     results = []
     seen: set[int] = set()
@@ -1955,23 +1955,23 @@ def handle_ss_onboard(token: str, session: BotSession,
 
 
 def handle_rly_onboard(token: str, session: BotSession, user, text: str):
-    """HRMS ID confirmation for railway officials after OTP self-link (legacy path)."""
+    """User ID confirmation for railway officials after OTP self-link (legacy path)."""
     if not text:
         return
     hrms_id = text.strip()
     if hrms_id.lower() != user.username.lower():
         send(token, session.telegram_chat_id,
-             f"⚠️ HRMS ID <code>{hrms_id}</code> doesn't match your account.\n"
-             "Please try again or type your correct HRMS ID.")
+             f"⚠️ User ID <code>{hrms_id}</code> doesn't match your account.\n"
+             "Please try again or type your correct User ID.")
         return
 
     profile     = getattr(user, 'profile', None)
     designation = profile.designation if profile else '—'
     role_label  = profile.role.replace('_', ' ').title() if profile else 'Official'
     send(token, session.telegram_chat_id,
-         f"✅ <b>HRMS confirmed!</b>\n\n"
+         f"✅ <b>User ID confirmed!</b>\n\n"
          f"<b>Name:</b> {_display_name(user)}\n"
-         f"<b>HRMS ID:</b> {user.username}\n"
+         f"<b>User ID:</b> {user.username}\n"
          f"<b>Designation:</b> {designation}\n"
          f"<b>Role:</b> {role_label}\n\n"
          "Your account is fully set up. You will receive Site Register notifications here.")
@@ -1984,7 +1984,7 @@ def handle_rly_invite_onboard(token: str, session: BotSession,
     Multi-step onboarding for a delegate railway official via RlyOfficialInvite.
 
     States:
-      rly_invite_hrms    → user sends HRMS ID
+      rly_invite_hrms    → user sends User ID
       rly_invite_confirm → HRMS found in system; user confirms Y/N
       rly_invite_name    → HRMS not found; ask name
       rly_invite_desig   → ask designation
@@ -2012,7 +2012,7 @@ def handle_rly_invite_onboard(token: str, session: BotSession,
             session.state = 'rly_invite_confirm'
             session.save(update_fields=['state', 'context', 'updated_at'])
             send(token, chat_id,
-                 f"✅ <b>HRMS found in system:</b>\n\n"
+                 f"✅ <b>User ID found in system:</b>\n\n"
                  f"<b>Name:</b> {name}\n"
                  f"<b>Designation:</b> {desig}\n\n"
                  "Is this you? Reply <b>YES</b> to confirm or <b>NO</b> to enter manually.",
@@ -2022,7 +2022,7 @@ def handle_rly_invite_onboard(token: str, session: BotSession,
             session.state = 'rly_invite_name'
             session.save(update_fields=['state', 'context', 'updated_at'])
             send(token, chat_id,
-                 f"ℹ️ HRMS ID <code>{hrms_id}</code> not in system. I'll record your details.\n\n"
+                 f"ℹ️ User ID <code>{hrms_id}</code> not in system. I'll record your details.\n\n"
                  "What is your <b>full name</b>?")
 
     elif state == 'rly_invite_confirm':
@@ -2131,7 +2131,7 @@ def _finalize_rly_invite(token: str, session: BotSession,
         send(token, chat_id,
              f"✅ <b>Registration complete!</b>\n\n"
              f"<b>Name:</b> {display}\n"
-             f"<b>HRMS ID:</b> {hrms_id}\n"
+             f"<b>User ID:</b> {hrms_id}\n"
              f"<b>Designation:</b> {desig or '—'}\n\n"
              "You are now linked as a Railway Official delegate. "
              "You can create and view Site Register entries for all LOAs.")
@@ -2174,7 +2174,7 @@ def try_link_otp(token: str, chat_id: int, tg_user_id: int, code: str, tg_from: 
         send(token, chat_id,
              f"✅ <b>Account linked!</b>\n\n"
              f"Connected as <b>{_display_name(linked_user)}</b>.\n"
-             f"<b>HRMS ID:</b> {hrms_label}\n"
+             f"<b>User ID:</b> {hrms_label}\n"
              f"<b>Designation:</b> {designation}\n\n"
              "You will receive Site Register notifications here.")
         return True
@@ -2228,7 +2228,7 @@ def try_link_otp(token: str, chat_id: int, tg_user_id: int, code: str, tg_from: 
 
         send(token, chat_id,
              "✅ <b>Valid Railway Official invite code!</b>\n\n"
-             "Please enter your <b>HRMS ID</b> to complete registration.")
+             "Please enter your <b>User ID</b> to complete registration.")
         logger.info("RlyOfficialInvite %s accepted by tg=%s", code, tg_user_id)
         return True
 
@@ -2255,7 +2255,7 @@ def show_rly_reassign_search(token: str, session: BotSession, thread: SiteRegist
          f"🔄 <b>Reassign {sr_num}</b>\n"
          f"<b>Current consignee:</b> {current}\n\n"
          "Search for new consignee:\n"
-         "Type their <b>name</b>, <b>HRMS ID</b>, or <b>designation</b>.",
+         "Type their <b>name</b>, <b>User ID</b>, or <b>designation</b>.",
          remove_kb=True)
 
 
@@ -2264,7 +2264,7 @@ def handle_rly_reassign_search(token: str, session: BotSession, text: str):
     if not results:
         sendt(token, session,
              "⚠️ No matching officials found.\n"
-             "Try name, HRMS ID, or designation (e.g. DSTE, SSE/Telecom).")
+             "Try name, User ID, or designation (e.g. DSTE, SSE/Telecom).")
         return
     if len(results) == 1:
         _show_reassign_confirm(token, session, results[0])

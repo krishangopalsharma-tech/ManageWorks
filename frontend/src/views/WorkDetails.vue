@@ -168,6 +168,16 @@ const progressPct = (item) => {
   return Math.min(Math.round((done / req) * 100), 999)
 }
 
+// Same category-first, schedule-fallback logic as progressPct — keeps the
+// SUPPLIED/EXECUTED column in sync with the progress bar it sits next to.
+const suppliedOrExecuted = (item) => {
+  const cat = item.category || ''
+  if (cat === 'supply_installation' || cat === 'execution') return item.executed_quantity || 0
+  if (cat === 'supply') return item.supplied_quantity || 0
+  const sch = String(item.schedule || '').toUpperCase().trim()
+  return sch.startsWith('B') ? (item.executed_quantity || 0) : (item.supplied_quantity || 0)
+}
+
 // ── Sorting ───────────────────────────────────────────────────────────────
 const toggleSort = (key) => {
   if (sortKey.value === key) sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
@@ -182,7 +192,7 @@ const sortedItems = computed(() => {
   return [...filteredItems.value].sort((a, b) => {
     let av, bv
     if      (sortKey.value === 'qty')       { av = a.qty || 0;               bv = b.qty || 0 }
-    else if (sortKey.value === 'submitted') { av = a.supplied_quantity || 0; bv = b.supplied_quantity || 0 }
+    else if (sortKey.value === 'submitted') { av = suppliedOrExecuted(a);    bv = suppliedOrExecuted(b) }
     else if (sortKey.value === 'progress')  { av = progressPct(a);           bv = progressPct(b) }
     else if (sortKey.value === 'entries')   { av = (a.entries||[]).length;   bv = (b.entries||[]).length }
     return sortDir.value === 'asc' ? av - bv : bv - av
@@ -558,36 +568,12 @@ const initCharts = async () => {
   await initSrCharts()
 }
 
-const SR_CAT_LABELS = {
-  order: 'Rly Order', progress: 'Progress', hindrance: 'Hindrance',
-  inspection_request: 'Inspection', document_submission: 'Document', general_remark: 'Remark',
-}
-
 const initSrCharts = async () => {
   if (activeTab.value !== 'analytics') return
   await nextTick()
   const sr = srStats.value || { by_category: {}, by_month: {} }
 
-  // 7. SR entries by category — donut
-  const catEntries = Object.entries(sr.by_category).filter(([,v]) => v > 0)
-  initOneChart('chart-sr-category', {
-    title: catEntries.length === 0
-      ? { text: 'No site register entries yet', left: 'center', top: 'middle', textStyle: { color: '#9ca3af', fontSize: 12, fontWeight: 'normal' } }
-      : undefined,
-    tooltip: { trigger: 'item', formatter: p => `${p.name}: ${p.value} (${p.percent}%)` },
-    legend: catEntries.length > 0 ? { bottom: 4, textStyle: { fontSize: 10 }, itemWidth: 10, itemHeight: 10 } : { show: false },
-    series: catEntries.length > 0 ? [{
-      type: 'pie', radius: ['48%', '70%'], center: ['50%', '46%'],
-      label: { show: false },
-      emphasis: { label: { show: true, fontSize: 11, fontWeight: 700 } },
-      data: catEntries.map(([k, v], idx) => ({
-        name: SR_CAT_LABELS[k] || k, value: v,
-        itemStyle: { color: PALETTE[idx % PALETTE.length] },
-      })),
-    }] : [],
-  })
-
-  // 8. SR entries by month — bar
+  // SR entries by month — bar
   const srMonths = Object.keys(sr.by_month).sort()
   const srCounts = srMonths.map(m => sr.by_month[m])
   initOneChart('chart-sr-timeline', {
@@ -675,7 +661,7 @@ const generateWorkPDF = async () => {
     // Metadata row
     const metaFields = [
       ['Consignee', w.consignee_display || w.consignee || '—'],
-      ['HRMS ID', w.hrms_id || '—'],
+      ['User ID', w.hrms_id || '—'],
       ['Completion', fmtDate(w.date_of_completion)],
       ['Agreement', w.contract_agreement || '—'],
       ['Tender', w.tender_number || '—'],
@@ -751,7 +737,6 @@ const generateWorkPDF = async () => {
       { id: 'chart-waterfall',      title: 'Financial Progress — Waterfall' },
       { id: 'chart-status',         title: 'Item Status' },
       { id: 'chart-top10',          title: 'Top 10 Items by Contract Value' },
-      { id: 'chart-sr-category',    title: 'Site Register — Entry Types' },
       { id: 'chart-sr-timeline',    title: 'Site Register — Entries by Month' },
     ]
 
@@ -808,23 +793,16 @@ const generateWorkPDF = async () => {
     doc.addPage()
     addPageHeader('Item Progress')
 
-    const progressItems = (w.items || []).filter(item => {
-      const sch = String(item.schedule || '').toUpperCase().trim()
-      const isB = sch.startsWith('B')
-      const done = isB ? (item.executed_quantity || 0) : (item.supplied_quantity || 0)
-      return done > 0
-    })
+    const progressItems = (w.items || []).filter(item => suppliedOrExecuted(item) > 0)
 
     autoTable(doc, {
       startY: 16,
       margin: { left: mg, right: mg },
       styles: tblFont,
-      head: [['Sch', 'S.No', 'Item Description', 'Scope', 'Supplied / Exec', 'Progress', 'Contract Value', 'Earned']],
+      head: [['Sch', 'S.No', 'Item Description', 'Scope', 'Supplied / Executed', 'Progress', 'Contract Value', 'Earned']],
       body: progressItems.map(item => {
-        const sch = String(item.schedule || '').toUpperCase().trim()
-        const isB = sch.startsWith('B')
         const qty = item.qty || 1
-        const done = isB ? (item.executed_quantity || 0) : (item.supplied_quantity || 0)
+        const done = suppliedOrExecuted(item)
         const pct = Math.min(done / qty * 100, 999)
         const contract = item.total_amount || 0
         const earned = contract * Math.min(done / qty, 1)
@@ -1174,25 +1152,15 @@ const generateWorkPDF = async () => {
             </div>
           </div>
 
-          <!-- Row 3: Top 10 (wide) + SR entry types -->
-          <div class="grid grid-cols-12 gap-3">
-            <div class="col-span-12 lg:col-span-8 bg-white border border-gray-200 rounded-xl p-4">
-              <div class="flex justify-between items-baseline mb-0.5">
-                <h3 class="text-sm font-bold text-gray-900">Top 10 Items by Contract Value</h3>
-                <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest">₹ Earned vs Pending</span>
-              </div>
-              <p class="text-[11px] text-gray-400 mb-2">High-value line-items driving overall progress.</p>
-              <div id="chart-top10" style="height:310px">
-                <div v-if="!analytics?.top10?.length" class="flex items-center justify-center h-full text-gray-300 text-xs">No financial data available</div>
-              </div>
+          <!-- Row 3: Top 10 (full width) -->
+          <div class="bg-white border border-gray-200 rounded-xl p-4">
+            <div class="flex justify-between items-baseline mb-0.5">
+              <h3 class="text-sm font-bold text-gray-900">Top 10 Items by Contract Value</h3>
+              <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest">₹ Earned vs Pending</span>
             </div>
-            <div class="col-span-12 lg:col-span-4 bg-white border border-gray-200 rounded-xl p-4">
-              <div class="flex justify-between items-baseline mb-0.5">
-                <h3 class="text-sm font-bold text-gray-900">Site Register — Entry Types</h3>
-                <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest">By Category</span>
-              </div>
-              <p class="text-[11px] text-gray-400 mb-2">Distribution of site register entries across order types.</p>
-              <div id="chart-sr-category" style="height:310px"></div>
+            <p class="text-[11px] text-gray-400 mb-2">High-value line-items driving overall progress.</p>
+            <div id="chart-top10" style="height:310px">
+              <div v-if="!analytics?.top10?.length" class="flex items-center justify-center h-full text-gray-300 text-xs">No financial data available</div>
             </div>
           </div>
 
@@ -1288,7 +1256,7 @@ const generateWorkPDF = async () => {
                     <div class="flex items-center justify-end gap-1">Scope <div :class="sortIcon('qty')" class="text-[9px]" :style="{ opacity: sortKey === 'qty' ? 1 : 0.35 }"></div></div>
                   </th>
                   <th @click="toggleSort('submitted')" class="px-4 py-3 text-right w-28 cursor-pointer select-none hover:text-gray-600 transition-colors">
-                    <div class="flex items-center justify-end gap-1">Submitted <div :class="sortIcon('submitted')" class="text-[9px]" :style="{ opacity: sortKey === 'submitted' ? 1 : 0.35 }"></div></div>
+                    <div class="flex items-center justify-end gap-1">Supplied / Executed <div :class="sortIcon('submitted')" class="text-[9px]" :style="{ opacity: sortKey === 'submitted' ? 1 : 0.35 }"></div></div>
                   </th>
                   <th @click="toggleSort('progress')" class="px-4 py-3 w-40 cursor-pointer select-none hover:text-gray-600 transition-colors">
                     <div class="flex items-center gap-1">Progress <div :class="sortIcon('progress')" class="text-[9px]" :style="{ opacity: sortKey === 'progress' ? 1 : 0.35 }"></div></div>
@@ -1327,10 +1295,10 @@ const generateWorkPDF = async () => {
                       {{ item.qty }} <span class="text-gray-400 font-normal text-[10px]">{{ item.unit }}</span>
                     </td>
                     <td class="px-4 py-3 text-right text-xs font-semibold"
-                      :class="(item.supplied_quantity || 0) > (item.qty || 0) ? 'text-orange-500' : 'text-gray-800'">
-                      {{ String(item.schedule||'').toUpperCase().startsWith('B') ? (item.executed_quantity || 0) : (item.supplied_quantity || 0) }}
+                      :class="suppliedOrExecuted(item) > (item.qty || 0) ? 'text-orange-500' : 'text-gray-800'">
+                      {{ suppliedOrExecuted(item) }}
                       <span class="text-gray-400 font-normal text-[10px]">{{ item.unit }}</span>
-                      <span v-if="(item.supplied_quantity || 0) > (item.qty || 0)" class="ml-1 text-[9px] text-orange-400 font-bold">OVER</span>
+                      <span v-if="suppliedOrExecuted(item) > (item.qty || 0)" class="ml-1 text-[9px] text-orange-400 font-bold">OVER</span>
                     </td>
                     <td class="px-4 py-3">
                       <!-- S+I: two stacked bars -->
@@ -1447,8 +1415,8 @@ const generateWorkPDF = async () => {
                                 <tr>
                                   <td class="px-4 py-2.5 text-[10px] font-bold text-gray-400 uppercase tracking-wide" colspan="2">Total</td>
                                   <td class="px-4 py-2.5 text-right font-bold text-gray-800">
-                                    {{ (item.supplied_quantity || 0) }} <span class="text-gray-400 font-normal">{{ item.unit }}</span>
-                                    <span v-if="(item.supplied_quantity || 0) > (item.qty || 0)"
+                                    {{ suppliedOrExecuted(item) }} <span class="text-gray-400 font-normal">{{ item.unit }}</span>
+                                    <span v-if="suppliedOrExecuted(item) > (item.qty || 0)"
                                       class="ml-1 text-[9px] font-bold text-orange-500">EXCEEDS SCHEDULE</span>
                                   </td>
                                   <td colspan="4"></td>

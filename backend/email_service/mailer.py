@@ -22,7 +22,7 @@ def send_password_email(to_email: str, user_name: str, hrms_id: str, plain_passw
     body = (
         f'Hello {user_name},\n\n'
         f'Your ManageWorks login credentials:\n\n'
-        f'  HRMS ID : {hrms_id}\n'
+        f'  User ID : {hrms_id}\n'
         f'  Password: {plain_password}\n\n'
         f'Please keep this information secure.\n\n'
         f'— ManageWorks Team'

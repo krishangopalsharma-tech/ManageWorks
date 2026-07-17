@@ -80,6 +80,10 @@ class DashboardStatsView(APIView):
             WorkItemEntry.objects.filter(entry_type='execution', submitted_at__gte=recent_cutoff)
             .values_list('work_item__work_id', flat=True).distinct()
         )
+        recent_bill_ids = set(
+            BillRecord.objects.filter(uploaded_at__gte=recent_cutoff)
+            .values_list('work_id', flat=True).distinct()
+        )
 
         loa_list = [
             {
@@ -88,6 +92,7 @@ class DashboardStatsView(APIView):
                 'contractor_nickname': _nickname(w.contractor_name or ''),
                 'supply_update':       w.id in recent_supply_ids,
                 'execution_update':    w.id in recent_exec_ids,
+                'financial_update':    w.id in recent_bill_ids,
             }
             for w in Work.objects.all()
         ]

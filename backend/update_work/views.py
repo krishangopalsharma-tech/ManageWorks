@@ -5,8 +5,11 @@ from rest_framework.response import Response
 from rest_framework import status, generics
 from rest_framework.exceptions import PermissionDenied
 
+from django.db.models import Q
+
 from works.models import Work, WorkItem, WorkItemEntry, WorkExtension
-from works.serializers import WorkItemEntrySerializer, WorkEditSerializer
+from works.serializers import WorkItemEntrySerializer, WorkEditSerializer, WorkSerializer
+from work_details.views import _base_queryset
 from .pdf_parser import parse_receipt_pdf
 
 
@@ -62,6 +65,44 @@ def _sync_item_quantities(work_item):
     work_item.supplied_quantity = supply_total
     work_item.executed_quantity = exec_total
     work_item.save(update_fields=['supplied_quantity', 'executed_quantity'])
+
+
+# ── Work list — deliberately unscoped ─────────────────────────────────────────
+# Any logged-in consignee (assigned or not) must be able to find and open any
+# LOA here to submit an execution entry — execution entries have no ownership
+# restriction (see WorkItemEntryView.post below), only supply entries do. This
+# mirrors _check_can_modify_work, which already allows any consignee to edit
+# any work. Do not add the admin/hrms_id filter used by work_details.views —
+# that scoping is specific to the read-only Work Details page.
+
+class UpdateWorkSearchView(generics.ListAPIView):
+    serializer_class = WorkSerializer
+
+    def get_queryset(self):
+        queryset = _base_queryset()
+        query = self.request.query_params.get('q', None)
+        if query:
+            queryset = queryset.filter(
+                Q(loa_number__icontains=query) |
+                Q(contractor_name__icontains=query) |
+                Q(tender_number__icontains=query)
+            )
+        return queryset
+
+    def list(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
+        return super().list(request, *args, **kwargs)
+
+
+class UpdateWorkRetrieveView(generics.RetrieveAPIView):
+    serializer_class = WorkSerializer
+    queryset = _base_queryset()
+
+    def retrieve(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
+        return super().retrieve(request, *args, **kwargs)
 
 
 # ── Work-level edit / delete ──────────────────────────────────────────────────

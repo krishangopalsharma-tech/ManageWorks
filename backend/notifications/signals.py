@@ -79,6 +79,24 @@ def on_work_item_entry_created(sender, instance, created, **kwargs):
         )
 
 
+@receiver(post_save, sender='financial_progress.BillRecord')
+def on_bill_record_created(sender, instance, created, **kwargs):
+    if not created:
+        return
+    from .models import Notification
+    work = instance.work
+    loa = work.loa_number or f'LOA #{work.pk}'
+    uploader = instance.uploaded_by
+    uploader_name = (uploader.first_name or uploader.username) if uploader else loa
+    for user in _recipients(work):
+        Notification.objects.create(
+            user=user,
+            notif_type='financial',
+            title=f'{loa} · Bill Uploaded',
+            body=f'{uploader_name} · Bill {instance.bill_number}',
+        )
+
+
 @receiver(pre_save, sender='works.Work')
 def on_work_pre_save(sender, instance, **kwargs):
     if instance.pk:

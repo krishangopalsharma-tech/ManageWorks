@@ -14,6 +14,7 @@ onMounted(() => startPolling(30000))
 onUnmounted(() => stopPolling())
 
 const isAdmin        = computed(() => state.user?.role === 'admin' || state.user?.is_staff)
+const isSuperAdmin    = computed(() => state.user?.hrms_id === 'admin')
 const canSeeRegister = computed(() => isAdmin.value || state.user?.role === 'consignee')
 const collapsed = ref(localStorage.getItem('sidebar-collapsed') === 'true')
 
@@ -47,8 +48,8 @@ const menuItems = ref([
     subItems: [
       { name: 'My Account',      path: '/settings/account' },
       { name: 'User Management', path: '/settings/user-management', adminOnly: true },
-      { name: 'SMTP Settings',   path: '/settings/smtp',            adminOnly: true },
-      { name: 'Telegram Bot',    path: '/settings/telegram',        adminOnly: true },
+      { name: 'SMTP Settings',   path: '/settings/smtp',            superAdminOnly: true },
+      { name: 'Telegram Bot',    path: '/settings/telegram',        superAdminOnly: true },
       { name: 'Site Supervisors', path: '/settings/site-register-parties', consigneeOrAdmin: true },
       { name: 'Link Rly Official Telegram', path: '/settings/telegram-link' },
       { name: 'Delete Log',                path: '/settings/delete-log',    adminOnly: true },
@@ -111,6 +112,7 @@ const isConsigneeOrAdmin = computed(() => isAdmin.value || state.user?.role === 
 const visibleSubItems = (item) => {
   if (!item.subItems) return []
   return item.subItems.filter(s => {
+    if (s.superAdminOnly) return isSuperAdmin.value
     if (s.adminOnly) return isAdmin.value
     if (s.consigneeOrAdmin) return isConsigneeOrAdmin.value
     return true

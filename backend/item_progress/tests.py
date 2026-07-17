@@ -12,7 +12,7 @@ class TestItemProgress:
     def setup_data(self):
         self.client = Client()
         self.user = User.objects.create_user(username='consignee1', password='password123')
-        UserProfile.objects.create(user=self.user, designation='JE', pf_number='PF-01', is_approved=True, role='consignee')
+        UserProfile.objects.create(user=self.user, designation='JE', is_approved=True, role='consignee')
         
         # Create work and items
         self.work = Work.objects.create(loa_number='LOA-2026-X', contractor_name='Contractor X', hrms_id='consignee1')

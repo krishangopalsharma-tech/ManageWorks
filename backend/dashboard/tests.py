@@ -17,10 +17,10 @@ class TestDashboard:
         
         # Create users
         self.admin = User.objects.create_superuser(username='admin', password='password123', email='admin@example.com')
-        UserProfile.objects.create(user=self.admin, designation='Admin', pf_number='PF-ADM01', is_approved=True, role='admin')
+        UserProfile.objects.create(user=self.admin, designation='Admin', is_approved=True, role='admin')
         
         self.consignee = User.objects.create_user(username='consignee1', password='password123')
-        UserProfile.objects.create(user=self.consignee, designation='JE', pf_number='PF-CON1', is_approved=True, role='consignee')
+        UserProfile.objects.create(user=self.consignee, designation='JE', is_approved=True, role='consignee')
 
         # Create works, items, and entries
         self.work1 = Work.objects.create(loa_number='LOA-2026-001', contractor_name='Apex', hrms_id='consignee1')

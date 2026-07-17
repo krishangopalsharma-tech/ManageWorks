@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     'smtp_settings',
     'delete_log',
     'financial_progress',
+    'profile_settings',
 ]
 
 MIDDLEWARE = [

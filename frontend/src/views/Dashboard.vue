@@ -400,6 +400,7 @@ onBeforeUnmount(() => {
                 <div class="flex gap-1 items-center">
                   <div v-if="loa.supply_update && !seenLoas.has(loa.id)" class="w-2 h-2 rounded-full bg-[#1D5F5E]" title="Recent supply update"></div>
                   <div v-if="loa.execution_update && !seenLoas.has(loa.id)" class="w-2 h-2 rounded-full bg-[#34c759]" title="Recent execution update"></div>
+                  <div v-if="loa.financial_update && !seenLoas.has(loa.id)" class="w-2 h-2 rounded-full bg-[#ff9500]" title="Recent bill upload"></div>
                 </div>
                 <div class="w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition-all"
                   :class="selectedLoas.includes(loa.id) ? 'bg-[#1D5F5E] border-[#1D5F5E]' : 'border-gray-300 bg-white'">

@@ -10,7 +10,7 @@ class UserProfile(models.Model):
 
     user           = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     designation    = models.CharField(max_length=150)
-    pf_number      = models.CharField(max_length=50)
+    mobile_number  = models.CharField(max_length=20, blank=True, default='')
     is_approved    = models.BooleanField(default=False)
     role           = models.CharField(max_length=20, choices=ROLE_CHOICES, default='consignee')
     created_at     = models.DateTimeField(auto_now_add=True)

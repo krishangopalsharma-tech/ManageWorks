@@ -250,7 +250,7 @@ onUnmounted(() => {
           <span class="w-5 h-5 rounded-full bg-[#1D5F5E] text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">3</span>
           <div>
             <p class="text-sm font-semibold text-gray-800 dark:text-white">Type the 6-digit code</p>
-            <p class="text-xs text-gray-400 mt-0.5">Bot will ask your HRMS ID to confirm identity and link your account.</p>
+            <p class="text-xs text-gray-400 mt-0.5">Bot will ask your User ID to confirm identity and link your account.</p>
           </div>
         </div>
         <div class="px-4 py-3 flex gap-3 items-start">
@@ -346,7 +346,7 @@ onUnmounted(() => {
         <thead>
           <tr class="bg-gray-50 dark:bg-[#2c2c2e] border-b border-gray-100 dark:border-[#2c2c2e]">
             <th class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">Name</th>
-            <th class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">HRMS ID</th>
+            <th class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">User ID</th>
             <th class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">Designation</th>
             <th v-if="isAdmin" class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">Added By</th>
             <th class="px-5 py-2.5 text-left font-semibold text-gray-400 uppercase tracking-wider">Mobile</th>
@@ -378,11 +378,10 @@ onUnmounted(() => {
               <td class="px-5 py-3 text-gray-500">{{ u.mobile || '—' }}</td>
               <td class="px-5 py-3 font-mono text-gray-400">{{ u.telegram_user_id }}</td>
               <td class="px-5 py-3 text-right">
-                <button v-if="!isAdmin" @click="startEdit(u)"
+                <button @click="startEdit(u)"
                   class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-gray-200 dark:border-[#3a3a3c] text-gray-500 hover:text-[#1D5F5E] hover:border-[#1D5F5E] transition-colors">
                   <div class="i-carbon-edit text-xs"></div> Edit
                 </button>
-                <span v-else class="text-gray-300 text-xs">—</span>
               </td>
             </tr>
 

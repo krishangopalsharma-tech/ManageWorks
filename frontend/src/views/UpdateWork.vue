@@ -51,6 +51,16 @@ const progressPct = (item) => {
   return Math.min(Math.round((done / req) * 100), 999)
 }
 
+// Same category-first, schedule-fallback logic as progressPct — keeps the
+// SUPPLIED/EXECUTED column in sync with the progress bar it sits next to.
+const suppliedOrExecuted = (item) => {
+  const cat = item.category || ''
+  if (cat === 'supply_installation' || cat === 'execution') return item.executed_quantity || 0
+  if (cat === 'supply') return item.supplied_quantity || 0
+  const sch = String(item.schedule || '').toUpperCase().trim()
+  return sch.startsWith('B') ? (item.executed_quantity || 0) : (item.supplied_quantity || 0)
+}
+
 const recalcItemQtys = (item) => {
   const entries = item.entries || []
   item.supplied_quantity = entries.filter(e => e.entry_type === 'supply').reduce((s, e) => s + (e.quantity || 0), 0)
@@ -302,7 +312,7 @@ const loadWorks = async () => {
   isLoading.value = true
   try {
     const [worksRes, meRes] = await Promise.allSettled([
-      axios.get('/api/work-details/search/'),
+      axios.get('/api/update-work/works/search/'),
       axios.get('/api/auth/me/'),
     ])
     if (worksRes.status === 'fulfilled') allWorks.value    = worksRes.value.data
@@ -365,7 +375,7 @@ const sortedItems = computed(() => {
   return [...filteredItems.value].sort((a, b) => {
     let av, bv
     if      (sortKey.value === 'qty')       { av = a.qty || 0;               bv = b.qty || 0 }
-    else if (sortKey.value === 'submitted') { av = a.supplied_quantity || 0; bv = b.supplied_quantity || 0 }
+    else if (sortKey.value === 'submitted') { av = suppliedOrExecuted(a);    bv = suppliedOrExecuted(b) }
     else if (sortKey.value === 'progress')  { av = progressPct(a);           bv = progressPct(b) }
     return sortDir.value === 'asc' ? av - bv : bv - av
   })
@@ -379,7 +389,7 @@ const selectWork = async (work) => {
   // Optimistically show what we have, then refresh from server
   selectedWork.value = { ...work, items: work.items.map(i => ({ ...i, entries: (i.entries || []).map(e => ({ ...e })) })) }
   try {
-    const res = await axios.get(`/api/work-details/${work.id}/`)
+    const res = await axios.get(`/api/update-work/works/${work.id}/detail/`)
     const fresh = res.data
     selectedWork.value = { ...fresh, items: fresh.items.map(i => ({ ...i, entries: (i.entries || []).map(e => ({ ...e })) })) }
     // Keep allWorks in sync
@@ -747,7 +757,7 @@ const deleteWork = async () => {
                   <div class="flex items-center justify-end gap-1">Scope <div :class="sortIcon('qty')" class="text-[9px]" :style="{ opacity: sortKey === 'qty' ? 1 : 0.35 }"></div></div>
                 </th>
                 <th @click="toggleSort('submitted')" class="px-4 py-3 text-right w-28 cursor-pointer select-none hover:text-gray-600 transition-colors">
-                  <div class="flex items-center justify-end gap-1">Supplied <div :class="sortIcon('submitted')" class="text-[9px]" :style="{ opacity: sortKey === 'submitted' ? 1 : 0.35 }"></div></div>
+                  <div class="flex items-center justify-end gap-1">Supplied / Executed <div :class="sortIcon('submitted')" class="text-[9px]" :style="{ opacity: sortKey === 'submitted' ? 1 : 0.35 }"></div></div>
                 </th>
                 <th @click="toggleSort('progress')" class="px-4 py-3 w-40 cursor-pointer select-none hover:text-gray-600 transition-colors">
                   <div class="flex items-center gap-1">Progress <div :class="sortIcon('progress')" class="text-[9px]" :style="{ opacity: sortKey === 'progress' ? 1 : 0.35 }"></div></div>
@@ -787,8 +797,8 @@ const deleteWork = async () => {
                   {{ item.qty }} <span class="font-normal text-gray-400">{{ item.unit }}</span>
                 </td>
                 <td class="px-4 py-3.5 text-right text-xs font-semibold"
-                  :class="(item.supplied_quantity || 0) > (item.qty || 0) ? 'text-orange-500' : 'text-gray-800'">
-                  {{ item.supplied_quantity || 0 }} <span class="font-normal text-gray-400">{{ item.unit }}</span>
+                  :class="suppliedOrExecuted(item) > (item.qty || 0) ? 'text-orange-500' : 'text-gray-800'">
+                  {{ suppliedOrExecuted(item) }} <span class="font-normal text-gray-400">{{ item.unit }}</span>
                 </td>
                 <td class="px-4 py-3.5">
                   <!-- S+I: two stacked bars -->

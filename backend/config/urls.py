@@ -24,4 +24,5 @@ urlpatterns = [
     path('api/settings/telegram/',    include('telegram_settings.urls')),
     path('api/delete-log/',           include('delete_log.urls')),
     path('api/financial-progress/',   include('financial_progress.urls')),
+    path('api/settings/profile/',     include('profile_settings.urls')),
 ]

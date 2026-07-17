@@ -257,14 +257,10 @@ onMounted(loadData)
               <!-- Info grid -->
               <div class="grid grid-cols-2 border-t border-gray-100 dark:border-[#3a3a3c]">
                 <div class="px-6 py-2 border-b border-r border-gray-100 dark:border-[#3a3a3c] flex items-baseline gap-2">
-                  <p class="text-[9px] font-bold text-gray-400 uppercase tracking-widest shrink-0">HRMS ID</p>
+                  <p class="text-[9px] font-bold text-gray-400 uppercase tracking-widest shrink-0">User ID</p>
                   <p class="text-sm font-semibold text-gray-800 dark:text-white font-mono">{{ detailUser.hrms_id }}</p>
                 </div>
                 <div class="px-6 py-2 border-b border-gray-100 dark:border-[#3a3a3c] flex items-baseline gap-2">
-                  <p class="text-[9px] font-bold text-gray-400 uppercase tracking-widest shrink-0">PF No</p>
-                  <p class="text-sm font-semibold text-gray-800 dark:text-white font-mono">{{ detailUser.pf_number }}</p>
-                </div>
-                <div class="px-6 py-2 border-r border-gray-100 dark:border-[#3a3a3c] flex items-baseline gap-2">
                   <p class="text-[9px] font-bold text-gray-400 uppercase tracking-widest shrink-0">Designation</p>
                   <input v-if="isEditing" v-model="editDesig" type="text"
                     class="w-full bg-gray-50 dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c] rounded-lg px-3 py-1 text-sm font-medium text-gray-800 dark:text-white outline-none focus:border-[#1D5F5E] focus:ring-2 focus:ring-[#1D5F5E]/10 transition-all">
@@ -432,8 +428,7 @@ onMounted(loadData)
                 <p class="text-sm font-semibold text-gray-800">{{ u.name }}</p>
                 <p class="text-xs text-gray-500 mt-0.5">{{ u.designation }}</p>
                 <div class="flex gap-4 mt-1.5 text-xs text-gray-400">
-                  <span>HRMS: <span class="font-medium text-gray-600">{{ u.hrms_id }}</span></span>
-                  <span>PF: <span class="font-medium text-gray-600">{{ u.pf_number }}</span></span>
+                  <span>User ID: <span class="font-medium text-gray-600">{{ u.hrms_id }}</span></span>
                   <span>{{ u.created_at }}</span>
                 </div>
               </div>
@@ -461,7 +456,7 @@ onMounted(loadData)
               <thead>
                 <tr class="border-b border-gray-100">
                   <th class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-5 py-3">Name</th>
-                  <th class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-5 py-3">HRMS ID</th>
+                  <th class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-5 py-3">User ID</th>
                   <th class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-5 py-3">Email</th>
                   <th class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-5 py-3">Designation</th>
                   <th class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-5 py-3">Role</th>

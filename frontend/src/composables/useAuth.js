@@ -59,6 +59,12 @@ async function forgotPassword(hrms_id) {
   return data
 }
 
+async function updateProfile(payload) {
+  const { data } = await axios.patch('/api/settings/profile/', payload, { headers: authHeaders() })
+  state.user = { ...state.user, ...data }
+  return data
+}
+
 export function useAuth() {
   return {
     state: readonly(state),
@@ -67,5 +73,6 @@ export function useAuth() {
     register,
     logout,
     forgotPassword,
+    updateProfile,
   }
 }

@@ -38,16 +38,16 @@ async function handleLogin() {
       <!-- Card -->
       <div class="bg-light-surface dark:bg-[#1c1c1e] rounded-2xl soft-shadow p-8 border border-gray-100 dark:border-[#3a3a3c]">
         <h1 class="text-xl font-bold text-gray-800 dark:text-white mb-1">Welcome back</h1>
-        <p class="text-sm text-gray-500 dark:text-gray-400 mb-8">Sign in with your HRMS ID</p>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-8">Sign in with your User ID</p>
 
         <form @submit.prevent="handleLogin" class="flex flex-col gap-5">
           <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">HRMS ID</label>
+            <label class="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">User ID</label>
             <input
               v-model="hrms_id"
               type="text"
               autocomplete="username"
-              placeholder="Enter your HRMS ID"
+              placeholder="Enter your User ID"
               required
               class="w-full px-4 py-3 rounded-xl bg-light-bg dark:bg-[#2c2c2e] border border-gray-200 dark:border-[#3a3a3c] text-sm text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:border-[#1D5F5E] focus:ring-2 focus:ring-[#1D5F5E]/10 transition-colors"
             />

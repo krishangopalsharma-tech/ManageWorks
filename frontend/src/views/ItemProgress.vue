@@ -116,6 +116,15 @@ const progressPct = (item) => {
   return Math.min(Math.round((done / req) * 100), 999)
 }
 
+// Same category-first, schedule-fallback logic as progressPct — keeps the
+// SUPPLIED/EXECUTED column in sync with the progress bar it sits next to.
+const suppliedOrExecuted = (item) => {
+  const cat = item.category || ''
+  if (cat === 'supply_installation' || cat === 'execution') return item.executed_quantity || 0
+  if (cat === 'supply') return item.supplied_quantity || 0
+  return isSchB(item) ? (item.executed_quantity || 0) : (item.supplied_quantity || 0)
+}
+
 // ── Category filter ────────────────────────────────────────────────────────
 const selectedCategories = ref(['supply', 'supply_installation', 'execution'])
 const toggleCategory = (cat) => {
@@ -198,7 +207,7 @@ const sortedResults = computed(() => {
   return [...filteredResults.value].sort((a, b) => {
     let av, bv
     if      (sortKey.value === 'qty')       { av = a.qty || 0;               bv = b.qty || 0 }
-    else if (sortKey.value === 'submitted') { av = a.supplied_quantity || 0; bv = b.supplied_quantity || 0 }
+    else if (sortKey.value === 'submitted') { av = suppliedOrExecuted(a);    bv = suppliedOrExecuted(b) }
     else if (sortKey.value === 'remaining') { av = remainingQty(a);          bv = remainingQty(b) }
     else if (sortKey.value === 'progress')  { av = progressPct(a);           bv = progressPct(b) }
     else if (sortKey.value === 'entries')   { av = (a.entries||[]).length;   bv = (b.entries||[]).length }
@@ -628,7 +637,7 @@ const generateItemPDF = async (includeEntries = true) => {
               <div class="flex items-center justify-end gap-1">Scope <div :class="sortIcon('qty')" class="text-[9px]" :style="{ opacity: sortKey === 'qty' ? 1 : 0.35 }"></div></div>
             </th>
             <th @click="toggleSort('submitted')" class="px-4 py-3 text-right w-28 cursor-pointer select-none hover:text-gray-600 transition-colors">
-              <div class="flex items-center justify-end gap-1">Supplied <div :class="sortIcon('submitted')" class="text-[9px]" :style="{ opacity: sortKey === 'submitted' ? 1 : 0.35 }"></div></div>
+              <div class="flex items-center justify-end gap-1">Supplied / Executed <div :class="sortIcon('submitted')" class="text-[9px]" :style="{ opacity: sortKey === 'submitted' ? 1 : 0.35 }"></div></div>
             </th>
             <th @click="toggleSort('remaining')" class="px-4 py-3 text-right w-28 cursor-pointer select-none hover:text-gray-600 transition-colors">
               <div class="flex items-center justify-end gap-1">Remaining <div :class="sortIcon('remaining')" class="text-[9px]" :style="{ opacity: sortKey === 'remaining' ? 1 : 0.35 }"></div></div>
@@ -681,10 +690,10 @@ const generateItemPDF = async (includeEntries = true) => {
                 {{ item.qty }} <span class="text-gray-400 font-normal">{{ item.unit }}</span>
               </td>
               <td class="px-4 py-3 text-right text-xs font-semibold"
-                :class="(item.supplied_quantity || 0) > (item.qty || 0) ? 'text-orange-500' : 'text-gray-800'">
-                {{ item.supplied_quantity || 0 }}
+                :class="suppliedOrExecuted(item) > (item.qty || 0) ? 'text-orange-500' : 'text-gray-800'">
+                {{ suppliedOrExecuted(item) }}
                 <span class="text-gray-400 font-normal">{{ item.unit }}</span>
-                <span v-if="(item.supplied_quantity || 0) > (item.qty || 0)" class="ml-1 text-[9px] text-orange-400 font-bold">OVER</span>
+                <span v-if="suppliedOrExecuted(item) > (item.qty || 0)" class="ml-1 text-[9px] text-orange-400 font-bold">OVER</span>
               </td>
               <td class="px-4 py-3 text-right text-xs font-semibold"
                 :class="remainingQty(item) < 0 ? 'text-orange-500' : 'text-gray-600'">
@@ -743,79 +752,47 @@ const generateItemPDF = async (includeEntries = true) => {
               <td colspan="11" class="px-6 pb-5 pt-0 border-b border-accent/10">
                 <div class="rounded-xl border border-gray-100 bg-white overflow-hidden mt-3 shadow-sm">
 
-                  <!-- Panel header -->
-                  <div class="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-3">
-                    <span class="rounded-md px-2 py-0.5 text-[10px] font-bold"
-                      :class="isSchB(item) ? 'bg-accent-b-soft text-accent-b' : 'bg-accent-soft text-accent'">
-                      {{ item.schedule }}
-                    </span>
-                    <span class="text-[10px] font-semibold text-gray-400">S.No {{ item.serial_number }}</span>
-                    <span class="text-[11px] font-semibold text-accent bg-accent-soft px-2 py-0.5 rounded-full">{{ item.loa_number }}</span>
-                    <p class="text-xs font-semibold text-gray-700 line-clamp-1 ml-1 flex-1">{{ item.item_desc }}</p>
-                    <div v-if="isSchB(item)" class="flex items-center gap-3 flex-shrink-0">
-                      <span class="text-[10px] text-gray-500">Supplied: <strong class="text-accent">{{ item.supplied_quantity || 0 }}</strong> <span class="text-gray-400">{{ item.unit }}</span></span>
-                      <span class="text-gray-200">·</span>
-                      <span class="text-[10px] text-gray-500">Executed: <strong class="text-accent-b">{{ item.executed_quantity || 0 }}</strong> <span class="text-gray-400">{{ item.unit }}</span></span>
-                    </div>
-                    <span class="text-[10px] text-gray-400 font-medium flex-shrink-0">
-                      {{ (item.entries || []).length }} entr{{ (item.entries || []).length === 1 ? 'y' : 'ies' }}
-                    </span>
-                  </div>
-
                   <!-- No entries -->
                   <div v-if="!(item.entries || []).length"
                     class="px-4 py-8 text-center text-xs text-gray-400 font-medium">
                     No entries submitted yet.
                   </div>
 
-                  <!-- Entries grid -->
-                  <div v-else class="p-3 flex flex-wrap gap-2">
-                    <div v-for="(entry, idx) in [...(item.entries || [])].reverse()" :key="entry.id"
-                      class="border border-gray-100 rounded-xl px-3 py-2.5 min-w-[200px] flex-1 max-w-[280px] hover:border-accent/30 transition-colors">
-                      <div class="flex items-center gap-2 mb-1.5">
-                        <span class="w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center flex-shrink-0"
-                          :class="entry.entry_type === 'supply' ? 'bg-accent-soft text-accent' : 'bg-accent-b-soft text-accent-b'">
-                          {{ (item.entries || []).length - idx }}
-                        </span>
-                        <span class="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide"
-                          :class="entry.entry_type === 'supply' ? 'bg-accent-soft text-accent' : 'bg-accent-b-soft text-accent-b'">
-                          {{ entry.entry_type === 'supply' ? 'Supply' : 'Exec' }}
-                        </span>
-                        <span class="text-xs font-bold text-gray-800">
-                          {{ entry.quantity }} <span class="text-gray-400 font-normal text-[10px]">{{ item.unit }}</span>
-                        </span>
-                        <span class="ml-auto text-[10px] text-gray-400 font-medium flex-shrink-0">
-                          {{ fmtDateTime(entry.submitted_at) }}
-                        </span>
-                      </div>
-                      <div class="flex flex-col gap-0.5 pl-7">
-                        <span class="flex items-center gap-1 text-[10px] text-gray-500 font-medium">
-                          <div class="i-carbon-user text-gray-400" style="font-size:10px;"></div>
-                          {{ entry.submitted_by_user?.full_name || entry.submitted_by_user?.username || '—' }}
-                          <span v-if="entry.submitted_by_designation_display || entry.submitted_by_user?.designation" class="text-gray-400"> · {{ entry.submitted_by_designation_display || entry.submitted_by_user?.designation }}</span>
-                        </span>
-                        <template v-if="entry.entry_type === 'supply'">
-                          <span v-if="entry.challan_no" class="flex items-center gap-1 text-[10px] text-gray-400 font-medium truncate">
-                            <div class="i-carbon-document text-gray-300" style="font-size:10px;"></div>
-                            {{ entry.challan_no }}
-                          </span>
-                          <span v-if="entry.udm_entry" class="flex items-center gap-1 text-[10px] text-gray-400 font-medium truncate">
-                            <div class="i-carbon-tag text-gray-300" style="font-size:10px;"></div>
-                            {{ entry.udm_entry }}
-                          </span>
-                        </template>
-                        <template v-else>
-                          <span v-if="entry.location" class="flex items-center gap-1 text-[10px] text-accent-b font-medium truncate">
-                            <div class="i-carbon-location text-accent-b/60" style="font-size:10px;"></div>
-                            {{ entry.location }}
-                          </span>
-                          <span v-if="entry.remarks" class="flex items-center gap-1 text-[10px] text-gray-500 font-medium line-clamp-1">
-                            <div class="i-carbon-chat text-gray-300" style="font-size:10px;"></div>
-                            {{ entry.remarks }}
-                          </span>
-                        </template>
-                      </div>
-                    </div>
+                  <!-- Entries table -->
+                  <div v-else class="overflow-x-auto">
+                    <table class="w-full text-xs">
+                      <thead class="bg-gray-50 text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+                        <tr>
+                          <th class="px-4 py-2 text-left w-10">#</th>
+                          <th class="px-4 py-2 text-left w-20">Category</th>
+                          <th class="px-4 py-2 text-left w-24">Date</th>
+                          <th class="px-4 py-2 text-left">Entry By</th>
+                          <th class="px-4 py-2 text-left">Location</th>
+                          <th class="px-4 py-2 text-right w-28">Quantity</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-gray-50">
+                        <tr v-for="(entry, idx) in [...(item.entries || [])].reverse()" :key="entry.id"
+                          class="hover:bg-gray-50/50 transition-colors">
+                          <td class="px-4 py-2.5 text-gray-400 font-semibold">{{ (item.entries || []).length - idx }}</td>
+                          <td class="px-4 py-2.5">
+                            <span class="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide"
+                              :class="entry.entry_type === 'supply' ? 'bg-accent-soft text-accent' : 'bg-accent-b-soft text-accent-b'">
+                              {{ entry.entry_type === 'supply' ? 'Supply' : 'Exec' }}
+                            </span>
+                          </td>
+                          <td class="px-4 py-2.5 text-gray-500 font-medium whitespace-nowrap">{{ fmtDate(entry.date_of_receipt || entry.submitted_at) }}</td>
+                          <td class="px-4 py-2.5">
+                            <span class="block font-semibold text-gray-800">{{ entry.submitted_by_user?.full_name || entry.submitted_by_user?.username || '—' }}</span>
+                            <span v-if="entry.submitted_by_designation_display || entry.submitted_by_user?.designation" class="block text-[10px] text-gray-400">{{ entry.submitted_by_designation_display || entry.submitted_by_user?.designation }}</span>
+                          </td>
+                          <td class="px-4 py-2.5 text-accent-b font-medium">{{ entry.entry_type === 'execution' ? (entry.location || '—') : '—' }}</td>
+                          <td class="px-4 py-2.5 text-right font-bold text-gray-800">
+                            {{ entry.quantity }} <span class="text-gray-400 font-normal">{{ item.unit }}</span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
 
                 </div>

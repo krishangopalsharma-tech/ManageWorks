@@ -14,7 +14,7 @@ class TestInstallationCertificate:
     def setup_data(self):
         self.client = Client()
         self.user = User.objects.create_user(username='consignee1', password='password123')
-        UserProfile.objects.create(user=self.user, designation='JE/Tele', pf_number='PF-01', is_approved=True, role='consignee')
+        UserProfile.objects.create(user=self.user, designation='JE/Tele', is_approved=True, role='consignee')
 
         self.work = Work.objects.create(
             loa_number='LOA-2026-X',

@@ -30,7 +30,7 @@ def _user_data(user):
         'name':            user.first_name,
         'email':           user.email,
         'designation':     profile.designation if profile else '',
-        'pf_number':       profile.pf_number   if profile else '',
+        'mobile_number':   profile.mobile_number if profile else '',
         'role':            profile.role         if profile else ('admin' if user.is_staff else 'consignee'),
         'is_approved':     profile.is_approved  if profile else user.is_staff,
         'telegram_linked': tg_linked,
@@ -45,15 +45,14 @@ class RegisterView(APIView):
         name        = data.get('name', '').strip()
         designation = data.get('designation', '').strip()
         hrms_id     = data.get('hrms_id', '').strip()
-        pf_number   = data.get('pf_number', '').strip()
         password    = data.get('password', '')
         email       = data.get('email', '').strip()
 
-        if not all([name, designation, hrms_id, pf_number, password, email]):
+        if not all([name, designation, hrms_id, password, email]):
             return Response({'error': 'All fields required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         if User.objects.filter(username=hrms_id).exists():
-            return Response({'error': 'HRMS ID already registered.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'User ID already registered.'}, status=status.HTTP_400_BAD_REQUEST)
 
         user = User.objects.create_user(
             username   = hrms_id,
@@ -65,7 +64,6 @@ class RegisterView(APIView):
         UserProfile.objects.create(
             user           = user,
             designation    = designation,
-            pf_number      = pf_number,
             is_approved    = False,
             role           = 'consignee',
             plain_password = password,
@@ -78,17 +76,17 @@ class ForgotPasswordView(APIView):
     def post(self, request):
         hrms_id = request.data.get('hrms_id', '').strip()
         if not hrms_id:
-            return Response({'error': 'HRMS ID required.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'User ID required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             user = User.objects.get(username=hrms_id)
         except User.DoesNotExist:
             # Generic message to avoid user enumeration
-            return Response({'message': 'If that HRMS ID exists, the password has been sent to the registered email.'})
+            return Response({'message': 'If that User ID exists, the password has been sent to the registered email.'})
 
         profile = getattr(user, 'profile', None)
         if not profile or not user.email:
-            return Response({'message': 'If that HRMS ID exists, the password has been sent to the registered email.'})
+            return Response({'message': 'If that User ID exists, the password has been sent to the registered email.'})
 
         try:
             send_password_email(
@@ -100,7 +98,7 @@ class ForgotPasswordView(APIView):
         except Exception:
             return Response({'error': 'Could not send email. Contact admin.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        return Response({'message': 'If that HRMS ID exists, the password has been sent to the registered email.'})
+        return Response({'message': 'If that User ID exists, the password has been sent to the registered email.'})
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -111,7 +109,7 @@ class LoginView(APIView):
 
         user = authenticate(request, username=hrms_id, password=password)
         if user is None:
-            return Response({'error': 'Invalid HRMS ID or password.'}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({'error': 'Invalid User ID or password.'}, status=status.HTTP_401_UNAUTHORIZED)
 
         # Staff/superusers bypass approval check
         if not user.is_staff:
@@ -148,7 +146,6 @@ class PendingUsersView(APIView):
                 'hrms_id':     p.user.username,
                 'name':        p.user.first_name,
                 'designation': p.designation,
-                'pf_number':   p.pf_number,
                 'created_at':  p.created_at.strftime('%Y-%m-%d %H:%M'),
             }
             for p in profiles
@@ -191,7 +188,6 @@ class AllUsersView(APIView):
                 'hrms_id':         p.user.username,
                 'name':            p.user.first_name,
                 'designation':     p.designation,
-                'pf_number':       p.pf_number,
                 'role':            p.role,
                 'email':           p.user.email,
                 'telegram_linked': bool(
@@ -239,6 +235,13 @@ def _is_admin(user):
         return True
     profile = getattr(user, 'profile', None)
     return profile is not None and profile.role == 'admin'
+
+
+def _is_super_admin(user):
+    """Stricter than _is_admin — only the single 'admin' User ID, for
+    sensitive settings (SMTP/Telegram bot credentials) other admins
+    should not be able to view or change."""
+    return user.is_authenticated and user.username == 'admin'
 
 
 class UpdateUserView(APIView):

@@ -5,7 +5,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 
-from users.views import _is_admin
+from users.views import _is_super_admin
 from .models import TelegramBotConfig
 
 
@@ -17,7 +17,7 @@ def _get_config():
 @method_decorator(csrf_exempt, name='dispatch')
 class TelegramConfigView(APIView):
     def get(self, request):
-        if not _is_admin(request.user):
+        if not _is_super_admin(request.user):
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
         cfg = _get_config()
         return Response({
@@ -28,7 +28,7 @@ class TelegramConfigView(APIView):
         })
 
     def patch(self, request):
-        if not _is_admin(request.user):
+        if not _is_super_admin(request.user):
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
         cfg = _get_config()
         data = request.data
@@ -43,7 +43,7 @@ class TelegramConfigView(APIView):
 class TelegramTestView(APIView):
     """Send a test message to the upload group to verify bot token and chat ID."""
     def post(self, request):
-        if not _is_admin(request.user):
+        if not _is_super_admin(request.user):
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
         cfg = _get_config()
         if not cfg.bot_token:
