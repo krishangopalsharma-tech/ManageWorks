@@ -6,6 +6,8 @@ import ItemProgress        from '../views/ItemProgress.vue'
 import LocationProgress   from '../views/LocationProgress.vue'
 import AddNewWork     from '../views/AddNewWork.vue'
 import UpdateWork     from '../views/UpdateWork.vue'
+import SupplyDetails    from '../views/SupplyDetails.vue'
+import ExecutionDetails from '../views/ExecutionDetails.vue'
 import Placeholder    from '../views/Placeholder.vue'
 import Login           from '../views/Login.vue'
 import Register        from '../views/Register.vue'
@@ -34,6 +36,8 @@ const routes = [
   { path: '/location-progress',       name: 'Location Progress', component: LocationProgress },
   { path: '/add-new-work',             name: 'Add New Work',     component: AddNewWork },
   { path: '/update-work',              name: 'Update Work',      component: UpdateWork },
+  { path: '/supply-details',           name: 'Supply Details',    component: SupplyDetails },
+  { path: '/execution-details',        name: 'Execution Details', component: ExecutionDetails },
   { path: '/financial-progress',       name: 'Financial Progress', component: FinancialProgress },
   { path: '/site-register',               name: 'Site Register',            component: SiteRegister, meta: { siteRegisterAccess: true } },
   { path: '/settings/user-management',    name: 'User Management',          component: UserManagement,          meta: { adminOnly: true } },
