@@ -138,6 +138,17 @@ class TestUsersAuthAndRBAC:
         assert data['hrms_id'] == 'consignee1'
         assert data['role'] == 'consignee'
 
+    def test_me_is_assigned_true_when_work_assigned(self):
+        Work.objects.create(loa_number='LOA-ASSIGNED-1', contractor_name='Apex', hrms_id='consignee1')
+        self.client.force_login(self.consignee)
+        response = self.client.get('/api/auth/me/')
+        assert response.json()['is_assigned'] is True
+
+    def test_me_is_assigned_false_when_no_work_assigned(self):
+        self.client.force_login(self.consignee)
+        response = self.client.get('/api/auth/me/')
+        assert response.json()['is_assigned'] is False
+
     def test_approve_user_admin_only(self):
         self.client.force_login(self.consignee)
         response = self.client.post(f'/api/auth/approve/{self.pending_user.pk}/')
