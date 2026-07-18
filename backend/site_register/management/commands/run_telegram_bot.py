@@ -9,20 +9,16 @@ idle
 rly_main_menu           ← rly official: New Entry / Recent Entries
 rly_loa_search          ← type last-5 digits of LOA or contractor nickname
 rly_loa_list            ← select from matched LOA list
-rly_loa_confirm         ← show LOA details (tender + brief name), YES/NO
 rly_choose_type         ← ITEM or GENERAL instruction
 rly_item_input          ← type item ref e.g. A-12 or A1-14
-rly_item_confirm        ← show item description, YES/NO
 rly_location            ← type station/section name or skip
 rly_type_text           ← type instruction text; also accepts photo/document; /done to finish
 rly_confirm             ← review + confirm send
 ss_main_menu            ← contractor: New Entry / Open Entries / Recent Entries
 ss_new_loa_search       ← contractor new entry: search LOA (own LOAs only)
 ss_new_loa_list         ← contractor: pick from list
-ss_new_loa_confirm      ← contractor: confirm LOA
 ss_new_choose_type      ← contractor: ITEM or GENERAL
 ss_new_item_input       ← contractor: type item ref
-ss_new_item_confirm     ← contractor: confirm item
 ss_new_location         ← contractor: type station/section name or skip
 ss_new_recipients       ← contractor: consignee only OR add extra officials
 ss_new_add_rcpts        ← contractor: type numbers to select extra officials
@@ -606,7 +602,7 @@ def _show_loa_list(token: str, session: BotSession, works: list):
 
 
 def _set_loa_and_confirm(token: str, session: BotSession, work):
-    """Store selected work in context and show LOA confirm prompt."""
+    """Store selected work in context and proceed straight to instruction type."""
     brief = _work_brief_name(work.name_of_work)
     session.context.update({
         "work_id":         work.id,
@@ -617,16 +613,8 @@ def _set_loa_and_confirm(token: str, session: BotSession, work):
         "category":        "order",
         "category_label":  "📋 Rly Official Order",
     })
-    session.state = "rly_loa_confirm"
-    session.save(update_fields=["state", "context", "updated_at"])
-    sendt(token, session,
-         f"📋 <b>LOA Details</b>\n\n"
-         f"<b>LOA No:</b> {work.loa_number}\n"
-         f"<b>Tender No:</b> {work.tender_number or '—'}\n"
-         f"<b>Contractor:</b> {work.contractor_name or '—'}\n"
-         f"<b>Work:</b> {brief}\n\n"
-         "Is this the correct LOA?",
-         keyboard=[["✅ Yes"], ["❌ No — search again"]])
+    session.save(update_fields=["context", "updated_at"])
+    show_instruction_type(token, session)
 
 
 def handle_rly_loa_search(token: str, session: BotSession, text: str):
@@ -679,16 +667,6 @@ def handle_rly_loa_list(token: str, session: BotSession, text: str):
     from works.models import Work
     work = Work.objects.get(pk=choices[idx])
     _set_loa_and_confirm(token, session, work)
-
-
-def handle_rly_loa_confirm(token: str, session: BotSession, text: str):
-    t = text.strip().upper()
-    if "YES" in t or t == "✅ YES":
-        show_instruction_type(token, session)
-    elif "NO" in t:
-        show_loa_search(token, session)
-    else:
-        sendt(token, session, "⚠️ Reply Yes or No.")
 
 
 def show_instruction_type(token: str, session: BotSession):
@@ -753,29 +731,8 @@ def handle_rly_item_input(token: str, session: BotSession, text: str):
         "work_item_desc": f"{full_ref} — {brief_desc}",
         "instruction_type": "item",
     })
-    session.state = "rly_item_confirm"
-    session.save(update_fields=["state", "context", "updated_at"])
-    sendt(token, session,
-         f"📦 <b>Item Found:</b>\n\n"
-         f"<b>Schedule:</b> {item.schedule}\n"
-         f"<b>Item No:</b> {item.serial_number}\n"
-         f"<b>Description:</b> {brief_desc}\n\n"
-         "Is this the correct item?",
-         keyboard=[["✅ Yes"], ["❌ No — re-enter"]])
-
-
-def handle_rly_item_confirm(token: str, session: BotSession, text: str):
-    t = text.strip().upper()
-    if "YES" in t:
-        _show_location_prompt(token, session, 'rly_location')
-    elif "NO" in t:
-        session.state = "rly_item_input"
-        session.save(update_fields=["state", "updated_at"])
-        sendt(token, session,
-             "Type the item reference again (e.g. <code>A-12</code>):",
-             remove_kb=True)
-    else:
-        sendt(token, session, "⚠️ Reply Yes or No.")
+    session.save(update_fields=["context", "updated_at"])
+    _show_location_prompt(token, session, 'rly_location')
 
 
 def _show_location_prompt(token: str, session: BotSession, next_state: str):
@@ -1003,16 +960,8 @@ def _ss_set_loa_and_confirm(token: str, session: BotSession, work):
         "contractor_name": work.contractor_name or '—',
         "work_brief_name": brief,
     })
-    session.state = "ss_new_loa_confirm"
-    session.save(update_fields=["state", "context", "updated_at"])
-    sendt(token, session,
-         f"📋 <b>LOA Details</b>\n\n"
-         f"<b>LOA No:</b> {work.loa_number}\n"
-         f"<b>Tender No:</b> {work.tender_number or '—'}\n"
-         f"<b>Contractor:</b> {work.contractor_name or '—'}\n"
-         f"<b>Work:</b> {brief}\n\n"
-         "Is this the correct LOA?",
-         keyboard=[["✅ Yes"], ["❌ No — search again"]])
+    session.save(update_fields=["context", "updated_at"])
+    show_ss_choose_type(token, session)
 
 
 def handle_ss_new_loa_search(token: str, session: BotSession, user, text: str):
@@ -1060,16 +1009,6 @@ def handle_ss_new_loa_list(token: str, session: BotSession, user, text: str):
     from works.models import Work
     work = Work.objects.get(pk=choices[idx])
     _ss_set_loa_and_confirm(token, session, work)
-
-
-def handle_ss_new_loa_confirm(token: str, session: BotSession, text: str):
-    t = text.strip().upper()
-    if "YES" in t or t == "✅ YES":
-        show_ss_choose_type(token, session)
-    elif "NO" in t:
-        show_ss_loa_search(token, session)
-    else:
-        sendt(token, session, "⚠️ Reply Yes or No.")
 
 
 def show_ss_choose_type(token: str, session: BotSession):
@@ -1128,27 +1067,8 @@ def handle_ss_new_item_input(token: str, session: BotSession, text: str):
         "work_item_desc":   f"{full_ref} — {brief_desc}",
         "instruction_type": "item",
     })
-    session.state = "ss_new_item_confirm"
-    session.save(update_fields=["state", "context", "updated_at"])
-    sendt(token, session,
-         f"📦 <b>Item Found:</b>\n\n"
-         f"<b>Schedule:</b> {item.schedule}\n"
-         f"<b>Item No:</b> {item.serial_number}\n"
-         f"<b>Description:</b> {brief_desc}\n\n"
-         "Is this the correct item?",
-         keyboard=[["✅ Yes"], ["❌ No — re-enter"]])
-
-
-def handle_ss_new_item_confirm(token: str, session: BotSession, text: str):
-    t = text.strip().upper()
-    if "YES" in t:
-        _show_location_prompt(token, session, 'ss_new_location')
-    elif "NO" in t:
-        session.state = "ss_new_item_input"
-        session.save(update_fields=["state", "updated_at"])
-        sendt(token, session, "Type the item reference again (e.g. <code>A-12</code>):", remove_kb=True)
-    else:
-        sendt(token, session, "⚠️ Reply Yes or No.")
+    session.save(update_fields=["context", "updated_at"])
+    _show_location_prompt(token, session, 'ss_new_location')
 
 
 def show_ss_recipients(token: str, session: BotSession):
@@ -2545,14 +2465,10 @@ def dispatch(token: str, upload_chat_id: str, update: dict):
         handle_rly_loa_search(token, session, text or "")
     elif session.state == "rly_loa_list":
         handle_rly_loa_list(token, session, text or "")
-    elif session.state == "rly_loa_confirm":
-        handle_rly_loa_confirm(token, session, text or "")
     elif session.state == "rly_choose_type":
         handle_rly_choose_type(token, session, text or "")
     elif session.state == "rly_item_input":
         handle_rly_item_input(token, session, text or "")
-    elif session.state == "rly_item_confirm":
-        handle_rly_item_confirm(token, session, text or "")
     elif session.state == "rly_location":
         handle_rly_location(token, session, text or "")
     elif session.state == "rly_type_text":
@@ -2569,14 +2485,10 @@ def dispatch(token: str, upload_chat_id: str, update: dict):
         handle_ss_new_loa_search(token, session, user, text or "")
     elif session.state == "ss_new_loa_list":
         handle_ss_new_loa_list(token, session, user, text or "")
-    elif session.state == "ss_new_loa_confirm":
-        handle_ss_new_loa_confirm(token, session, text or "")
     elif session.state == "ss_new_choose_type":
         handle_ss_new_choose_type(token, session, text or "")
     elif session.state == "ss_new_item_input":
         handle_ss_new_item_input(token, session, text or "")
-    elif session.state == "ss_new_item_confirm":
-        handle_ss_new_item_confirm(token, session, text or "")
     elif session.state == "ss_new_location":
         handle_ss_location(token, session, text or "")
     elif session.state == "ss_new_recipients":

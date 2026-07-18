@@ -30,7 +30,7 @@ const menuItems = ref([
   { name: 'Location Progress', icon: 'i-carbon-location-filled', path: '/location-progress' },
   { name: 'Update Work',  icon: 'i-carbon-edit',      path: '/update-work' },
   { name: 'Supply Details',    icon: 'i-carbon-package',           path: '/supply-details' },
-  { name: 'Execution Details', icon: 'i-carbon-checkmark-outline', path: '/execution-details' },
+  { name: 'Execution Details', icon: 'i-park-shovel', path: '/execution-details' },
   { name: 'Site Register', icon: 'i-carbon-map',       path: '/site-register', siteRegisterOnly: true },
   { name: 'Financial Progress', icon: 'i-carbon-chart-line',  path: '/financial-progress' },
   { name: 'Notifications',   icon: 'i-carbon-notification', path: '/notifications' },
