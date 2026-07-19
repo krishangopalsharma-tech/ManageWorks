@@ -28,7 +28,6 @@ const menuItems = ref([
   { name: 'Work Details', icon: 'i-carbon-catalog',   path: '/work-details' },
   { name: 'Item Progress',     icon: 'i-carbon-chart-bar',      path: '/item-progress' },
   { name: 'Location Progress', icon: 'i-carbon-location-filled', path: '/location-progress' },
-  { name: 'Update Work',  icon: 'i-carbon-edit',      path: '/update-work' },
   { name: 'Supply Details',    icon: 'i-carbon-package',           path: '/supply-details' },
   { name: 'Execution Details', icon: 'i-park-shovel', path: '/execution-details' },
   { name: 'Site Register', icon: 'i-carbon-map',       path: '/site-register', siteRegisterOnly: true },
@@ -42,13 +41,14 @@ const menuItems = ref([
       { name: 'Installation Certificate', path: '/installation-certificate' },
     ],
   },
-  { name: 'Add New Work', icon: 'i-carbon-add-alt',   path: '/add-new-work' },
   {
     name: 'Settings',
     icon: 'i-carbon-settings',
     expanded: false,
     subItems: [
       { name: 'My Account',      path: '/settings/account' },
+      { name: 'Add New Work',    path: '/settings/add-new-work' },
+      { name: 'Update Work',     path: '/settings/update-work' },
       { name: 'User Management', path: '/settings/user-management', adminOnly: true },
       { name: 'SMTP Settings',   path: '/settings/smtp',            superAdminOnly: true },
       { name: 'Telegram Bot',    path: '/settings/telegram',        superAdminOnly: true },
