@@ -25,3 +25,19 @@ def is_assigned_consignee(user, work):
 
 def can_see_all_entries(user, work):
     return is_admin_user(user) or is_assigned_consignee(user, work)
+
+
+def pad_loa(raw):
+    """Normalise LOA to 14 digits — Excel/PDF often strips leading zeros."""
+    s = str(raw or '').strip()
+    if not s:
+        return s
+    # Drop any decimal point Excel appends (e.g. "890160138264.0")
+    if '.' in s:
+        try:
+            s = str(int(float(s)))
+        except (ValueError, TypeError):
+            pass
+    if s.isdigit() and len(s) < 14:
+        s = s.zfill(14)
+    return s

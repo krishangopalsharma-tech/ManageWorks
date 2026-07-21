@@ -1,6 +1,6 @@
 import pandas as pd
 from works.models import Work, WorkItem
-from works.utils import is_admin_user
+from works.utils import is_admin_user, pad_loa
 
 
 _HEADER_KEYWORDS = ('sch', 'serial', 's.no', 'item desc', 'description', 'qty', 'quantity', 'catagory', 'category')
@@ -58,22 +58,6 @@ def _is_blank(val):
     return pd.isna(val) or str(val).strip() == ''
 
 
-def _pad_loa(raw):
-    """Normalise LOA to 14 digits — Excel strips leading zeros from numeric cells."""
-    s = str(raw or '').strip()
-    if not s:
-        return s
-    # Drop any decimal point Excel appends (e.g. "890160138264.0")
-    if '.' in s:
-        try:
-            s = str(int(float(s)))
-        except (ValueError, TypeError):
-            pass
-    if s.isdigit() and len(s) < 14:
-        s = s.zfill(14)
-    return s
-
-
 _CATEGORY_MAP = {
     # New short codes
     'si': 'supply_installation',
@@ -100,7 +84,7 @@ def _parse_two_sheet(xf):
     """Parse new two-tab format: sheet 0 = details, sheet 1 = items with Category column."""
     df_meta = xf.parse(sheet_name=0, header=None)
 
-    loa_number         = _pad_loa(_meta_by_label(df_meta, 'loa'))
+    loa_number         = pad_loa(_meta_by_label(df_meta, 'loa'))
     tender_number      = _meta_by_label(df_meta, 'tender')
     date               = _meta_by_label(df_meta, 'date of loa', 'date')
     contract_agreement = _meta_by_label(df_meta, 'contract agreement', 'agreement')
@@ -148,7 +132,7 @@ def _parse_single_sheet(xf):
     """Parse old single-sheet format (metadata + items on same sheet, no Category column)."""
     df = xf.parse(sheet_name=0, header=None)
 
-    loa_number         = _pad_loa(_meta_by_label(df, 'loa'))
+    loa_number         = pad_loa(_meta_by_label(df, 'loa'))
     tender_number      = _meta_by_label(df, 'tender')
     date               = _meta_by_label(df, 'date of loa', 'date')
     contract_agreement = _meta_by_label(df, 'contract agreement', 'agreement')

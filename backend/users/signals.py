@@ -9,13 +9,9 @@ from works.models import Work
 def _capture_old_hrms_id_for_autoconvert(sender, instance, **kwargs):
     """
     Own dedicated capture, independent of works.signals._capture_old_consignee /
-    notifications.signals.on_work_pre_save. Both of those already stash the previous
-    hrms_id on instance._old_hrms_id, but they disagree on None-vs-'' normalization
-    and, since Django dispatches multiple receivers for the same signal/sender in
-    registration order, whichever runs last silently overwrites the other's value —
-    confirmed this actually happens (notifications' version runs second and lacks the
-    `or ''` normalization, clobbering works.signals' correctly-normalized ''). Rather
-    than depend on that fragile shared attribute, capture our own here.
+    notifications.signals.on_work_pre_save. Each pre_save receiver now writes to
+    its own instance attribute (_old_hrms_id / _old_hrms_id_notif / this one), so
+    there's no shared-attribute collision between them.
     """
     if instance.pk:
         try:

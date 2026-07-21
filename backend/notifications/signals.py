@@ -102,18 +102,18 @@ def on_work_pre_save(sender, instance, **kwargs):
     if instance.pk:
         try:
             old = sender.objects.get(pk=instance.pk)
-            instance._old_hrms_id = old.hrms_id
+            instance._old_hrms_id_notif = old.hrms_id
         except sender.DoesNotExist:
-            instance._old_hrms_id = None
+            instance._old_hrms_id_notif = None
     else:
-        instance._old_hrms_id = None
+        instance._old_hrms_id_notif = None
 
 
 @receiver(post_save, sender='works.Work')
 def on_work_saved(sender, instance, created, **kwargs):
     if created:
         return
-    old_hrms = getattr(instance, '_old_hrms_id', None)
+    old_hrms = getattr(instance, '_old_hrms_id_notif', None)
     new_hrms = instance.hrms_id
     if not old_hrms or old_hrms == new_hrms:
         return

@@ -1,6 +1,8 @@
 import re
 import pdfplumber
 
+from works.utils import pad_loa
+
 
 def _parse_date(date_str):
     """Convert DD-MM-YYYY → YYYY-MM-DD. Pass through YYYY-MM-DD unchanged."""
@@ -201,11 +203,7 @@ def parse_receipt_pdf(file_obj):
     if not loa_val:
         loa_val = _lv_find(lv, 'loa') or _lv_find(lv, 'po no') or _lv_find(lv, 'po/loa')
     if loa_val:
-        # Zero-pad to 14 digits if Excel/PDF stripped leading zeros
-        s = str(loa_val).strip()
-        if s.isdigit() and len(s) < 14:
-            s = s.zfill(14)
-        result['loa_number'] = s
+        result['loa_number'] = pad_loa(loa_val)
 
     # ── Contract Agreement Number ──────────────────────────────────────────────
     val = (_lv_find(lv, 'contract', 'agreement')

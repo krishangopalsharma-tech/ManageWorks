@@ -7,24 +7,9 @@ from rest_framework.exceptions import PermissionDenied
 
 from works.models import Work, WorkItem, WorkItemEntry
 from works.serializers import WorkItemEntrySerializer, WorkSerializer
-from works.utils import is_assigned_consignee
+from works.utils import is_assigned_consignee, pad_loa
 from work_details.views import _base_queryset
 from .pdf_parser import parse_receipt_pdf
-
-
-def _pad_loa(raw):
-    """Normalise LOA to 14 digits — mirrors excel_parser logic."""
-    s = str(raw or '').strip()
-    if not s:
-        return s
-    if '.' in s:
-        try:
-            s = str(int(float(s)))
-        except (ValueError, TypeError):
-            pass
-    if s.isdigit() and len(s) < 14:
-        s = s.zfill(14)
-    return s
 
 
 def _check_authenticated(user):
@@ -248,8 +233,8 @@ class ParseSupplyPDFsView(APIView):
 
             if work and not parsed.get('error'):
                 mismatch = []
-                pdf_loa = _pad_loa(parsed.get('loa_number') or '').lower()
-                work_loa = _pad_loa(work.loa_number or '').lower()
+                pdf_loa = pad_loa(parsed.get('loa_number') or '').lower()
+                work_loa = pad_loa(work.loa_number or '').lower()
                 if pdf_loa and work_loa and pdf_loa != work_loa:
                     mismatch.append(
                         f'LOA No. mismatch: PDF has "{parsed["loa_number"]}" '
