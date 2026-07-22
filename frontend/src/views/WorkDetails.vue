@@ -865,40 +865,66 @@ const generateWorkPDF = async () => {
       const sch = String(item.schedule || '').toUpperCase().trim()
       const isB = sch.startsWith('B')
 
+      // Column set mirrors the on-screen Lot History table: Supply items show
+      // Receive Note/Challan, Execution items show Location/Remark, S+I items
+      // (entries can be either type) show all four.
+      const cat = item.category || 'supply'
+      const showSupplyCols = cat !== 'execution'
+      const showExecCols   = cat !== 'supply'
+
+      const head = ['#', 'Type', 'Qty', 'Date']
+      if (showSupplyCols) head.push('Receive Note', 'Challan No')
+      if (showExecCols)   head.push('Location', 'Remark')
+      head.push('Submitted By')
+
+      const body = item.entries.map((e, idx) => {
+        const row = [
+          idx + 1,
+          e.entry_type === 'execution' ? 'Exec' : 'Supply',
+          `${e.quantity} ${item.unit}`,
+          e.date_of_receipt ? fmtDate(e.date_of_receipt) : fmtDateTime(e.submitted_at),
+        ]
+        if (showSupplyCols) row.push(e.receive_note_no || '—', e.challan_no || '—')
+        if (showExecCols)   row.push(e.location || '—', e.remarks || '—')
+        row.push((() => {
+          const u = e.submitted_by_user
+          if (!u) return '—'
+          const name = u.full_name || u.username
+          const desig = e.submitted_by_designation_display || u.designation
+          return desig ? `${name}\n(${desig})` : name
+        })())
+        return row
+      })
+
+      let colIdx = 0
+      const columnStyles = {
+        [colIdx++]: { cellWidth: 8, halign: 'center' },   // #
+        [colIdx++]: { cellWidth: 16 },                    // Type
+        [colIdx++]: { cellWidth: 22, halign: 'right' },   // Qty
+        [colIdx++]: { cellWidth: 24 },                    // Date
+      }
+      if (showSupplyCols) {
+        columnStyles[colIdx++] = { cellWidth: 'auto' }    // Receive Note
+        columnStyles[colIdx++] = { cellWidth: 'auto' }    // Challan No
+      }
+      if (showExecCols) {
+        columnStyles[colIdx++] = { cellWidth: 'auto' }    // Location
+        columnStyles[colIdx++] = { cellWidth: 'auto' }    // Remark
+      }
+      columnStyles[colIdx++] = { cellWidth: 30 }          // Submitted By
+
       autoTable(doc, {
         startY: doc.lastAutoTable.finalY + 2,
         margin: { left: mg + 3, right: mg },
         styles: tblFont,
         head: [
-          [{ content: `${item.schedule} · S.No ${item.serial_number}  —  ${(item.item_desc || '').substring(0, 70)}`, colSpan: 7, styles: { fillColor: [235, 245, 244], textColor: C_TEAL, fontStyle: 'bold', fontSize: 7 } }],
-          ['#', 'Type', 'Qty', 'Receive Note / Challan', 'UDM Entry', 'Submitted By', 'Date'],
+          [{ content: `${item.schedule} · S.No ${item.serial_number}  —  ${(item.item_desc || '').substring(0, 70)}`, colSpan: head.length, styles: { fillColor: [235, 245, 244], textColor: C_TEAL, fontStyle: 'bold', fontSize: 7 } }],
+          head,
         ],
-        body: item.entries.map((e, idx) => [
-          idx + 1,
-          e.entry_type === 'execution' ? 'Exec' : 'Supply',
-          `${e.quantity} ${item.unit}`,
-          [e.receive_note_no, e.challan_no].filter(Boolean).join(' / ') || '—',
-          e.udm_entry || '—',
-          (() => {
-            const u = e.submitted_by_user
-            if (!u) return '—'
-            const name = u.full_name || u.username
-            const desig = e.submitted_by_designation_display || u.designation
-            return desig ? `${name}\n(${desig})` : name
-          })(),
-          e.date_of_receipt ? fmtDate(e.date_of_receipt) : fmtDateTime(e.submitted_at),
-        ]),
+        body,
         headStyles: { fillColor: [241, 245, 249], textColor: [75, 85, 99], fontSize: 7, fontStyle: 'bold' },
         bodyStyles: { fontSize: 7 },
-        columnStyles: {
-          0: { cellWidth: 8, halign: 'center' },
-          1: { cellWidth: 16 },
-          2: { cellWidth: 24, halign: 'right' },
-          3: { cellWidth: 'auto' },
-          4: { cellWidth: 28 },
-          5: { cellWidth: 30 },
-          6: { cellWidth: 28 },
-        },
+        columnStyles,
         tableLineColor: [229, 231, 235],
         tableLineWidth: 0.15,
         didParseCell: (data) => {
