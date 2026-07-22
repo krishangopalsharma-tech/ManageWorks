@@ -350,8 +350,8 @@ const saveEditEntry = async () => {
                   <div class="flex items-center gap-1.5 mt-0.5">
                     <span v-if="item.category" class="text-[9px] font-semibold px-1.5 py-0.5 rounded"
                       :class="{
-                        'bg-violet-50 text-violet-600': item.category === 'supply_installation',
-                        'bg-orange-50 text-orange-600': item.category === 'execution',
+                        'bg-data-si/10 text-data-si':     item.category === 'supply_installation',
+                        'bg-data-exec/10 text-data-exec': item.category === 'execution',
                       }">
                       {{ item.category === 'supply_installation' ? 'S+I' : 'Execution' }}
                     </span>
@@ -364,18 +364,18 @@ const saveEditEntry = async () => {
                   {{ item.qty }} <span class="font-normal text-gray-400">{{ item.unit }}</span>
                 </td>
                 <td class="px-4 py-3.5 text-right text-xs font-semibold"
-                  :class="(item.executed_quantity || 0) > (item.qty || 0) ? 'text-orange-500' : 'text-gray-800'">
+                  :class="(item.executed_quantity || 0) > (item.qty || 0) ? 'text-status-critical' : 'text-gray-800'">
                   {{ item.executed_quantity || 0 }} <span class="font-normal text-gray-400">{{ item.unit }}</span>
                 </td>
                 <td class="px-4 py-3.5">
                   <div class="flex items-center gap-2">
                     <div class="flex-1 h-1.5 rounded-full overflow-hidden bg-gray-100">
                       <div class="h-full rounded-full transition-all duration-500"
-                        :class="execPct(item) > 100 ? 'bg-orange-400' : 'bg-accent-b'"
+                        :class="execPct(item) > 100 ? 'bg-status-critical' : 'bg-data-exec'"
                         :style="{ width: Math.min(execPct(item), 100) + '%' }"></div>
                     </div>
                     <span class="text-[10px] font-bold w-8 text-right"
-                      :class="execPct(item) > 100 ? 'text-orange-500' : 'text-gray-500'">
+                      :class="execPct(item) > 100 ? 'text-status-critical' : 'text-gray-500'">
                       {{ execPct(item) }}%
                     </span>
                   </div>
@@ -423,10 +423,10 @@ const saveEditEntry = async () => {
                     <div class="flex items-center gap-2">
                       <div class="flex-1 h-2 rounded-full overflow-hidden bg-gray-100">
                         <div class="h-full rounded-full transition-all duration-500"
-                          :class="execPct(lotPopupItem) > 100 ? 'bg-orange-400' : 'bg-accent-b'"
+                          :class="execPct(lotPopupItem) > 100 ? 'bg-status-critical' : 'bg-data-exec'"
                           :style="{ width: Math.min(execPct(lotPopupItem), 100) + '%' }"></div>
                       </div>
-                      <span class="text-xs font-bold w-10 text-right" :class="execPct(lotPopupItem) > 100 ? 'text-orange-500' : 'text-gray-600'">
+                      <span class="text-xs font-bold w-10 text-right" :class="execPct(lotPopupItem) > 100 ? 'text-status-critical' : 'text-gray-600'">
                         {{ execPct(lotPopupItem) }}%
                       </span>
                     </div>

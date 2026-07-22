@@ -72,6 +72,26 @@ export default defineConfig({
       danger:  '#B63A2E',
       neutral: '#9B958A',
 
+      // Progress data palette — one hue per tracked metric, used identically
+      // across category badges, progress bars, and doughnut/pie charts.
+      // Validated for CVD separation + contrast (dataviz skill, both surfaces).
+      data: {
+        supply:    '#0D9488',   // Supply (SS)
+        si:        '#7C3AED',   // Supply & Installation (S+I)
+        exec:      '#C17841',   // Execution (EE) — same value as accent-b
+        overall:   '#5856D6',   // Overall completion
+        financial: '#DB2777',   // Financial / billing progress
+      },
+
+      // Reserved status colors — completion-threshold state only, never
+      // reused as a category identity.
+      status: {
+        critical: '#D03B3B',   // < 50%, or "over target" flag
+        serious:  '#EC835A',   // 50–74%
+        warn:     '#FAB219',   // 75–99%
+        good:     '#0CA30C',   // 100%+
+      },
+
       // Borders
       border:         '#E6E2D7',
       'border-strong':'#CFC9B8',

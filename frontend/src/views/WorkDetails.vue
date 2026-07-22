@@ -395,8 +395,9 @@ const analytics = computed(() => {
 // ── ECharts management ────────────────────────────────────────────────────
 const chartInstances = {}
 
-const TEAL  = '#1D5F5E'
-const AMBER = '#C17841'
+const TEAL      = '#0D9488'   // Supply — data.supply
+const AMBER     = '#C17841'   // Execution — data.exec
+const FINANCIAL = '#DB2777'   // Financial — data.financial
 const PALETTE = [TEAL, AMBER, '#8b5cf6', '#10b981', '#f59e0b', '#6366f1', '#ec4899', '#14b8a6', '#f97316']
 
 const initOneChart = (id, option) => {
@@ -438,12 +439,12 @@ const initCharts = async () => {
       label: { show: false },
       emphasis: { label: { show: true, fontSize: 12, fontWeight: 700 } },
       data: [
-        { value: Math.max(a.schAQtyPct, 0),         name: 'Supplied', itemStyle: { color: '#1D5F5E' } },
+        { value: Math.max(a.schAQtyPct, 0),         name: 'Supplied', itemStyle: { color: TEAL } },
         { value: Math.max(100 - a.schAQtyPct, 0),   name: 'Pending',  itemStyle: { color: '#e5e5ea' } },
       ],
     }],
     graphic: [
-      { type: 'text', left: 'center', top: '34%', style: { text: `${a.schAQtyPct.toFixed(0)}%`, fill: '#1D5F5E', fontSize: 22, fontWeight: 700, textAlign: 'center' } },
+      { type: 'text', left: 'center', top: '34%', style: { text: `${a.schAQtyPct.toFixed(0)}%`, fill: TEAL, fontSize: 22, fontWeight: 700, textAlign: 'center' } },
       { type: 'text', left: 'center', top: '50%', style: { text: 'supply', fill: '#9ca3af', fontSize: 10, textAlign: 'center' } },
     ],
   })
@@ -458,12 +459,12 @@ const initCharts = async () => {
       label: { show: false },
       emphasis: { label: { show: true, fontSize: 12, fontWeight: 700 } },
       data: [
-        { value: Math.max(a.schBQtyPct, 0),         name: 'Executed', itemStyle: { color: '#34c759' } },
+        { value: Math.max(a.schBQtyPct, 0),         name: 'Executed', itemStyle: { color: AMBER } },
         { value: Math.max(100 - a.schBQtyPct, 0),   name: 'Pending',  itemStyle: { color: '#e5e5ea' } },
       ],
     }],
     graphic: [
-      { type: 'text', left: 'center', top: '34%', style: { text: `${a.schBQtyPct.toFixed(0)}%`, fill: '#34c759', fontSize: 22, fontWeight: 700, textAlign: 'center' } },
+      { type: 'text', left: 'center', top: '34%', style: { text: `${a.schBQtyPct.toFixed(0)}%`, fill: AMBER, fontSize: 22, fontWeight: 700, textAlign: 'center' } },
       { type: 'text', left: 'center', top: '50%', style: { text: 'execution', fill: '#9ca3af', fontSize: 10, textAlign: 'center' } },
     ],
   })
@@ -480,7 +481,7 @@ const initCharts = async () => {
     yAxis: { type: 'value', axisLabel: { formatter: v => `₹${v}L`, fontSize: 9 }, splitLine: { lineStyle: { type: 'dashed', color: '#f3f4f6' } } },
     series: [
       {
-        name: 'Earned', type: 'bar', barMaxWidth: 36, itemStyle: { color: TEAL, borderRadius: [3, 3, 0, 0] },
+        name: 'Earned', type: 'bar', barMaxWidth: 36, itemStyle: { color: FINANCIAL, borderRadius: [3, 3, 0, 0] },
         data: [L(a.earnedTotal), L(a.schAEarned), L(a.schBEarned)],
         label: { show: true, position: 'top', fontSize: 9, formatter: p => `₹${p.value}L` },
       },
@@ -526,7 +527,7 @@ const initCharts = async () => {
       axisLabel: { fontSize: 9, width: 245, overflow: 'truncate' },
     },
     series: [
-      { name: 'Earned',  type: 'bar', stack: 'v', barMaxWidth: 18, itemStyle: { color: TEAL  }, data: top10Rev.map(i => L(i.earned))  },
+      { name: 'Earned',  type: 'bar', stack: 'v', barMaxWidth: 18, itemStyle: { color: FINANCIAL  }, data: top10Rev.map(i => L(i.earned))  },
       { name: 'Pending', type: 'bar', stack: 'v', barMaxWidth: 18, itemStyle: { color: '#fca5a5' }, data: top10Rev.map(i => L(i.pending)) },
     ],
   })
@@ -564,12 +565,12 @@ const initCharts = async () => {
       label: { show: false },
       emphasis: { label: { show: true, fontSize: 11, fontWeight: 700 } },
       data: [
-        { value: a.earnedTotal,               name: 'Earned',  itemStyle: { color: '#ff9500' } },
+        { value: a.earnedTotal,               name: 'Earned',  itemStyle: { color: FINANCIAL } },
         { value: Math.max(a.pendingTotal, 0), name: 'Pending', itemStyle: { color: '#e5e5ea' } },
       ].filter(d => d.value > 0),
     }],
     graphic: [
-      { type: 'text', left: 'center', top: '34%', style: { text: `${a.overallPct.toFixed(0)}%`, fill: '#ff9500', fontSize: 22, fontWeight: 700, textAlign: 'center' } },
+      { type: 'text', left: 'center', top: '34%', style: { text: `${a.overallPct.toFixed(0)}%`, fill: FINANCIAL, fontSize: 22, fontWeight: 700, textAlign: 'center' } },
       { type: 'text', left: 'center', top: '50%', style: { text: 'earned', fill: '#9ca3af', fontSize: 10, textAlign: 'center' } },
     ],
   })
@@ -976,10 +977,10 @@ const generateWorkPDF = async () => {
                 <!-- Middle: 4 progress badges -->
                 <div class="flex gap-2 flex-shrink-0">
                   <div v-for="d in [
-                    { label: 'SUPPLY',    pct: workStats[work.id]?.supply    ?? 0, bg: '#F0FDFA', border: '#99F6E4', text: '#0F766E' },
-                    { label: 'EXECUTION', pct: workStats[work.id]?.execution ?? 0, bg: '#EFF6FF', border: '#BFDBFE', text: '#1D4ED8' },
-                    { label: 'OVERALL',   pct: workStats[work.id]?.overall   ?? 0, bg: '#F5F3FF', border: '#C4B5FD', text: '#6D28D9' },
-                    { label: 'FINANCIAL', pct: workStats[work.id]?.financial ?? 0, bg: '#FFFBEB', border: '#FDE68A', text: '#B45309' },
+                    { label: 'SUPPLY',    pct: workStats[work.id]?.supply    ?? 0, bg: '#F0FDFA', border: '#99F6E4', text: '#0D9488' },
+                    { label: 'EXECUTION', pct: workStats[work.id]?.execution ?? 0, bg: '#FFFBEB', border: '#FDE68A', text: '#C17841' },
+                    { label: 'OVERALL',   pct: workStats[work.id]?.overall   ?? 0, bg: '#F5F3FF', border: '#C4B5FD', text: '#5856D6' },
+                    { label: 'FINANCIAL', pct: workStats[work.id]?.financial ?? 0, bg: '#FFF1F2', border: '#FECDD3', text: '#DB2777' },
                   ]" :key="d.label"
                     class="flex flex-col items-center px-3 py-1.5 rounded-md min-w-[60px]"
                     :style="`background:${d.bg};border:1px solid ${d.border}`">
@@ -1075,26 +1076,26 @@ const generateWorkPDF = async () => {
               <div class="text-base font-extrabold text-gray-900 leading-tight">{{ fmtCr(analytics?.contractTotal) }}</div>
             </div>
             <div class="bg-gray-50 border border-gray-200 rounded-xl p-3 relative overflow-hidden">
-              <div class="absolute top-0 left-0 right-0 h-0.5 bg-[#1D5F5E]"></div>
+              <div class="absolute top-0 left-0 right-0 h-0.5 bg-data-financial"></div>
               <div class="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-0.5 mb-1.5">Earned</div>
-              <div class="text-base font-extrabold text-[#1D5F5E] leading-tight">{{ fmtCr(analytics?.earnedTotal) }}</div>
+              <div class="text-base font-extrabold text-data-financial leading-tight">{{ fmtCr(analytics?.earnedTotal) }}</div>
               <div class="text-[10px] text-gray-400 mt-0.5">{{ analytics?.overallPct?.toFixed(1) }}% overall</div>
             </div>
             <div class="bg-gray-50 border border-gray-200 rounded-xl p-3 relative overflow-hidden">
-              <div class="absolute top-0 left-0 right-0 h-0.5 bg-red-400"></div>
+              <div class="absolute top-0 left-0 right-0 h-0.5 bg-status-critical"></div>
               <div class="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-0.5 mb-1.5">Pending</div>
-              <div class="text-base font-extrabold text-red-500 leading-tight">{{ fmtCr(analytics?.pendingTotal) }}</div>
+              <div class="text-base font-extrabold text-status-critical leading-tight">{{ fmtCr(analytics?.pendingTotal) }}</div>
             </div>
             <div class="bg-gray-50 border border-gray-200 rounded-xl p-3 relative overflow-hidden">
-              <div class="absolute top-0 left-0 right-0 h-0.5 bg-[#1D5F5E]"></div>
+              <div class="absolute top-0 left-0 right-0 h-0.5 bg-data-supply"></div>
               <div class="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-0.5 mb-1.5">Supply (Sch A)</div>
-              <div class="text-base font-extrabold text-[#1D5F5E] leading-tight">{{ analytics?.schAPct?.toFixed(1) }}%</div>
+              <div class="text-base font-extrabold text-data-supply leading-tight">{{ analytics?.schAPct?.toFixed(1) }}%</div>
               <div class="text-[10px] text-gray-400 mt-0.5">{{ analytics?.schACount }} items</div>
             </div>
             <div class="bg-gray-50 border border-gray-200 rounded-xl p-3 relative overflow-hidden">
-              <div class="absolute top-0 left-0 right-0 h-0.5 bg-[#C17841]"></div>
+              <div class="absolute top-0 left-0 right-0 h-0.5 bg-data-exec"></div>
               <div class="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-0.5 mb-1.5">Execution (Sch B)</div>
-              <div class="text-base font-extrabold text-[#C17841] leading-tight">{{ analytics?.schBPct?.toFixed(1) }}%</div>
+              <div class="text-base font-extrabold text-data-exec leading-tight">{{ analytics?.schBPct?.toFixed(1) }}%</div>
               <div class="text-[10px] text-gray-400 mt-0.5">{{ analytics?.schBCount }} items</div>
             </div>
             <div class="bg-gray-50 border border-gray-200 rounded-xl p-3 relative overflow-hidden">
@@ -1221,21 +1222,21 @@ const generateWorkPDF = async () => {
               <button @click="toggleWdCategory('supply')"
                 class="px-3 py-2 rounded-xl text-[11px] font-bold border transition-all"
                 :class="wdSelectedCategories.includes('supply')
-                  ? 'bg-teal-50 border-teal-300 text-teal-700'
+                  ? 'bg-data-supply/10 border-data-supply/30 text-data-supply'
                   : 'bg-white border-gray-200 text-gray-400'">
                 Supply
               </button>
               <button @click="toggleWdCategory('supply_installation')"
                 class="px-3 py-2 rounded-xl text-[11px] font-bold border transition-all"
                 :class="wdSelectedCategories.includes('supply_installation')
-                  ? 'bg-violet-50 border-violet-300 text-violet-700'
+                  ? 'bg-data-si/10 border-data-si/30 text-data-si'
                   : 'bg-white border-gray-200 text-gray-400'">
                 S+I
               </button>
               <button @click="toggleWdCategory('execution')"
                 class="px-3 py-2 rounded-xl text-[11px] font-bold border transition-all"
                 :class="wdSelectedCategories.includes('execution')
-                  ? 'bg-orange-50 border-orange-300 text-orange-700'
+                  ? 'bg-data-exec/10 border-data-exec/30 text-data-exec'
                   : 'bg-white border-gray-200 text-gray-400'">
                 Execution
               </button>

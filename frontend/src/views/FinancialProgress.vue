@@ -14,11 +14,14 @@ const fmtDate = (val) => {
 const fmt    = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 })
 const fmtAmt = (v) => (v != null && v !== 0) ? '₹' + fmt.format(v) : '—'
 
+// Reserved status ramp (uno.config.js theme.colors.status) — monotonic
+// red -> orange -> amber -> green, matching the completion-threshold bars
+// used everywhere else in the app.
 function progressColor(pct) {
-  if (pct >= 100) return '#22c55e'
-  if (pct >= 75)  return '#3b82f6'
-  if (pct >= 50)  return '#f59e0b'
-  return '#ef4444'
+  if (pct >= 100) return '#0CA30C'   // good
+  if (pct >= 75)  return '#FAB219'   // warn
+  if (pct >= 50)  return '#EC835A'   // serious
+  return '#D03B3B'                   // critical
 }
 
 // Extract "Bill 1" from "WR/ADI/S&T/2025/0027/B1/R1"

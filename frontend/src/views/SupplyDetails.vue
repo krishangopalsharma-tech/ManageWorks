@@ -573,8 +573,8 @@ const saveEditEntry = async () => {
                   <div class="flex items-center gap-1.5 mt-0.5">
                     <span v-if="item.category" class="text-[9px] font-semibold px-1.5 py-0.5 rounded"
                       :class="{
-                        'bg-teal-50 text-teal-600':     item.category === 'supply',
-                        'bg-violet-50 text-violet-600': item.category === 'supply_installation',
+                        'bg-data-supply/10 text-data-supply': item.category === 'supply',
+                        'bg-data-si/10 text-data-si':         item.category === 'supply_installation',
                       }">
                       {{ item.category === 'supply' ? 'Supply' : 'S+I' }}
                     </span>
@@ -587,18 +587,18 @@ const saveEditEntry = async () => {
                   {{ item.qty }} <span class="font-normal text-gray-400">{{ item.unit }}</span>
                 </td>
                 <td class="px-4 py-3.5 text-right text-xs font-semibold"
-                  :class="(item.supplied_quantity || 0) > (item.qty || 0) ? 'text-orange-500' : 'text-gray-800'">
+                  :class="(item.supplied_quantity || 0) > (item.qty || 0) ? 'text-status-critical' : 'text-gray-800'">
                   {{ item.supplied_quantity || 0 }} <span class="font-normal text-gray-400">{{ item.unit }}</span>
                 </td>
                 <td class="px-4 py-3.5">
                   <div class="flex items-center gap-2">
                     <div class="flex-1 h-1.5 rounded-full overflow-hidden bg-gray-100">
                       <div class="h-full rounded-full transition-all duration-500"
-                        :class="supplyPct(item) > 100 ? 'bg-orange-400' : 'bg-teal-500'"
+                        :class="supplyPct(item) > 100 ? 'bg-status-critical' : 'bg-data-supply'"
                         :style="{ width: Math.min(supplyPct(item), 100) + '%' }"></div>
                     </div>
                     <span class="text-[10px] font-bold w-8 text-right"
-                      :class="supplyPct(item) > 100 ? 'text-orange-500' : 'text-gray-500'">
+                      :class="supplyPct(item) > 100 ? 'text-status-critical' : 'text-gray-500'">
                       {{ supplyPct(item) }}%
                     </span>
                   </div>
@@ -646,10 +646,10 @@ const saveEditEntry = async () => {
                     <div class="flex items-center gap-2">
                       <div class="flex-1 h-2 rounded-full overflow-hidden bg-gray-100">
                         <div class="h-full rounded-full transition-all duration-500"
-                          :class="supplyPct(lotPopupItem) > 100 ? 'bg-orange-400' : 'bg-accent'"
+                          :class="supplyPct(lotPopupItem) > 100 ? 'bg-status-critical' : 'bg-data-supply'"
                           :style="{ width: Math.min(supplyPct(lotPopupItem), 100) + '%' }"></div>
                       </div>
-                      <span class="text-xs font-bold w-10 text-right" :class="supplyPct(lotPopupItem) > 100 ? 'text-orange-500' : 'text-gray-600'">
+                      <span class="text-xs font-bold w-10 text-right" :class="supplyPct(lotPopupItem) > 100 ? 'text-status-critical' : 'text-gray-600'">
                         {{ supplyPct(lotPopupItem) }}%
                       </span>
                     </div>

@@ -411,14 +411,14 @@ onBeforeUnmount(() => { document.removeEventListener('click', closeDropdown); cl
           <button @click="toggleCategory('supply_installation')"
             class="px-3 py-2 rounded-xl text-[11px] font-bold border transition-all"
             :class="selectedCategories.includes('supply_installation')
-              ? 'bg-violet-50 border-violet-300 text-violet-700'
+              ? 'bg-data-si/10 border-data-si/30 text-data-si'
               : 'bg-white border-gray-200 text-gray-400'">
             S+I
           </button>
           <button @click="toggleCategory('execution')"
             class="px-3 py-2 rounded-xl text-[11px] font-bold border transition-all"
             :class="selectedCategories.includes('execution')
-              ? 'bg-orange-50 border-orange-300 text-orange-700'
+              ? 'bg-data-exec/10 border-data-exec/30 text-data-exec'
               : 'bg-white border-gray-200 text-gray-400'">
             Execution
           </button>
@@ -623,11 +623,11 @@ onBeforeUnmount(() => { document.removeEventListener('click', closeDropdown); cl
                 <div class="flex items-center gap-2">
                   <div class="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                     <div class="h-full rounded-full transition-all duration-500"
-                      :class="row.progress_pct > 100 ? 'bg-orange-400' : 'bg-accent-b'"
+                      :class="row.progress_pct > 100 ? 'bg-status-critical' : 'bg-data-exec'"
                       :style="{ width: Math.min(row.progress_pct, 100) + '%' }"></div>
                   </div>
                   <span class="text-[10px] font-bold w-8 text-right"
-                    :class="row.progress_pct > 100 ? 'text-orange-500' : 'text-gray-500'">
+                    :class="row.progress_pct > 100 ? 'text-status-critical' : 'text-gray-500'">
                     {{ row.progress_pct }}%
                   </span>
                 </div>

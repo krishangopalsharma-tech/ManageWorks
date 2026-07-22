@@ -535,7 +535,11 @@ const onResizerMousedown = (e) => {
                       <span v-if="item.schedule" class="px-1.5 py-0.5 rounded font-mono font-bold text-xs" style="background: var(--color-surface-secondary); color: var(--color-text-secondary);">{{ item.schedule }}</span>
                       <span v-if="item.serial_number" class="text-xs" style="color: var(--color-text-tertiary);">#{{ item.serial_number }}</span>
                       <span class="text-xs px-1.5 py-0.5 rounded"
-                        :style="item.category === 'execution' ? 'background:#dcfce7;color:#166534;' : 'background:#dbeafe;color:#1e40af;'">
+                        :class="{
+                          'bg-data-supply/10 text-data-supply': item.category === 'supply',
+                          'bg-data-si/10 text-data-si':         item.category === 'supply_installation',
+                          'bg-data-exec/10 text-data-exec':     item.category === 'execution',
+                        }">
                         {{ item.category || 'N/A' }}
                       </span>
                     </div>

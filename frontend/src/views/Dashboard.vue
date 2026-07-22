@@ -77,10 +77,18 @@ const mkDoughnut = (val, color) => ({
   }],
 })
 
-const supplyData  = computed(() => mkDoughnut(stats.value?.supply     || 0, '#1D5F5E'))
-const execData    = computed(() => mkDoughnut(stats.value?.execution  || 0, '#34c759'))
-const overallData = computed(() => mkDoughnut(stats.value?.overall    || 0, '#5856d6'))
-const finData     = computed(() => mkDoughnut(stats.value?.financial  || 0, '#ff9500'))
+// Progress data palette — matches uno.config.js theme.colors.data, kept in
+// sync with the category badges / progress bars across ItemProgress,
+// WorkDetails, SupplyDetails, ExecutionDetails, LocationProgress.
+const DATA_SUPPLY    = '#0D9488'
+const DATA_EXEC      = '#C17841'
+const DATA_OVERALL   = '#5856D6'
+const DATA_FINANCIAL = '#DB2777'
+
+const supplyData  = computed(() => mkDoughnut(stats.value?.supply     || 0, DATA_SUPPLY))
+const execData    = computed(() => mkDoughnut(stats.value?.execution  || 0, DATA_EXEC))
+const overallData = computed(() => mkDoughnut(stats.value?.overall    || 0, DATA_OVERALL))
+const finData     = computed(() => mkDoughnut(stats.value?.financial  || 0, DATA_FINANCIAL))
 
 // ── Bar chart ──────────────────────────────────────────────────────────────
 const barData = computed(() => ({
@@ -89,8 +97,8 @@ const barData = computed(() => ({
     {
       label: 'Supply',
       data:  trendData.value.map(d => d.supply ?? 0),
-      backgroundColor: '#1D5F5E',
-      hoverBackgroundColor: '#174a49',
+      backgroundColor: DATA_SUPPLY,
+      hoverBackgroundColor: '#0B7A70',
       borderRadius: 6,
       borderSkipped: false,
       maxBarThickness: 32,
@@ -98,8 +106,8 @@ const barData = computed(() => ({
     {
       label: 'Execution',
       data:  trendData.value.map(d => d.execution ?? 0),
-      backgroundColor: 'rgba(52, 199, 89, 0.85)',
-      hoverBackgroundColor: '#34c759',
+      backgroundColor: 'rgba(193, 120, 65, 0.85)',
+      hoverBackgroundColor: DATA_EXEC,
       borderRadius: 6,
       borderSkipped: false,
       maxBarThickness: 32,
@@ -107,8 +115,8 @@ const barData = computed(() => ({
     {
       label: 'Financial',
       data:  trendData.value.map(d => d.financial ?? 0),
-      backgroundColor: 'rgba(255, 149, 0, 0.85)',
-      hoverBackgroundColor: '#ff9500',
+      backgroundColor: 'rgba(219, 39, 119, 0.85)',
+      hoverBackgroundColor: DATA_FINANCIAL,
       borderRadius: 6,
       borderSkipped: false,
       maxBarThickness: 32,
@@ -254,7 +262,7 @@ onBeforeUnmount(() => {
               <span class="absolute text-base font-extrabold text-gray-800 z-10 pointer-events-none">{{ stats?.supply || 0 }}%</span>
               <Doughnut :data="supplyData" :options="doughnutOptions" />
             </div>
-            <div class="mt-2 w-2 h-2 rounded-full bg-[#1D5F5E]"></div>
+            <div class="mt-2 w-2 h-2 rounded-full bg-data-supply"></div>
           </div>
 
           <div class="flex flex-col items-center bg-white border border-gray-100 rounded-2xl py-4 px-3 soft-shadow">
@@ -263,7 +271,7 @@ onBeforeUnmount(() => {
               <span class="absolute text-base font-extrabold text-gray-800 z-10 pointer-events-none">{{ stats?.execution || 0 }}%</span>
               <Doughnut :data="execData" :options="doughnutOptions" />
             </div>
-            <div class="mt-2 w-2 h-2 rounded-full bg-[#34c759]"></div>
+            <div class="mt-2 w-2 h-2 rounded-full bg-data-exec"></div>
           </div>
 
           <div class="flex flex-col items-center bg-white border border-gray-100 rounded-2xl py-4 px-3 soft-shadow">
@@ -272,7 +280,7 @@ onBeforeUnmount(() => {
               <span class="absolute text-base font-extrabold text-gray-800 z-10 pointer-events-none">{{ stats?.overall || 0 }}%</span>
               <Doughnut :data="overallData" :options="doughnutOptions" />
             </div>
-            <div class="mt-2 w-2 h-2 rounded-full bg-[#5856d6]"></div>
+            <div class="mt-2 w-2 h-2 rounded-full bg-data-overall"></div>
           </div>
 
           <div class="flex flex-col items-center bg-white border border-gray-100 rounded-2xl py-4 px-3 soft-shadow">
@@ -281,7 +289,7 @@ onBeforeUnmount(() => {
               <span class="absolute text-base font-extrabold text-gray-800 z-10 pointer-events-none">{{ stats?.financial || 0 }}%</span>
               <Doughnut :data="finData" :options="doughnutOptions" />
             </div>
-            <div class="mt-2 w-2 h-2 rounded-full bg-[#ff9500]"></div>
+            <div class="mt-2 w-2 h-2 rounded-full bg-data-financial"></div>
           </div>
 
         </div>
@@ -398,9 +406,9 @@ onBeforeUnmount(() => {
               </div>
               <div class="flex items-center gap-1.5 flex-shrink-0">
                 <div class="flex gap-1 items-center">
-                  <div v-if="loa.supply_update && !seenLoas.has(loa.id)" class="w-2 h-2 rounded-full bg-[#1D5F5E]" title="Recent supply update"></div>
-                  <div v-if="loa.execution_update && !seenLoas.has(loa.id)" class="w-2 h-2 rounded-full bg-[#34c759]" title="Recent execution update"></div>
-                  <div v-if="loa.financial_update && !seenLoas.has(loa.id)" class="w-2 h-2 rounded-full bg-[#ff9500]" title="Recent bill upload"></div>
+                  <div v-if="loa.supply_update && !seenLoas.has(loa.id)" class="w-2 h-2 rounded-full bg-data-supply" title="Recent supply update"></div>
+                  <div v-if="loa.execution_update && !seenLoas.has(loa.id)" class="w-2 h-2 rounded-full bg-data-exec" title="Recent execution update"></div>
+                  <div v-if="loa.financial_update && !seenLoas.has(loa.id)" class="w-2 h-2 rounded-full bg-data-financial" title="Recent bill upload"></div>
                 </div>
                 <div class="w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition-all"
                   :class="selectedLoas.includes(loa.id) ? 'bg-[#1D5F5E] border-[#1D5F5E]' : 'border-gray-300 bg-white'">
