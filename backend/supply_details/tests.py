@@ -30,12 +30,40 @@ class TestSupplyDetailsPermissions:
         self.si_item = WorkItem.objects.create(work=self.work1, schedule='A', serial_number='2', category=WorkItem.CATEGORY_SUPPLY_INSTALLATION)
         self.ee_item = WorkItem.objects.create(work=self.work1, schedule='B', serial_number='1', category=WorkItem.CATEGORY_EXECUTION)
 
-    def test_everyone_can_search_all_loas(self):
-        for user in (self.admin, self.consignee1, self.consignee2):
-            self.client.force_login(user)
-            response = self.client.get('/api/supply-details/works/search/')
-            assert response.status_code == status.HTTP_200_OK
-            assert 'LOA-SD-001' in [w['loa_number'] for w in response.json()]
+    def test_admin_can_search_all_loas(self):
+        self.client.force_login(self.admin)
+        response = self.client.get('/api/supply-details/works/search/')
+        assert response.status_code == status.HTTP_200_OK
+        assert 'LOA-SD-001' in [w['loa_number'] for w in response.json()]
+
+    def test_assigned_consignee_sees_own_loa_in_search(self):
+        self.client.force_login(self.consignee1)
+        response = self.client.get('/api/supply-details/works/search/')
+        assert response.status_code == status.HTTP_200_OK
+        assert 'LOA-SD-001' in [w['loa_number'] for w in response.json()]
+
+    def test_other_consignee_does_not_see_non_owned_loa_in_search(self):
+        self.client.force_login(self.consignee2)
+        response = self.client.get('/api/supply-details/works/search/')
+        assert response.status_code == status.HTTP_200_OK
+        assert 'LOA-SD-001' not in [w['loa_number'] for w in response.json()]
+
+    def test_other_consignee_cannot_retrieve_non_owned_loa(self):
+        self.client.force_login(self.consignee2)
+        response = self.client.get(f'/api/supply-details/works/{self.work1.pk}/detail/')
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_other_consignee_cannot_read_entries_on_non_owned_item(self):
+        self.client.force_login(self.consignee2)
+        response = self.client.get(f'/api/supply-details/items/{self.ss_item.pk}/entries/')
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_admin_can_retrieve_any_loa_and_read_entries(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(f'/api/supply-details/works/{self.work1.pk}/detail/')
+        assert response.status_code == status.HTTP_200_OK
+        response = self.client.get(f'/api/supply-details/items/{self.ss_item.pk}/entries/')
+        assert response.status_code == status.HTTP_200_OK
 
     def test_assigned_consignee_can_submit_ss_entry(self):
         self.client.force_login(self.consignee1)

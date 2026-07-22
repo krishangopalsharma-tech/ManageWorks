@@ -13,6 +13,7 @@ class UserProfile(models.Model):
     mobile_number  = models.CharField(max_length=20, blank=True, default='')
     is_approved    = models.BooleanField(default=False)
     role           = models.CharField(max_length=20, choices=ROLE_CHOICES, default='consignee')
+    is_super_admin = models.BooleanField(default=False)
     created_at     = models.DateTimeField(auto_now_add=True)
     plain_password = models.CharField(max_length=128, blank=True, default='')
 

@@ -56,10 +56,22 @@ class SiteRegisterView(APIView):
         if not _can_access_site_register(request.user):
             raise PermissionDenied("Access restricted to consignees and admins.")
 
-        # Admins see all works; consignees only see works assigned to them
+        # Admins see all works. A consignee sees their own assigned work(s) in
+        # full, plus any other work where they've personally authored an SR
+        # entry (so an unassigned consignee still finds entries they made on
+        # someone else's LOA) — thread-level filtering below then limits what
+        # shows for those non-owned works to just their own entries.
+        is_admin_req = _is_admin(request.user)
         qs = Work.objects.prefetch_related("items").order_by("contractor_name")
-        if not _is_admin(request.user):
-            qs = qs.filter(hrms_id=request.user.username)
+        owned_ids = None
+        if not is_admin_req:
+            owned_ids = set(
+                Work.objects.filter(hrms_id=request.user.username).values_list('pk', flat=True)
+            )
+            authored_ids = set(
+                SiteRegisterThread.objects.filter(created_by=request.user).values_list('work_id', flat=True)
+            )
+            qs = qs.filter(pk__in=owned_ids | authored_ids)
 
         works = list(qs)
 
@@ -128,6 +140,8 @@ class SiteRegisterView(APIView):
             return p.designation if p else ''
 
         for t in threads_qs:
+            if owned_ids is not None and t.work_id not in owned_ids and t.created_by_id != request.user.id:
+                continue
             all_msgs = [
                 {
                     'id':                m.id,
@@ -283,6 +297,11 @@ class LoaPartiesListView(APIView):
         works = Work.objects.order_by('contractor_name', 'loa_number')
         if is_consignee:
             works = works.filter(hrms_id=request.user.username)
+            if not works.exists():
+                return Response(
+                    {'error': 'No assigned LOA — nothing to manage here.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
         mappings = (
             WorkContractorTelegram.objects
             .filter(is_active=True)

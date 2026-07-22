@@ -15,7 +15,7 @@ class TestFinancialProgressBillPermissions:
         self.client = Client()
 
         self.super_admin = User.objects.create_user(username='admin', password='password123')
-        UserProfile.objects.create(user=self.super_admin, designation='Super Admin', is_approved=True, role='admin')
+        UserProfile.objects.create(user=self.super_admin, designation='Super Admin', is_approved=True, role='admin', is_super_admin=True)
 
         self.plain_admin = User.objects.create_user(username='admin2', password='password123')
         UserProfile.objects.create(user=self.plain_admin, designation='Admin', is_approved=True, role='admin')

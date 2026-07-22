@@ -90,9 +90,19 @@ class TestSiteRegister:
         self.client.force_login(self.admin)
         response = self.client.get('/api/site-register/parties/')
         assert response.status_code == status.HTTP_200_OK
-        
-        # Non-admin forbidden
+
+        # consignee1 owns work1 — sees their own LOA, not forbidden
         self.client.force_login(self.consignee1)
+        response = self.client.get('/api/site-register/parties/')
+        assert response.status_code == status.HTTP_200_OK
+        loa_numbers = [loa['loa_number'] for group in response.json() for loa in group['loas']]
+        assert 'LOA-2026-001' in loa_numbers
+        assert 'LOA-2026-002' not in loa_numbers
+
+    def test_loa_parties_list_forbidden_for_unassigned_consignee(self):
+        unassigned = User.objects.create_user(username='noloa', password='password123')
+        UserProfile.objects.create(user=unassigned, designation='JE-3', is_approved=True, role='consignee')
+        self.client.force_login(unassigned)
         response = self.client.get('/api/site-register/parties/')
         assert response.status_code == status.HTTP_403_FORBIDDEN
 

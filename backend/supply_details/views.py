@@ -7,7 +7,7 @@ from rest_framework.exceptions import PermissionDenied
 
 from works.models import Work, WorkItem, WorkItemEntry
 from works.serializers import WorkItemEntrySerializer, WorkSerializer
-from works.utils import is_assigned_consignee, pad_loa
+from works.utils import is_assigned_consignee, is_admin_user, pad_loa
 from work_details.views import _base_queryset
 from .pdf_parser import parse_receipt_pdf
 
@@ -28,16 +28,19 @@ def _sync_supplied_quantity(work_item):
     work_item.save(update_fields=['supplied_quantity'])
 
 
-# ── Work list — unscoped ───────────────────────────────────────────────────────
-# Every consignee (assigned or not) needs to find any LOA to view its Supply
-# Details (SS + supply-portion of SI items); actual entry submission is gated
-# per-item below (assigned consignee only, per category).
+# ── Work list — scoped ──────────────────────────────────────────────────────────
+# Admin/Super Admin see every LOA (view-only). A consignee only sees Supply
+# Details for their own assigned LOA — no visibility into anyone else's, and an
+# unassigned consignee sees none at all (matches the access matrix: "No access").
 
 class SupplyWorkSearchView(generics.ListAPIView):
     serializer_class = WorkSerializer
 
     def get_queryset(self):
         queryset = _base_queryset()
+        user = self.request.user
+        if not is_admin_user(user):
+            queryset = queryset.filter(hrms_id=user.username)
         query = self.request.query_params.get('q', None)
         if query:
             queryset = queryset.filter(
@@ -55,7 +58,12 @@ class SupplyWorkSearchView(generics.ListAPIView):
 
 class SupplyWorkRetrieveView(generics.RetrieveAPIView):
     serializer_class = WorkSerializer
-    queryset = _base_queryset()
+
+    def get_queryset(self):
+        queryset = _base_queryset()
+        if not is_admin_user(self.request.user):
+            queryset = queryset.filter(hrms_id=self.request.user.username)
+        return queryset
 
     def retrieve(self, request, *args, **kwargs):
         if not request.user.is_authenticated:
@@ -73,6 +81,18 @@ class SupplyEntryView(APIView):
 
     def get(self, request, item_id):
         _check_authenticated(request.user)
+
+        try:
+            work_item = WorkItem.objects.select_related('work').get(pk=item_id)
+        except WorkItem.DoesNotExist:
+            return Response({'error': 'Item not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if not is_admin_user(request.user) and not is_assigned_consignee(request.user, work_item.work):
+            return Response(
+                {'error': 'You do not have access to this LOA\'s supply details.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         entries = (
             WorkItemEntry.objects
             .filter(work_item_id=item_id, entry_type='supply')

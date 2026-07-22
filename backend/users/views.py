@@ -231,15 +231,23 @@ class RevokeUserView(APIView):
 
 
 def _is_super_admin(user):
-    """Stricter than _is_admin — only the single 'admin' User ID, for
-    sensitive settings (SMTP/Telegram bot credentials) other admins
-    should not be able to view or change."""
-    return user.is_authenticated and user.username == 'admin'
+    """Stricter than _is_admin — gated on a real DB flag (UserProfile.is_super_admin),
+    for sensitive settings (SMTP/Telegram bot credentials, bill delete/edit) other
+    admins should not be able to view or change."""
+    if not user.is_authenticated:
+        return False
+    profile = getattr(user, 'profile', None)
+    return bool(profile and profile.is_super_admin)
 
 
 class UpdateUserView(APIView):
+    """View is Admin-or-above; every actual field write here is Super-Admin-only —
+    a plain Admin can look up a user but not change their designation/email/role."""
+
     def patch(self, request, user_id):
         if not _is_admin(request.user):
+            return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
+        if not _is_super_admin(request.user):
             return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
         try:
             profile = UserProfile.objects.get(user_id=user_id)
@@ -248,8 +256,6 @@ class UpdateUserView(APIView):
         if 'designation' in request.data:
             profile.designation = (request.data['designation'] or '').strip()
         if 'role' in request.data:
-            if not _is_super_admin(request.user):
-                return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
             role = (request.data['role'] or '').strip()
             if role not in ('consignee', 'admin'):
                 return Response({'error': 'Invalid role.'}, status=status.HTTP_400_BAD_REQUEST)

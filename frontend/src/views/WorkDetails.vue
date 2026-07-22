@@ -41,6 +41,12 @@ const selectedWork = ref(null)
 const isLoading    = ref(true)
 const searchQuery  = ref('')
 const itemFilter   = ref('')
+const wdSelectedCategories = ref(['supply', 'supply_installation', 'execution'])
+const toggleWdCategory = (cat) => {
+  const idx = wdSelectedCategories.value.indexOf(cat)
+  if (idx >= 0) wdSelectedCategories.value.splice(idx, 1)
+  else wdSelectedCategories.value.push(cat)
+}
 const expandedId   = ref(null)
 const sortKey      = ref('')
 const wdProgressMin   = ref(0)
@@ -142,6 +148,9 @@ const filteredItems = computed(() => {
         (i.item_desc && i.item_desc.toLowerCase().includes(q))
       )
     : selectedWork.value.items
+  if (wdSelectedCategories.value.length < 3) {
+    items = items.filter(i => wdSelectedCategories.value.includes(i.category || 'supply'))
+  }
   if (!wdProgressFilterActive.value) return items
   const min = wdProgressMin.value
   const max = wdProgressMax.value
@@ -1207,6 +1216,31 @@ const generateWorkPDF = async () => {
                 class="bg-transparent outline-none w-full text-xs text-gray-700 placeholder-gray-400 font-medium">
             </div>
 
+            <!-- Category filter pills -->
+            <div class="flex items-center gap-1.5 flex-shrink-0">
+              <button @click="toggleWdCategory('supply')"
+                class="px-3 py-2 rounded-xl text-[11px] font-bold border transition-all"
+                :class="wdSelectedCategories.includes('supply')
+                  ? 'bg-teal-50 border-teal-300 text-teal-700'
+                  : 'bg-white border-gray-200 text-gray-400'">
+                Supply
+              </button>
+              <button @click="toggleWdCategory('supply_installation')"
+                class="px-3 py-2 rounded-xl text-[11px] font-bold border transition-all"
+                :class="wdSelectedCategories.includes('supply_installation')
+                  ? 'bg-violet-50 border-violet-300 text-violet-700'
+                  : 'bg-white border-gray-200 text-gray-400'">
+                S+I
+              </button>
+              <button @click="toggleWdCategory('execution')"
+                class="px-3 py-2 rounded-xl text-[11px] font-bold border transition-all"
+                :class="wdSelectedCategories.includes('execution')
+                  ? 'bg-orange-50 border-orange-300 text-orange-700'
+                  : 'bg-white border-gray-200 text-gray-400'">
+                Execution
+              </button>
+            </div>
+
             <!-- Progress slider -->
             <div class="flex items-center gap-2 w-100 flex-shrink-0">
               <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex-shrink-0">Progress</span>
@@ -1234,7 +1268,7 @@ const generateWorkPDF = async () => {
             </button>
 
             <!-- Reset -->
-            <button @click="sortKey = ''; itemFilter = ''; resetWdProgress()" class="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-500 hover:bg-gray-50 transition-colors flex items-center gap-1 flex-shrink-0">
+            <button @click="sortKey = ''; itemFilter = ''; wdSelectedCategories = ['supply', 'supply_installation', 'execution']; resetWdProgress()" class="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-500 hover:bg-gray-50 transition-colors flex items-center gap-1 flex-shrink-0">
               <div class="i-carbon-reset text-xs"></div> Reset
             </button>
 
@@ -1374,10 +1408,12 @@ const generateWorkPDF = async () => {
                                   <th class="px-4 py-2 text-left w-8">#</th>
                                   <th class="px-4 py-2 text-left w-20">Type</th>
                                   <th class="px-4 py-2 text-right w-28">Quantity</th>
-                                  <th class="px-4 py-2 text-left">Receive Note / Challan</th>
-                                  <th class="px-4 py-2 text-left">UDM Entry</th>
-                                  <th class="px-4 py-2 text-left">Submitted By</th>
                                   <th class="px-4 py-2 text-left">Date</th>
+                                  <th v-if="item.category !== 'execution'" class="px-4 py-2 text-left">Receive Note</th>
+                                  <th v-if="item.category !== 'execution'" class="px-4 py-2 text-left">Challan No</th>
+                                  <th v-if="item.category !== 'supply'" class="px-4 py-2 text-left">Location</th>
+                                  <th v-if="item.category !== 'supply'" class="px-4 py-2 text-left">Remark</th>
+                                  <th class="px-4 py-2 text-left">Submitted By</th>
                                 </tr>
                               </thead>
                               <tbody class="divide-y divide-gray-50">
@@ -1395,19 +1431,17 @@ const generateWorkPDF = async () => {
                                   <td class="px-4 py-2.5 text-right font-bold text-gray-800">
                                     {{ entry.quantity }} <span class="text-gray-400 font-normal">{{ item.unit }}</span>
                                   </td>
-                                  <td class="px-4 py-2.5 text-gray-600 font-medium">
-                                    <span v-if="entry.receive_note_no" class="block text-gray-800">{{ entry.receive_note_no }}</span>
-                                    <span v-if="entry.challan_no" class="block text-gray-500 text-[10px]">{{ entry.challan_no }}</span>
-                                    <span v-if="!entry.receive_note_no && !entry.challan_no" class="text-gray-300">—</span>
-                                  </td>
-                                  <td class="px-4 py-2.5 text-gray-600 font-medium">{{ entry.udm_entry || '—' }}</td>
-                                  <td class="px-4 py-2.5 text-gray-600 font-medium">
-                                    <span class="block font-semibold text-gray-800">{{ entry.submitted_by_user?.full_name || entry.submitted_by_user?.username || '—' }}</span>
-                                    <span v-if="entry.submitted_by_designation_display || entry.submitted_by_user?.designation" class="block text-[10px] text-gray-400">{{ entry.submitted_by_designation_display || entry.submitted_by_user?.designation }}</span>
-                                  </td>
                                   <td class="px-4 py-2.5 text-gray-400 whitespace-nowrap">
                                     <span v-if="entry.date_of_receipt" class="block font-medium text-gray-600">{{ fmtDate(entry.date_of_receipt) }}</span>
                                     <span class="text-[10px]">{{ fmtDateTime(entry.submitted_at) }}</span>
+                                  </td>
+                                  <td v-if="item.category !== 'execution'" class="px-4 py-2.5 text-gray-600 font-medium">{{ entry.receive_note_no || '—' }}</td>
+                                  <td v-if="item.category !== 'execution'" class="px-4 py-2.5 text-gray-600 font-medium">{{ entry.challan_no || '—' }}</td>
+                                  <td v-if="item.category !== 'supply'" class="px-4 py-2.5 text-gray-600 font-medium">{{ entry.location || '—' }}</td>
+                                  <td v-if="item.category !== 'supply'" class="px-4 py-2.5 text-gray-600 font-medium max-w-[160px] truncate" :title="entry.remarks || ''">{{ entry.remarks || '—' }}</td>
+                                  <td class="px-4 py-2.5 text-gray-600 font-medium">
+                                    <span class="block font-semibold text-gray-800">{{ entry.submitted_by_user?.full_name || entry.submitted_by_user?.username || '—' }}</span>
+                                    <span v-if="entry.submitted_by_designation_display || entry.submitted_by_user?.designation" class="block text-[10px] text-gray-400">{{ entry.submitted_by_designation_display || entry.submitted_by_user?.designation }}</span>
                                   </td>
                                 </tr>
                               </tbody>
@@ -1419,7 +1453,7 @@ const generateWorkPDF = async () => {
                                     <span v-if="suppliedOrExecuted(item) > (item.qty || 0)"
                                       class="ml-1 text-[9px] font-bold text-orange-500">EXCEEDS SCHEDULE</span>
                                   </td>
-                                  <td colspan="4"></td>
+                                  <td :colspan="item.category === 'supply_installation' ? 6 : 4"></td>
                                 </tr>
                               </tfoot>
                             </table>

@@ -19,6 +19,7 @@ class TestUsersAuthAndRBAC:
             designation='Admin Officer',
             is_approved=True,
             role='admin',
+            is_super_admin=True,
             plain_password='password123'
         )
 
@@ -232,12 +233,26 @@ class TestUsersAuthAndRBAC:
         assert self.client.get('/api/auth/pending/').status_code == status.HTTP_200_OK
         assert self.client.get('/api/auth/all/').status_code == status.HTTP_200_OK
 
-    def test_plain_admin_can_still_edit_designation(self):
+    def test_plain_admin_cannot_edit_designation(self):
+        """UpdateUserView is fully Super-Admin-only now — a plain Admin can view
+        users but not write any field here, not even designation/email."""
         self.client.force_login(self.plain_admin)
         response = self.client.patch(f'/api/auth/update/{self.consignee.pk}/', {
             'designation': 'Updated Designation'
         }, content_type='application/json')
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_super_admin_can_edit_designation_and_email(self):
+        self.client.force_login(self.admin)
+        response = self.client.patch(f'/api/auth/update/{self.consignee.pk}/', {
+            'designation': 'Updated Designation',
+            'email': 'updated@example.com',
+        }, content_type='application/json')
         assert response.status_code == status.HTTP_200_OK
+        self.profile.refresh_from_db()
+        self.consignee.refresh_from_db()
+        assert self.profile.designation == 'Updated Designation'
+        assert self.consignee.email == 'updated@example.com'
 
     @patch('users.views.send_password_email')
     def test_forgot_password_unknown_hrms(self, mock_send_email):
@@ -275,7 +290,7 @@ class TestAdminAutoConvertToConsignee:
         self.client = Client()
 
         self.super_admin = User.objects.create_superuser(username='admin', password='password123')
-        UserProfile.objects.create(user=self.super_admin, designation='Super Admin', is_approved=True, role='admin')
+        UserProfile.objects.create(user=self.super_admin, designation='Super Admin', is_approved=True, role='admin', is_super_admin=True)
 
         self.zero_loa_admin = User.objects.create_user(username='admin2', password='password123')
         self.zero_loa_admin_profile = UserProfile.objects.create(
