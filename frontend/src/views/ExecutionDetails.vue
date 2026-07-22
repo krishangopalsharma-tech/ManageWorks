@@ -340,7 +340,7 @@ const saveEditEntry = async () => {
               <tr v-for="item in sortedItems" :key="item.id" class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                 <td class="px-4 py-3.5 text-center">
                   <span class="rounded-md px-2 py-1 text-[10px] font-bold"
-                    :class="String(item.schedule||'').toUpperCase().startsWith('A') ? 'bg-accent-soft text-accent' : 'bg-accent-b-soft text-accent-b'">
+                    :class="String(item.schedule||'').toUpperCase().startsWith('A') ? 'bg-data-supply/10 text-data-supply' : 'bg-data-exec/10 text-data-exec'">
                     {{ item.schedule }}
                   </span>
                 </td>
@@ -403,7 +403,7 @@ const saveEditEntry = async () => {
             <div class="flex items-start justify-between gap-4">
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2 mb-1.5">
-                  <span class="text-[10px] font-bold px-2 py-1 rounded-md bg-accent-b-soft text-accent-b">{{ lotPopupItem.schedule }}</span>
+                  <span class="text-[10px] font-bold px-2 py-1 rounded-md bg-data-exec/10 text-data-exec">{{ lotPopupItem.schedule }}</span>
                   <span class="text-[10px] font-semibold text-gray-400">S.No {{ lotPopupItem.serial_number }}</span>
                 </div>
                 <h2 class="text-sm font-semibold text-gray-900 leading-snug line-clamp-2">{{ lotPopupItem.item_desc }}</h2>

@@ -455,13 +455,13 @@ onBeforeUnmount(() => { document.removeEventListener('click', closeDropdown); cl
 
       <!-- Stats pills + Export PDF button -->
       <div v-if="filteredRows.length > 0" class="flex flex-wrap items-center gap-3 mt-2.5">
-        <div class="flex items-center gap-2 bg-violet-50 border border-violet-200 rounded-xl px-4 py-2">
-          <div class="w-2 h-2 rounded-full bg-violet-500"></div>
-          <span class="text-xs font-semibold text-violet-700">S+I: {{ stats.siCount }}</span>
+        <div class="flex items-center gap-2 bg-data-si/10 border border-data-si/25 rounded-xl px-4 py-2">
+          <div class="w-2 h-2 rounded-full bg-data-si"></div>
+          <span class="text-xs font-semibold text-data-si">S+I: {{ stats.siCount }}</span>
         </div>
-        <div class="flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-xl px-4 py-2">
-          <div class="w-2 h-2 rounded-full bg-orange-500"></div>
-          <span class="text-xs font-semibold text-orange-700">Execution: {{ stats.exCount }}</span>
+        <div class="flex items-center gap-2 bg-data-exec/10 border border-data-exec/25 rounded-xl px-4 py-2">
+          <div class="w-2 h-2 rounded-full bg-data-exec"></div>
+          <span class="text-xs font-semibold text-data-exec">Execution: {{ stats.exCount }}</span>
         </div>
         <div class="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2">
           <div class="i-carbon-location text-blue-400 text-sm"></div>
@@ -585,7 +585,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', closeDropdown); cl
 
               <!-- SCH -->
               <td class="px-4 py-3 text-center">
-                <span class="rounded-md px-2 py-1 text-[10px] font-bold bg-accent-b-soft text-accent-b">
+                <span class="rounded-md px-2 py-1 text-[10px] font-bold bg-data-exec/10 text-data-exec">
                   {{ row.schedule || '—' }}
                 </span>
               </td>
@@ -602,7 +602,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', closeDropdown); cl
 
               <!-- Executed at location -->
               <td class="px-4 py-3 text-right text-xs font-semibold"
-                :class="row.executed_here > row.scope ? 'text-orange-500' : 'text-gray-800'">
+                :class="row.executed_here > row.scope ? 'text-status-critical' : 'text-gray-800'">
                 {{ row.executed_here }}
                 <span class="text-gray-400 font-normal">{{ row.unit }}</span>
               </td>
@@ -614,7 +614,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', closeDropdown); cl
 
               <!-- Remaining -->
               <td class="px-4 py-3 text-right text-xs font-semibold"
-                :class="row.remaining < 0 ? 'text-orange-500' : 'text-gray-600'">
+                :class="row.remaining < 0 ? 'text-status-critical' : 'text-gray-600'">
                 {{ row.remaining }} <span class="text-gray-400 font-normal">{{ row.unit }}</span>
               </td>
 

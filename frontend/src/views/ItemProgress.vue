@@ -557,7 +557,7 @@ const generateItemPDF = async (includeEntries = true) => {
         <button @click="includeExcess = !includeExcess"
           class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all flex-shrink-0"
           :class="includeExcess
-            ? 'bg-orange-50 border-orange-300 text-orange-700'
+            ? 'bg-status-critical/10 border-status-critical/30 text-status-critical'
             : 'bg-white border-gray-200 text-gray-400 line-through'">
           <div class="i-carbon-overflow-menu-horizontal text-[11px]"></div>
           +Excess
@@ -572,16 +572,16 @@ const generateItemPDF = async (includeEntries = true) => {
 
       <!-- Stats pills + Export (visible when items exist) -->
       <div v-if="filteredResults.length > 0" class="flex flex-wrap items-center gap-3">
-        <div class="flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-xl px-4 py-2">
-          <div class="w-2 h-2 rounded-full bg-teal-500"></div>
-          <span class="text-xs font-semibold text-teal-700">
+        <div class="flex items-center gap-2 bg-data-supply/10 border border-data-supply/25 rounded-xl px-4 py-2">
+          <div class="w-2 h-2 rounded-full bg-data-supply"></div>
+          <span class="text-xs font-semibold text-data-supply">
             Supply: {{ stats.supplyPct }}%
             <span class="font-normal opacity-70">({{ stats.supplyCount }})</span>
           </span>
         </div>
-        <div class="flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-xl px-4 py-2">
-          <div class="w-2 h-2 rounded-full bg-orange-500"></div>
-          <span class="text-xs font-semibold text-orange-700">
+        <div class="flex items-center gap-2 bg-data-exec/10 border border-data-exec/25 rounded-xl px-4 py-2">
+          <div class="w-2 h-2 rounded-full bg-data-exec"></div>
+          <span class="text-xs font-semibold text-data-exec">
             Exec + S+I: {{ stats.execPct }}%
             <span class="font-normal opacity-70">({{ stats.execCount }})</span>
           </span>
@@ -678,7 +678,7 @@ const generateItemPDF = async (includeEntries = true) => {
               </td>
               <td class="px-4 py-3 text-center">
                 <span class="rounded-md px-2 py-1 text-[10px] font-bold"
-                  :class="isSchB(item) ? 'bg-accent-b-soft text-accent-b' : 'bg-accent-soft text-accent'">
+                  :class="isSchB(item) ? 'bg-data-exec/10 text-data-exec' : 'bg-data-supply/10 text-data-supply'">
                   {{ item.schedule }}
                 </span>
               </td>
@@ -777,7 +777,7 @@ const generateItemPDF = async (includeEntries = true) => {
                           <td class="px-4 py-2.5 text-gray-400 font-semibold">{{ (item.entries || []).length - idx }}</td>
                           <td class="px-4 py-2.5">
                             <span class="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide"
-                              :class="entry.entry_type === 'supply' ? 'bg-accent-soft text-accent' : 'bg-accent-b-soft text-accent-b'">
+                              :class="entry.entry_type === 'supply' ? 'bg-data-supply/10 text-data-supply' : 'bg-data-exec/10 text-data-exec'">
                               {{ entry.entry_type === 'supply' ? 'Supply' : 'Exec' }}
                             </span>
                           </td>

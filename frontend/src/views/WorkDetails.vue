@@ -177,6 +177,15 @@ const progressPct = (item) => {
   return Math.min(Math.round((done / req) * 100), 999)
 }
 
+// Same category-first, schedule-fallback logic as progressPct — decides
+// whether the single progress bar reads as Execution (amber) or Supply (teal).
+const isExecBar = (item) => {
+  const cat = item.category || ''
+  if (cat === 'supply_installation' || cat === 'execution') return true
+  if (cat === 'supply') return false
+  return String(item.schedule || '').toUpperCase().trim().startsWith('B')
+}
+
 // Same category-first, schedule-fallback logic as progressPct — keeps the
 // SUPPLIED/EXECUTED column in sync with the progress bar it sits next to.
 const suppliedOrExecuted = (item) => {
@@ -1262,7 +1271,7 @@ const generateWorkPDF = async () => {
             <button @click="wdIncludeExcess = !wdIncludeExcess"
               class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all flex-shrink-0"
               :class="wdIncludeExcess
-                ? 'bg-orange-50 border-orange-300 text-orange-700'
+                ? 'bg-status-critical/10 border-status-critical/30 text-status-critical'
                 : 'bg-white border-gray-200 text-gray-400 line-through'">
               <div class="i-carbon-overflow-menu-horizontal text-[11px]"></div>
               +Excess
@@ -1316,8 +1325,8 @@ const generateWorkPDF = async () => {
                     <td class="px-4 py-3 text-center">
                       <span class="rounded-md px-2 py-0.5 text-[10px] font-bold"
                         :class="String(item.schedule||'').toUpperCase().startsWith('A')
-                          ? 'bg-[#1D5F5E]/10 text-[#1D5F5E]'
-                          : 'bg-[#C17841]/10 text-[#C17841]'">
+                          ? 'bg-data-supply/10 text-data-supply'
+                          : 'bg-data-exec/10 text-data-exec'">
                         {{ item.schedule }}
                       </span>
                     </td>
@@ -1330,28 +1339,28 @@ const generateWorkPDF = async () => {
                       {{ item.qty }} <span class="text-gray-400 font-normal text-[10px]">{{ item.unit }}</span>
                     </td>
                     <td class="px-4 py-3 text-right text-xs font-semibold"
-                      :class="suppliedOrExecuted(item) > (item.qty || 0) ? 'text-orange-500' : 'text-gray-800'">
+                      :class="suppliedOrExecuted(item) > (item.qty || 0) ? 'text-status-critical' : 'text-gray-800'">
                       {{ suppliedOrExecuted(item) }}
                       <span class="text-gray-400 font-normal text-[10px]">{{ item.unit }}</span>
-                      <span v-if="suppliedOrExecuted(item) > (item.qty || 0)" class="ml-1 text-[9px] text-orange-400 font-bold">OVER</span>
+                      <span v-if="suppliedOrExecuted(item) > (item.qty || 0)" class="ml-1 text-[9px] text-status-critical font-bold">OVER</span>
                     </td>
                     <td class="px-4 py-3">
-                      <!-- S+I: two stacked bars -->
+                      <!-- S+I: two stacked bars — supply progress, then execution progress -->
                       <template v-if="item.category === 'supply_installation'">
                         <div class="flex flex-col gap-1">
                           <div class="flex items-center gap-1.5">
                             <div class="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
-                              <div class="h-full rounded-full transition-all duration-500 bg-teal-500"
+                              <div class="h-full rounded-full transition-all duration-500 bg-data-supply"
                                 :style="{ width: Math.min(supplyPct(item), 100) + '%' }"></div>
                             </div>
-                            <span class="text-[9px] font-bold w-7 text-right text-teal-600">{{ supplyPct(item) }}%</span>
+                            <span class="text-[9px] font-bold w-7 text-right text-data-supply">{{ supplyPct(item) }}%</span>
                           </div>
                           <div class="flex items-center gap-1.5">
                             <div class="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
-                              <div class="h-full rounded-full transition-all duration-500 bg-violet-500"
+                              <div class="h-full rounded-full transition-all duration-500 bg-data-exec"
                                 :style="{ width: Math.min(execPctItem(item), 100) + '%' }"></div>
                             </div>
-                            <span class="text-[9px] font-bold w-7 text-right text-violet-600">{{ execPctItem(item) }}%</span>
+                            <span class="text-[9px] font-bold w-7 text-right text-data-exec">{{ execPctItem(item) }}%</span>
                           </div>
                         </div>
                       </template>
@@ -1360,12 +1369,12 @@ const generateWorkPDF = async () => {
                         <div class="flex items-center gap-2">
                           <div class="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                             <div class="h-full rounded-full transition-all duration-500"
-                              :class="progressPct(item) > 100 ? 'bg-orange-400' : 'bg-[#1D5F5E]'"
+                              :class="progressPct(item) > 100 ? 'bg-status-critical' : (isExecBar(item) ? 'bg-data-exec' : 'bg-data-supply')"
                               :style="{ width: Math.min(progressPct(item), 100) + '%' }">
                             </div>
                           </div>
                           <span class="text-[10px] font-bold w-8 text-right"
-                            :class="progressPct(item) > 100 ? 'text-orange-500' : progressPct(item) >= 99 ? 'text-[#1D5F5E]' : 'text-gray-500'">
+                            :class="progressPct(item) > 100 ? 'text-status-critical' : 'text-gray-500'">
                             {{ progressPct(item) }}%
                           </span>
                         </div>
@@ -1424,8 +1433,8 @@ const generateWorkPDF = async () => {
                                   <td class="px-4 py-2.5">
                                     <span class="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase"
                                       :class="entry.entry_type === 'execution'
-                                        ? 'bg-[#C17841]/10 text-[#C17841]'
-                                        : 'bg-[#1D5F5E]/10 text-[#1D5F5E]'">
+                                        ? 'bg-data-exec/10 text-data-exec'
+                                        : 'bg-data-supply/10 text-data-supply'">
                                       {{ entry.entry_type }}
                                     </span>
                                   </td>
@@ -1452,7 +1461,7 @@ const generateWorkPDF = async () => {
                                   <td class="px-4 py-2.5 text-right font-bold text-gray-800">
                                     {{ suppliedOrExecuted(item) }} <span class="text-gray-400 font-normal">{{ item.unit }}</span>
                                     <span v-if="suppliedOrExecuted(item) > (item.qty || 0)"
-                                      class="ml-1 text-[9px] font-bold text-orange-500">EXCEEDS SCHEDULE</span>
+                                      class="ml-1 text-[9px] font-bold text-status-critical">EXCEEDS SCHEDULE</span>
                                   </td>
                                   <td :colspan="item.category === 'supply_installation' ? 6 : 4"></td>
                                 </tr>
