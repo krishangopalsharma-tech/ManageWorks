@@ -35,6 +35,14 @@ const canEditEntry = (entry) => {
   return entry.submitted_by_user?.id === currentUser.value.id
 }
 
+// Delete is narrower than submit/edit: only Super Admin (any LOA) or the
+// LOA's own assigned consignee — not just any consignee, and not plain Admin.
+const isWorkConsignee = computed(() => {
+  if (!currentUser.value || !selectedWork.value) return false
+  return currentUser.value.hrms_id === selectedWork.value.hrms_id
+})
+const canDeleteEntry = computed(() => currentUser.value?.is_super_admin || isWorkConsignee.value)
+
 // Lot entry popup
 const lotPopupItem = ref(null)
 const entryForm    = ref({ quantity: '', location: '', remarks: '', isSubmitting: false, status: '' })
@@ -188,6 +196,24 @@ const openEditEntry = (entry) => {
   }
 }
 const closeEditEntry = () => { editingEntry.value = null; entrySaveStatus.value = '' }
+
+const deletingEntryId = ref(null)
+const deleteEntry = async (entry) => {
+  const item = lotPopupItem.value
+  if (!confirm(`Delete this lot entry (${entry.quantity} ${item.unit})? This can't be undone.`)) return
+
+  deletingEntryId.value = entry.id
+  try {
+    await axios.delete(`/api/execution-details/entries/${entry.id}/`)
+    item.entries = (item.entries || []).filter(e => e.id !== entry.id)
+    recalcExecuted(item)
+  } catch (err) {
+    console.error(err)
+    alert(err.response?.status === 403 ? 'You do not have permission to delete this entry.' : 'Failed to delete entry.')
+  } finally {
+    deletingEntryId.value = null
+  }
+}
 
 const saveEditEntry = async () => {
   const e    = editingEntry.value
@@ -561,12 +587,21 @@ const saveEditEntry = async () => {
                         <td class="px-3 py-2.5 text-gray-500 max-w-[120px] truncate text-[11px]">{{ entry.remarks || '—' }}</td>
                         <td class="px-3 py-2.5 text-gray-500 text-[11px]">{{ entry.submitted_by_user?.username || '—' }}</td>
                         <td class="px-3 py-2.5 text-center">
-                          <button v-if="canEditEntry(entry)"
-                            @click="openEditEntry(entry)"
-                            class="px-2 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 text-[10px] font-bold transition-all flex items-center gap-1 mx-auto">
-                            <div class="i-carbon-edit text-[10px]"></div>
-                          </button>
-                          <span v-else class="text-gray-200">—</span>
+                          <div class="flex items-center justify-center gap-1">
+                            <button v-if="canEditEntry(entry)"
+                              @click="openEditEntry(entry)"
+                              class="px-2 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 text-[10px] font-bold transition-all flex items-center gap-1">
+                              <div class="i-carbon-edit text-[10px]"></div>
+                            </button>
+                            <button v-if="canDeleteEntry"
+                              @click="deleteEntry(entry)"
+                              :disabled="deletingEntryId === entry.id"
+                              class="px-2 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 text-[10px] font-bold transition-all disabled:opacity-50 flex items-center gap-1">
+                              <div v-if="deletingEntryId === entry.id" class="i-carbon-circle-dash animate-spin text-[10px]"></div>
+                              <div v-else class="i-carbon-trash-can text-[10px]"></div>
+                            </button>
+                            <span v-if="!canEditEntry(entry) && !canDeleteEntry" class="text-gray-200">—</span>
+                          </div>
                         </td>
                       </tr>
 

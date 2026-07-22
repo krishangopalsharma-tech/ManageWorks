@@ -171,3 +171,46 @@ class TestSupplyDetailsPermissions:
             content_type='application/json',
         )
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_assigned_consignee_can_delete_entry(self):
+        """Assigned consignee can delete any supply entry on their own LOA —
+        not limited to entries they personally submitted (lets them correct a
+        colleague's mistake, e.g. a receipt filed under the wrong item)."""
+        entry = WorkItemEntry.objects.create(
+            work_item=self.ss_item, entry_type='supply', quantity=5, submitted_by=self.consignee1,
+        )
+        self.client.force_login(self.consignee1)
+        response = self.client.delete(f'/api/supply-details/entries/{entry.pk}/')
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not WorkItemEntry.objects.filter(pk=entry.pk).exists()
+        self.ss_item.refresh_from_db()
+        assert self.ss_item.supplied_quantity == 0
+
+    def test_admin_cannot_delete_entry(self):
+        entry = WorkItemEntry.objects.create(
+            work_item=self.ss_item, entry_type='supply', quantity=5, submitted_by=self.consignee1,
+        )
+        self.client.force_login(self.admin)
+        response = self.client.delete(f'/api/supply-details/entries/{entry.pk}/')
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert WorkItemEntry.objects.filter(pk=entry.pk).exists()
+
+    def test_other_consignee_cannot_delete_entry(self):
+        entry = WorkItemEntry.objects.create(
+            work_item=self.ss_item, entry_type='supply', quantity=5, submitted_by=self.consignee1,
+        )
+        self.client.force_login(self.consignee2)
+        response = self.client.delete(f'/api/supply-details/entries/{entry.pk}/')
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert WorkItemEntry.objects.filter(pk=entry.pk).exists()
+
+    def test_delete_blocked_after_reassignment(self):
+        entry = WorkItemEntry.objects.create(
+            work_item=self.ss_item, entry_type='supply', quantity=5, submitted_by=self.consignee1,
+        )
+        self.work1.hrms_id = 'consignee2'
+        self.work1.save(update_fields=['hrms_id'])
+
+        self.client.force_login(self.consignee1)
+        response = self.client.delete(f'/api/supply-details/entries/{entry.pk}/')
+        assert response.status_code == status.HTTP_403_FORBIDDEN

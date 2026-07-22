@@ -18,7 +18,10 @@ class TestExecutionDetailsPermissions:
         self.client = Client()
 
         self.admin = User.objects.create_superuser(username='admin', password='password123')
-        UserProfile.objects.create(user=self.admin, designation='Admin', is_approved=True, role='admin')
+        UserProfile.objects.create(user=self.admin, designation='Admin', is_approved=True, role='admin', is_super_admin=True)
+
+        self.plain_admin = User.objects.create_user(username='admin2', password='password123')
+        UserProfile.objects.create(user=self.plain_admin, designation='Regional Admin', is_approved=True, role='admin')
 
         self.consignee1 = User.objects.create_user(username='consignee1', password='password123')
         UserProfile.objects.create(user=self.consignee1, designation='Consignee 1', is_approved=True, role='consignee')
@@ -127,3 +130,43 @@ class TestExecutionDetailsPermissions:
             content_type='application/json',
         )
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_super_admin_can_delete_entry_on_any_loa(self):
+        entry = WorkItemEntry.objects.create(
+            work_item=self.ee_item, entry_type='execution', quantity=4, submitted_by=self.consignee1,
+        )
+        self.client.force_login(self.admin)
+        response = self.client.delete(f'/api/execution-details/entries/{entry.pk}/')
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not WorkItemEntry.objects.filter(pk=entry.pk).exists()
+        self.ee_item.refresh_from_db()
+        assert self.ee_item.executed_quantity == 0
+
+    def test_assigned_consignee_can_delete_entry_on_own_loa(self):
+        """Even an entry submitted by someone else on their own LOA — assigned
+        consignee can correct a colleague's mistake, same as Supply Details."""
+        entry = WorkItemEntry.objects.create(
+            work_item=self.ee_item, entry_type='execution', quantity=4, submitted_by=self.unassigned,
+        )
+        self.client.force_login(self.consignee1)
+        response = self.client.delete(f'/api/execution-details/entries/{entry.pk}/')
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not WorkItemEntry.objects.filter(pk=entry.pk).exists()
+
+    def test_plain_admin_cannot_delete_entry(self):
+        entry = WorkItemEntry.objects.create(
+            work_item=self.ee_item, entry_type='execution', quantity=4, submitted_by=self.consignee1,
+        )
+        self.client.force_login(self.plain_admin)
+        response = self.client.delete(f'/api/execution-details/entries/{entry.pk}/')
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert WorkItemEntry.objects.filter(pk=entry.pk).exists()
+
+    def test_unassigned_consignee_cannot_delete_entry(self):
+        entry = WorkItemEntry.objects.create(
+            work_item=self.ee_item, entry_type='execution', quantity=4, submitted_by=self.consignee1,
+        )
+        self.client.force_login(self.unassigned)
+        response = self.client.delete(f'/api/execution-details/entries/{entry.pk}/')
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert WorkItemEntry.objects.filter(pk=entry.pk).exists()

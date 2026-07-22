@@ -185,12 +185,34 @@ def parse_receipt_pdf(file_obj):
         warnings.append('Qty. Accepted not found')
 
     # ── LOA Number ────────────────────────────────────────────────────────────
-    # "PO/Contract No. & Date" cell contains the LOA number at the start,
-    # e.g. "00890160138264 dt. 04-09-2025 (LOA No. AHMEDABAD DIVISION-S ...)"
-    # Extract the leading digit sequence (8-14 digits) from that cell.
+    # "PO/Contract No. & Date" cell often embeds the real LOA number inside a
+    # parenthetical, e.g. "WR/ADI/S&T/2026/0006 dt. 15-04-2026 (LOA No.
+    # AHMEDABAD DIVISION-S AND T/GSU-TELE-ADI-01-25-26/01161770147378 dt.
+    # 24-12-2025)" — that cell also contains several shorter reference numbers
+    # (PO number, date fragments) before the actual LOA number. Prefer anchoring
+    # on the "LOA No." label itself and taking the longest 8-14 digit run that
+    # follows it (LOA numbers are consistently 14 digits — see works.utils.pad_loa)
+    # rather than blindly grabbing the first long digit run in the whole cell.
+    def _loa_after_label(source):
+        m = re.search(r'LOA\s*No\.?', source, re.IGNORECASE)
+        if not m:
+            return None
+        window = source[m.end():m.end() + 200]
+        window = re.split(r'[)\n]', window)[0]
+        digit_runs = re.findall(r'\d{8,14}', window)
+        if not digit_runs:
+            return None
+        return max(digit_runs, key=len)
+
     loa_val = None
     po_cell = _lv_find(lv, 'po/contract no') or _lv_find(lv, 'po', 'contract')
     if po_cell:
+        loa_val = _loa_after_label(po_cell)
+    if not loa_val:
+        loa_val = _loa_after_label(text)
+    # Fallback: first long digit run in the PO/Contract cell — for receipts
+    # that embed the LOA number without an explicit "LOA No." label.
+    if not loa_val and po_cell:
         m = re.search(r'\b(\d{8,14})\b', po_cell)
         if m:
             loa_val = m.group(1)

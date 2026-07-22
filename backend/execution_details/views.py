@@ -7,8 +7,9 @@ from rest_framework.exceptions import PermissionDenied
 
 from works.models import Work, WorkItem, WorkItemEntry
 from works.serializers import WorkItemEntrySerializer, WorkSerializer
-from works.utils import is_admin_user
+from works.utils import is_admin_user, is_assigned_consignee
 from work_details.views import _base_queryset
+from users.views import _is_super_admin
 
 
 def _check_authenticated(user):
@@ -129,8 +130,10 @@ class ExecutionEntryView(APIView):
 
 
 class ExecutionEntryUpdateView(APIView):
-    """PATCH /api/execution-details/entries/<entry_id>/ — only the submitter may edit.
-    Admin/Super Admin is view-only on Execution Details — no create, no edit."""
+    """PATCH  /api/execution-details/entries/<entry_id>/ — only the submitter may edit.
+    DELETE /api/execution-details/entries/<entry_id>/ — Super Admin (any LOA) or the
+    LOA's assigned consignee may delete, to correct a mistaken entry. Regular Admin
+    and any other consignee cannot delete."""
 
     def patch(self, request, entry_id):
         if not request.user.is_authenticated:
@@ -161,3 +164,24 @@ class ExecutionEntryUpdateView(APIView):
         _sync_executed_quantity(entry.work_item)
 
         return Response(WorkItemEntrySerializer(entry).data)
+
+    def delete(self, request, entry_id):
+        if not request.user.is_authenticated:
+            raise PermissionDenied("Authentication required.")
+
+        try:
+            entry = WorkItemEntry.objects.select_related('work_item__work').get(pk=entry_id, entry_type='execution')
+        except WorkItemEntry.DoesNotExist:
+            return Response({'error': 'Entry not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        work = entry.work_item.work
+        if not (_is_super_admin(request.user) or is_assigned_consignee(request.user, work)):
+            raise PermissionDenied(
+                "Only Super Admin or this LOA's assigned consignee can delete an execution entry."
+            )
+
+        work_item = entry.work_item
+        entry.delete()
+        _sync_executed_quantity(work_item)
+
+        return Response(status=status.HTTP_204_NO_CONTENT)

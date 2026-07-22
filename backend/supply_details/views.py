@@ -167,7 +167,10 @@ class SupplyEntryView(APIView):
 
 
 class SupplyEntryUpdateView(APIView):
-    """PATCH /api/supply-details/entries/<entry_id>/ — only submitter or admin may edit."""
+    """PATCH/DELETE /api/supply-details/entries/<entry_id>/ — only submitter may edit;
+    the LOA's assigned consignee may delete (to correct mistakes like a receipt filed
+    under the wrong item). Admin/Super Admin are view-only on Supply Details — neither
+    can edit or delete."""
 
     def patch(self, request, entry_id):
         if not request.user.is_authenticated:
@@ -211,6 +214,28 @@ class SupplyEntryUpdateView(APIView):
         _sync_supplied_quantity(entry.work_item)
 
         return Response(WorkItemEntrySerializer(entry).data)
+
+    def delete(self, request, entry_id):
+        if not request.user.is_authenticated:
+            raise PermissionDenied("Authentication required.")
+
+        try:
+            entry = WorkItemEntry.objects.select_related('work_item__work').get(pk=entry_id, entry_type='supply')
+        except WorkItemEntry.DoesNotExist:
+            return Response({'error': 'Entry not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Assigned consignee only, own LOA — Admin/Super Admin stay view-only here.
+        work = entry.work_item.work
+        if not is_assigned_consignee(request.user, work):
+            raise PermissionDenied(
+                "Only the LOA's assigned consignee can delete a supply entry."
+            )
+
+        work_item = entry.work_item
+        entry.delete()
+        _sync_supplied_quantity(work_item)
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 # ── PDF parsing ─────────────────────────────────────────────────────────────────

@@ -34,6 +34,7 @@ def _user_data(user):
         'mobile_number':   profile.mobile_number if profile else '',
         'role':            profile.role         if profile else ('admin' if user.is_staff else 'consignee'),
         'is_approved':     profile.is_approved  if profile else user.is_staff,
+        'is_super_admin':  bool(profile and profile.is_super_admin),
         'is_assigned':     Work.objects.filter(hrms_id=user.username).exists(),
         'telegram_linked': tg_linked,
         'telegram_chat_id': tg_chat_id,

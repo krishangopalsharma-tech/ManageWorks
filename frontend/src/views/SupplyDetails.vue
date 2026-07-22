@@ -44,7 +44,7 @@ const canEditEntry = (entry) => {
 // Lot entry popup
 const lotPopupItem = ref(null)
 const entryForm    = ref({
-  quantity: '', receive_note_no: '', date_of_receipt: '', challan_no: '', udm_entry: '',
+  quantity: '', receive_note_no: '', date_of_receipt: '', challan_no: '',
   isSubmitting: false, status: '',
 })
 
@@ -97,15 +97,26 @@ const findBestMatch = (pdfSerial, pdfDesc) => {
   const items = supplyItems.value
   if (!items.length) return null
   const { schedule, itemNum } = parsePdfSerial(pdfSerial)
+  if (!itemNum) return null
 
-  let candidates = items.filter(item => {
-    const { schedule: iSch, itemNum: iNum } = parseItemSerial(item.serial_number)
-    const dbSch = iSch || (item.schedule || '').trim().toUpperCase()
-    return schedule && itemNum && (dbSch === schedule || dbSch.startsWith(schedule)) && iNum === itemNum
-  })
-  if (!candidates.length && itemNum) {
+  let candidates
+  if (schedule) {
+    // Receipt states a specific schedule (e.g. "B-15") — only match within
+    // that schedule. If nothing matches, stop here rather than guessing a
+    // same-numbered item from a different, unrelated schedule (e.g. A-15) —
+    // a wrong-but-confident guess is worse than no match at all.
+    candidates = items.filter(item => {
+      const { schedule: iSch, itemNum: iNum } = parseItemSerial(item.serial_number)
+      const dbSch = iSch || (item.schedule || '').trim().toUpperCase()
+      return (dbSch === schedule || dbSch.startsWith(schedule)) && iNum === itemNum
+    })
+  } else {
+    // Receipt's item reference has no recognisable schedule letter at all
+    // (just a bare number) — there's no schedule claim to honour, so number
+    // is the only signal available.
     candidates = items.filter(item => parseItemSerial(item.serial_number).itemNum === itemNum)
   }
+
   if (!candidates.length) return null
   if (candidates.length === 1) return candidates[0]
 
@@ -192,7 +203,6 @@ const submitBatchEntries = async () => {
       receive_note_no: r.receive_note_no || '',
       date_of_receipt: r.date_of_receipt || null,
       challan_no:      r.challan_no || '',
-      udm_entry:       '',
     }
     try {
       const res = await axios.post(`/api/supply-details/items/${r.matchedItemId}/entries/`, payload)
@@ -316,7 +326,7 @@ const openLotPopup = (item) => {
   entrySaveStatus.value = ''
   pdfFillWarnings.value = []
   entryForm.value = {
-    quantity: '', receive_note_no: '', date_of_receipt: '', challan_no: '', udm_entry: '',
+    quantity: '', receive_note_no: '', date_of_receipt: '', challan_no: '',
     isSubmitting: false, status: '',
   }
 }
@@ -338,11 +348,47 @@ const fillFromPdf = async (evt) => {
     if (parsed.error) {
       pdfFillWarnings.value = parsed.parse_warnings || ['Failed to parse PDF.']
     } else {
-      entryForm.value.receive_note_no = parsed.receive_note_no || ''
-      entryForm.value.date_of_receipt = parsed.date_of_receipt || ''
-      entryForm.value.challan_no      = parsed.challan_no      || ''
-      entryForm.value.quantity        = parsed.quantity != null ? String(parsed.quantity) : ''
-      pdfFillWarnings.value = parsed.parse_warnings || []
+      // Cross-check the receipt's own item number against the item this popup
+      // is open for — without this, a receipt for a different item (e.g. B-15)
+      // silently fills into whichever item happened to be open (e.g. A-15).
+      const item = lotPopupItem.value
+      const { schedule: pdfSch, itemNum: pdfNum } = parsePdfSerial(parsed.serial_number)
+      const { schedule: iSchParsed, itemNum: iNum } = parseItemSerial(item?.serial_number)
+      const iSch = iSchParsed || (item?.schedule || '').trim().toUpperCase()
+      const bothParsed = pdfSch && pdfNum && iSch && iNum
+      const numberMismatch = bothParsed && !((iSch === pdfSch || iSch.startsWith(pdfSch)) && iNum === pdfNum)
+
+      const fillFields = () => {
+        entryForm.value.receive_note_no = parsed.receive_note_no || ''
+        entryForm.value.date_of_receipt = parsed.date_of_receipt || ''
+        entryForm.value.challan_no      = parsed.challan_no      || ''
+        entryForm.value.quantity        = parsed.quantity != null ? String(parsed.quantity) : ''
+      }
+
+      if (numberMismatch) {
+        pdfFillWarnings.value = [
+          `This receipt is for item ${pdfSch}-${pdfNum}, but you're adding an entry to item ${iSch}-${iNum}. ` +
+          `Nothing was filled in — open item ${pdfSch}-${pdfNum} instead before uploading this receipt.`,
+        ]
+      } else {
+        // Even when the item number lines up, also check the description text
+        // — a misread/mistyped number can still land on a real, different
+        // item. Only applied when both descriptions were actually captured;
+        // this is a fuzzy text check, so it warns instead of blocking outright.
+        const DESC_MATCH_THRESHOLD = 0.2
+        const haveBothDescs = parsed.item_desc && item?.item_desc
+        const descMismatch = haveBothDescs && descScore(parsed.item_desc, item.item_desc) < DESC_MATCH_THRESHOLD
+
+        fillFields()
+        if (descMismatch) {
+          pdfFillWarnings.value = [
+            `Heads up: the receipt's item description doesn't look like a match for "${item.item_desc}". ` +
+            `Receipt says: "${parsed.item_desc}". Double-check this is the right item before submitting.`,
+          ]
+        } else {
+          pdfFillWarnings.value = parsed.parse_warnings || []
+        }
+      }
     }
   } catch (e) {
     pdfFillWarnings.value = ['Upload failed. Please try again.']
@@ -368,7 +414,6 @@ const submitEntry = async () => {
       receive_note_no: form.receive_note_no,
       date_of_receipt: form.date_of_receipt || null,
       challan_no:      form.challan_no,
-      udm_entry:       form.udm_entry,
     }
     const res = await axios.post(`/api/supply-details/items/${item.id}/entries/`, payload)
     if (!item.entries) item.entries = []
@@ -376,7 +421,7 @@ const submitEntry = async () => {
     recalcSupplied(item)
 
     form.quantity = ''; form.receive_note_no = ''; form.date_of_receipt = ''
-    form.challan_no = ''; form.udm_entry = ''
+    form.challan_no = ''
     pdfFillWarnings.value = []
     form.status = 'ok'
     setTimeout(() => { form.status = '' }, 2500)
@@ -395,10 +440,28 @@ const openEditEntry = (entry) => {
   editingEntry.value = {
     id: entry.id, quantity: entry.quantity,
     receive_note_no: entry.receive_note_no || '', date_of_receipt: entry.date_of_receipt || '',
-    challan_no: entry.challan_no || '', udm_entry: entry.udm_entry || '',
+    challan_no: entry.challan_no || '',
   }
 }
 const closeEditEntry = () => { editingEntry.value = null; entrySaveStatus.value = '' }
+
+const deletingEntryId = ref(null)
+const deleteEntry = async (entry) => {
+  const item = lotPopupItem.value
+  if (!confirm(`Delete this lot entry (${entry.quantity} ${item.unit})? This can't be undone.`)) return
+
+  deletingEntryId.value = entry.id
+  try {
+    await axios.delete(`/api/supply-details/entries/${entry.id}/`)
+    item.entries = (item.entries || []).filter(e => e.id !== entry.id)
+    recalcSupplied(item)
+  } catch (err) {
+    console.error(err)
+    alert(err.response?.status === 403 ? 'You do not have permission to delete this entry.' : 'Failed to delete entry.')
+  } finally {
+    deletingEntryId.value = null
+  }
+}
 
 const saveEditEntry = async () => {
   const e    = editingEntry.value
@@ -411,7 +474,7 @@ const saveEditEntry = async () => {
     const payload = {
       quantity: parseFloat(e.quantity),
       receive_note_no: e.receive_note_no, date_of_receipt: e.date_of_receipt || null,
-      challan_no: e.challan_no, udm_entry: e.udm_entry,
+      challan_no: e.challan_no,
     }
     const res = await axios.patch(`/api/supply-details/entries/${e.id}/`, payload)
     const idx = (item.entries || []).findIndex(x => x.id === e.id)
@@ -712,11 +775,6 @@ const saveEditEntry = async () => {
                       class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none focus:border-[#1D5F5E] focus:ring-2 focus:ring-[#1D5F5E]/10 focus:bg-white transition-all">
                   </div>
                 </div>
-                <div class="flex flex-col gap-1.5">
-                  <label class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">UDM Entry</label>
-                  <input v-model="entryForm.udm_entry" type="text" placeholder="UDM register entry…"
-                    class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none focus:border-[#1D5F5E] focus:ring-2 focus:ring-[#1D5F5E]/10 focus:bg-white transition-all">
-                </div>
               </div>
 
               <button @click="submitEntry" :disabled="entryForm.isSubmitting"
@@ -817,12 +875,21 @@ const saveEditEntry = async () => {
                         <td class="px-3 py-2.5 text-gray-500 max-w-[120px] truncate text-[11px]">{{ entry.challan_no || '—' }}</td>
                         <td class="px-3 py-2.5 text-gray-500 text-[11px]">{{ entry.submitted_by_user?.username || '—' }}</td>
                         <td class="px-3 py-2.5 text-center">
-                          <button v-if="canEditEntry(entry)"
-                            @click="openEditEntry(entry)"
-                            class="px-2 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 text-[10px] font-bold transition-all flex items-center gap-1 mx-auto">
-                            <div class="i-carbon-edit text-[10px]"></div>
-                          </button>
-                          <span v-else class="text-gray-200">—</span>
+                          <div class="flex items-center justify-center gap-1">
+                            <button v-if="canEditEntry(entry)"
+                              @click="openEditEntry(entry)"
+                              class="px-2 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 text-[10px] font-bold transition-all flex items-center gap-1">
+                              <div class="i-carbon-edit text-[10px]"></div>
+                            </button>
+                            <button v-if="canSubmitSupply"
+                              @click="deleteEntry(entry)"
+                              :disabled="deletingEntryId === entry.id"
+                              class="px-2 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 text-[10px] font-bold transition-all disabled:opacity-50 flex items-center gap-1">
+                              <div v-if="deletingEntryId === entry.id" class="i-carbon-circle-dash animate-spin text-[10px]"></div>
+                              <div v-else class="i-carbon-trash-can text-[10px]"></div>
+                            </button>
+                            <span v-if="!canEditEntry(entry) && !canSubmitSupply" class="text-gray-200">—</span>
+                          </div>
                         </td>
                       </tr>
 
@@ -926,6 +993,9 @@ const saveEditEntry = async () => {
                           [{{ item.serial_number }}] {{ item.item_desc?.slice(0, 60) }}…
                         </option>
                       </select>
+                      <p v-if="!r.matchedItemId" class="text-[10px] font-semibold text-amber-600">
+                        No confident match found for this item — please select the correct one above.
+                      </p>
                     </div>
                     <div>
                       <p class="text-[10px] text-gray-400 font-medium">Receive Note No.</p>
