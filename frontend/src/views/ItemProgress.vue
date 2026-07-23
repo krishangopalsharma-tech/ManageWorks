@@ -46,28 +46,65 @@ const loadWorks = async () => {
   }
 }
 
-// ── Load items for selected LOAs (server fetch, no q required) ─────────────
+// ── Load items for selected LOAs — paginated, filtered/sorted server-side ──
+// Big selections (e.g. "select all" across ~98 works / ~10,000 items) load in
+// batches instead of one giant request; category/search/progress-range/sort
+// are sent as query params so the server only ever returns what matches.
+const page          = ref(1)
+const pageSize      = ref(200)
+const hasMore       = ref(false)
+const loadingMore   = ref(false)
+const totalCount    = ref(0)
+const serverStats   = ref({ supplyPct: 0, execPct: 0, supplyCount: 0, execCount: 0 })
+
+const buildParams = (pageNum, size) => {
+  const params = { work_ids: selectedIds.value.join(','), page: pageNum, page_size: size }
+  if (itemSearch.value.trim()) params.q = itemSearch.value.trim()
+  params.category = selectedCategories.value.join(',')
+  if (progressFilterActive.value) {
+    params.progress_min    = progressMin.value
+    params.progress_max    = progressMax.value
+    params.include_excess  = includeExcess.value
+  }
+  if (sortKey.value) params.ordering = (sortDir.value === 'desc' ? '-' : '') + sortKey.value
+  return params
+}
+
 let itemLoadTimer = null
-const loadItems = async () => {
-  if (!selectedIds.value.length) { allItems.value = []; return }
-  isLoadingItems.value = true
+const loadItems = async (reset = true) => {
+  if (!selectedIds.value.length) {
+    allItems.value = []; totalCount.value = 0; hasMore.value = false
+    return
+  }
+  if (reset) { isLoadingItems.value = true; page.value = 1 } else { loadingMore.value = true }
   try {
-    const res = await axios.get('/api/item-progress/search/', {
-      params: { work_ids: selectedIds.value.join(',') },
-    })
-    allItems.value = res.data
+    const res = await axios.get('/api/item-progress/search/', { params: buildParams(page.value, pageSize.value) })
+    allItems.value  = reset ? res.data.results : allItems.value.concat(res.data.results)
+    totalCount.value = res.data.count
+    hasMore.value    = !!res.data.next
+    serverStats.value = res.data.stats
   } catch (e) {
     console.error(e)
   } finally {
     isLoadingItems.value = false
+    loadingMore.value = false
   }
 }
 
-// Debounce rapid LOA toggles (avoid hammering on "Select All" then individual toggle)
-watch(selectedIds, () => {
+const loadMore = async () => {
+  if (!hasMore.value || loadingMore.value) return
+  page.value += 1
+  await loadItems(false)
+}
+
+// Debounce rapid filter/sort/LOA changes (avoid hammering on "Select All" then
+// individual toggles, or fast typing in the search box). The actual `watch()`
+// registrations are further down, once selectedCategories/progressMin/etc
+// exist — see "── Load triggers ──" below.
+const scheduleLoad = () => {
   clearTimeout(itemLoadTimer)
-  itemLoadTimer = setTimeout(loadItems, 250)
-}, { deep: true })
+  itemLoadTimer = setTimeout(() => loadItems(true), 300)
+}
 
 const closeDropdown = (e) => { if (dropdownRef.value && !dropdownRef.value.contains(e.target)) dropdownOpen.value = false }
 onMounted(() => { loadWorks(); document.addEventListener('click', closeDropdown) })
@@ -142,54 +179,12 @@ const resetProgress  = () => { progressMin.value = 0; progressMax.value = 100; i
 const onMinInput     = () => { if (progressMin.value > progressMax.value) progressMax.value = progressMin.value }
 const onMaxInput     = () => { if (progressMax.value < progressMin.value) progressMin.value = progressMax.value }
 
-// ── Client-side search + category filter (instant, no API call) ────────────
-const filteredBySearch = computed(() => {
-  const q = itemSearch.value.toLowerCase().trim()
-  if (!q) return allItems.value
-  return allItems.value.filter(item =>
-    (item.item_desc    && item.item_desc.toLowerCase().includes(q)) ||
-    (item.schedule     && item.schedule.toLowerCase().includes(q)) ||
-    (item.serial_number && item.serial_number.toLowerCase().includes(q)) ||
-    (item.loa_number   && item.loa_number.toLowerCase().includes(q))
-  )
-})
-
-const filteredByCat = computed(() => {
-  if (selectedCategories.value.length === 3) return filteredBySearch.value
-  return filteredBySearch.value.filter(item => selectedCategories.value.includes(item.category || 'supply'))
-})
-
-const filteredResults = computed(() => {
-  if (!progressFilterActive.value) return filteredByCat.value
-  const min = progressMin.value
-  const max = progressMax.value
-  const excess = includeExcess.value
-  return filteredByCat.value.filter(item => {
-    const pct = progressPct(item)
-    if (pct > 100) return excess
-    return pct >= min && pct <= max
-  })
-})
-
-// ── Cumulative stats ───────────────────────────────────────────────────────
-const stats = computed(() => {
-  let supplyTotal = 0, supplyDone = 0, supplyCount = 0
-  let execTotal   = 0, execDone   = 0, execCount   = 0
-  for (const item of filteredResults.value) {
-    const req = item.qty || 0
-    const cat = item.category || ''
-    if (cat === 'supply') {
-      supplyTotal += req; supplyDone += item.supplied_quantity || 0; supplyCount++
-    } else if (cat === 'execution' || cat === 'supply_installation') {
-      execTotal += req; execDone += item.executed_quantity || 0; execCount++
-    } else {
-      if (!isSchB(item)) { supplyTotal += req; supplyDone += item.supplied_quantity || 0; supplyCount++ }
-      else               { execTotal   += req; execDone   += item.executed_quantity  || 0; execCount++ }
-    }
-  }
-  const pct = (d, t) => t > 0 ? Math.round(d / t * 100) : 0
-  return { supplyPct: pct(supplyDone, supplyTotal), execPct: pct(execDone, execTotal), supplyCount, execCount }
-})
+// ── Filtering/sorting now happens server-side (see loadItems/buildParams
+// above) — these stay as thin aliases so the template (and PDF export) don't
+// need to change: `allItems` already IS the filtered+sorted, currently-loaded
+// page(s) of results.
+const filteredResults = computed(() => allItems.value)
+const stats = computed(() => serverStats.value)
 
 // ── Sorting ────────────────────────────────────────────────────────────────
 const sortKey = ref('')
@@ -202,18 +197,18 @@ const sortIcon = (key) => {
   if (sortKey.value !== key) return 'i-carbon-arrows-vertical'
   return sortDir.value === 'asc' ? 'i-carbon-arrow-up' : 'i-carbon-arrow-down'
 }
-const sortedResults = computed(() => {
-  if (!sortKey.value) return filteredResults.value
-  return [...filteredResults.value].sort((a, b) => {
-    let av, bv
-    if      (sortKey.value === 'qty')       { av = a.qty || 0;               bv = b.qty || 0 }
-    else if (sortKey.value === 'submitted') { av = suppliedOrExecuted(a);    bv = suppliedOrExecuted(b) }
-    else if (sortKey.value === 'remaining') { av = remainingQty(a);          bv = remainingQty(b) }
-    else if (sortKey.value === 'progress')  { av = progressPct(a);           bv = progressPct(b) }
-    else if (sortKey.value === 'entries')   { av = (a.entries||[]).length;   bv = (b.entries||[]).length }
-    return sortDir.value === 'asc' ? av - bv : bv - av
-  })
-})
+// Server already sorts (see buildParams' `ordering` param) — alias for the
+// template/PDF export, which still reference `sortedResults` by name.
+const sortedResults = computed(() => allItems.value)
+
+// ── Load triggers ──────────────────────────────────────────────────────────
+// Registered here (not up near loadItems/scheduleLoad) since these all need
+// to exist first: selectedCategories, progressMin/Max/includeExcess, sortKey/Dir.
+watch(selectedIds, scheduleLoad, { deep: true })
+watch(itemSearch, scheduleLoad)
+watch(selectedCategories, scheduleLoad, { deep: true })
+watch([progressMin, progressMax, includeExcess], scheduleLoad)
+watch([sortKey, sortDir], scheduleLoad)
 
 // ── Remaining quantity ─────────────────────────────────────────────────────
 const remainingQty = (item) => {
@@ -240,8 +235,26 @@ const confirmPdfExport = async (includeEntries) => {
   await generateItemPDF(includeEntries)
 }
 
+// PDF export must contain everything matching the current filter, not just
+// whatever page(s) happen to be loaded client-side — drain the remaining
+// pages first (large page_size to minimise round trips) if needed.
+const fetchAllForExport = async () => {
+  const EXPORT_PAGE_SIZE = 2000
+  let items = []
+  let st = serverStats.value
+  let pageNum = 1
+  while (true) {
+    const res = await axios.get('/api/item-progress/search/', { params: buildParams(pageNum, EXPORT_PAGE_SIZE) })
+    items = items.concat(res.data.results)
+    st = res.data.stats
+    if (!res.data.next) break
+    pageNum += 1
+  }
+  return { items, st }
+}
+
 const generateItemPDF = async (includeEntries = true) => {
-  if (!filteredResults.value.length) return
+  if (!totalCount.value) return
   isGeneratingPDF.value = true
   try {
     const { jsPDF } = await import('jspdf')
@@ -258,8 +271,10 @@ const generateItemPDF = async (includeEntries = true) => {
     const C_BLUE  = [0, 113, 227]
     const C_GRAY  = [107, 114, 128]
 
-    const items = sortedResults.value  // already uses filteredResults
-    const st    = stats.value
+    const needsDrain = hasMore.value
+    const drained = needsDrain ? await fetchAllForExport() : null
+    const items = drained ? drained.items : allItems.value
+    const st    = drained ? drained.st    : serverStats.value
     const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 
     const addPageHeader = () => {
@@ -589,12 +604,12 @@ const generateItemPDF = async (includeEntries = true) => {
         <div class="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2">
           <div class="i-carbon-list text-gray-400 text-sm"></div>
           <span class="text-xs font-semibold text-gray-600">
-            {{ filteredResults.length }}
-            <span v-if="filteredResults.length < allItems.length" class="font-normal text-gray-400"> of {{ allItems.length }}</span>
+            {{ allItems.length }}
+            <span v-if="allItems.length < totalCount" class="font-normal text-gray-400"> of {{ totalCount }}</span>
             items
           </span>
         </div>
-        <button @click="onExportClick" :disabled="isGeneratingPDF || !sortedResults.length"
+        <button @click="onExportClick" :disabled="isGeneratingPDF || !totalCount"
           class="ml-auto flex items-center gap-1.5 px-4 py-2 rounded-xl border border-gray-300 text-xs font-semibold text-gray-600 hover:bg-gray-100 hover:border-gray-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0">
           <div :class="isGeneratingPDF ? 'i-carbon-circle-dash animate-spin' : 'i-carbon-document-pdf'" class="text-sm"></div>
           {{ isGeneratingPDF ? 'Generating…' : 'Export PDF' }}
@@ -616,7 +631,7 @@ const generateItemPDF = async (includeEntries = true) => {
     </div>
 
     <!-- No items match filter/search -->
-    <div v-else-if="!isLoadingItems && allItems.length > 0 && filteredResults.length === 0" class="flex-1 flex flex-col items-center justify-center py-24 text-center">
+    <div v-else-if="!isLoadingItems && !noneSelected && totalCount === 0" class="flex-1 flex flex-col items-center justify-center py-24 text-center">
       <div class="i-carbon-search text-5xl text-gray-200 mb-4"></div>
       <p class="text-sm font-semibold text-gray-400">No items match your filters.</p>
       <p class="text-xs text-gray-300 mt-1">Try adjusting the search or enabling more category filters.</p>
@@ -804,11 +819,17 @@ const generateItemPDF = async (includeEntries = true) => {
     </div>
 
     <!-- Footer -->
-    <div v-if="filteredResults.length > 0" class="px-6 py-3 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
+    <div v-if="filteredResults.length > 0" class="px-6 py-3 border-t border-gray-100 bg-gray-50 rounded-b-2xl flex items-center justify-between gap-3">
       <p class="text-[11px] text-gray-400 font-medium">
-        Showing {{ filteredResults.length }} of {{ allItems.length }} {{ allItems.length === 1 ? 'item' : 'items' }}
+        Showing {{ allItems.length }} of {{ totalCount }} {{ totalCount === 1 ? 'item' : 'items' }}
         across {{ selectedIds.length }} {{ selectedIds.length === 1 ? 'work' : 'works' }}
       </p>
+      <button v-if="hasMore" @click="loadMore" :disabled="loadingMore"
+        class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-[11px] font-semibold text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all disabled:opacity-50 flex-shrink-0">
+        <div v-if="loadingMore" class="i-carbon-circle-dash animate-spin text-[11px]"></div>
+        <div v-else class="i-carbon-add text-[11px]"></div>
+        {{ loadingMore ? 'Loading…' : `Load more (${totalCount - allItems.length} remaining)` }}
+      </button>
     </div>
 
     <!-- PDF Export Modal -->

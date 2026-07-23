@@ -451,8 +451,8 @@ onMounted(loadData)
           <div v-if="!approved.length" class="py-20 text-center">
             <p class="text-sm text-gray-400">No approved users yet</p>
           </div>
-          <div v-else class="bg-light-surface rounded-2xl soft-shadow overflow-hidden max-w-4xl">
-            <table class="w-full text-sm">
+          <div v-else class="bg-light-surface rounded-2xl soft-shadow max-w-6xl overflow-x-auto">
+            <table class="w-full text-sm min-w-[820px]">
               <thead>
                 <tr class="border-b border-gray-100">
                   <th class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-5 py-3">Name</th>
@@ -460,7 +460,7 @@ onMounted(loadData)
                   <th class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-5 py-3">Email</th>
                   <th class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-5 py-3">Designation</th>
                   <th class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-5 py-3">Role</th>
-                  <th class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-5 py-3">Actions</th>
+                  <th class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-5 py-3 whitespace-nowrap sticky right-0 bg-light-surface">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -485,9 +485,9 @@ onMounted(loadData)
                       {{ u.role }}
                     </span>
                   </td>
-                  <td class="px-5 py-3.5" @click.stop>
+                  <td class="px-5 py-3.5 whitespace-nowrap sticky right-0 bg-light-surface" @click.stop>
                     <button @click="revoke(u.id)"
-                      class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 text-red-600 border border-red-200 text-xs font-semibold hover:bg-red-100 transition-colors">
+                      class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 text-red-600 border border-red-200 text-xs font-semibold hover:bg-red-100 transition-colors whitespace-nowrap">
                       <div class="i-carbon-locked text-sm"></div> Revoke
                     </button>
                   </td>

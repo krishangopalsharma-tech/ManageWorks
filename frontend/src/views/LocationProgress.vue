@@ -61,25 +61,58 @@ const toggleWork = (id) => {
   else selectedIds.value.push(id)
 }
 
-// ── Load data ──────────────────────────────────────────────────────────────────
-let loadTimer = null
-const loadData = async () => {
-  if (noneSelected.value) { allRows.value = []; return }
-  isLoadingData.value = true
-  expandedKey.value = null
-  try {
-    const params = {}
-    if (!allSelected.value) params.work_ids = selectedIds.value.join(',')
-    const res = await axios.get('/api/location-progress/data/', { params })
-    allRows.value = res.data
-  } catch (e) { console.error(e) }
-  finally { isLoadingData.value = false }
+// ── Load data — paginated, filtered/sorted server-side ──────────────────────
+// Big selections (e.g. "select all") load in batches instead of one giant
+// request; category/search/sort are sent as query params so the server only
+// ever returns what matches.
+const page        = ref(1)
+const pageSize    = ref(200)
+const hasMore     = ref(false)
+const loadingMore = ref(false)
+const totalCount  = ref(0)
+const serverStats = ref({ sections: 0, stations: 0, siCount: 0, exCount: 0 })
+
+const buildParams = (pageNum, size) => {
+  const params = { work_ids: selectedIds.value.join(','), page: pageNum, page_size: size }
+  if (itemSearch.value.trim()) params.q = itemSearch.value.trim()
+  if (locationSearch.value.trim()) params.location = locationSearch.value.trim()
+  params.category = selectedCategories.value.join(',')
+  if (sortKey.value) params.ordering = (sortDir.value === 'desc' ? '-' : '') + sortKey.value
+  return params
 }
 
-watch(selectedIds, () => {
+let loadTimer = null
+const loadData = async (reset = true) => {
+  if (noneSelected.value) {
+    allRows.value = []; totalCount.value = 0; hasMore.value = false
+    return
+  }
+  if (reset) { isLoadingData.value = true; page.value = 1; expandedKey.value = null } else { loadingMore.value = true }
+  try {
+    const res = await axios.get('/api/location-progress/data/', { params: buildParams(page.value, pageSize.value) })
+    allRows.value    = reset ? res.data.results : allRows.value.concat(res.data.results)
+    totalCount.value = res.data.count
+    hasMore.value    = !!res.data.next
+    serverStats.value = res.data.stats
+  } catch (e) { console.error(e) }
+  finally { isLoadingData.value = false; loadingMore.value = false }
+}
+
+const loadMore = async () => {
+  if (!hasMore.value || loadingMore.value) return
+  page.value += 1
+  await loadData(false)
+}
+
+const scheduleLoad = () => {
   clearTimeout(loadTimer)
-  loadTimer = setTimeout(loadData, 300)
-}, { deep: true })
+  loadTimer = setTimeout(() => loadData(true), 300)
+}
+watch(selectedIds, scheduleLoad, { deep: true })
+watch(itemSearch, scheduleLoad)
+watch(locationSearch, scheduleLoad)
+// watch(selectedCategories, ...) and watch([sortKey, sortDir], ...) are
+// registered further down, once those refs exist — see "── Load triggers ──".
 
 // ── Category filter ────────────────────────────────────────────────────────────
 const selectedCategories = ref(['supply_installation', 'execution'])
@@ -89,30 +122,11 @@ const toggleCategory = (cat) => {
   else selectedCategories.value.push(cat)
 }
 
-// ── Filtered rows ──────────────────────────────────────────────────────────────
-const filteredRows = computed(() => {
-  let rows = allRows.value
-
-  if (selectedCategories.value.length < 2) {
-    rows = rows.filter(r => selectedCategories.value.includes(r.category || 'supply'))
-  }
-
-  const iq = itemSearch.value.toLowerCase().trim()
-  if (iq) {
-    rows = rows.filter(r =>
-      (r.item_desc     && r.item_desc.toLowerCase().includes(iq)) ||
-      (r.serial_number && r.serial_number.toLowerCase().includes(iq)) ||
-      (r.schedule      && r.schedule.toLowerCase().includes(iq))
-    )
-  }
-
-  const lq = locationSearch.value.toUpperCase().trim()
-  if (lq) {
-    rows = rows.filter(r => r.location.includes(lq))
-  }
-
-  return rows
-})
+// ── Filtering/sorting now happens server-side (see loadData/buildParams
+// above) — these stay as thin aliases so the template/PDF export don't need
+// to change: `allRows` already IS the filtered+sorted, currently-loaded
+// page(s) of results.
+const filteredRows = computed(() => allRows.value)
 
 // ── Sorting ────────────────────────────────────────────────────────────────────
 const sortKey = ref('')
@@ -125,30 +139,16 @@ const sortIcon = (key) => {
   if (sortKey.value !== key) return 'i-carbon-arrows-vertical'
   return sortDir.value === 'asc' ? 'i-carbon-arrow-up' : 'i-carbon-arrow-down'
 }
-const sortedRows = computed(() => {
-  if (!sortKey.value) return filteredRows.value
-  return [...filteredRows.value].sort((a, b) => {
-    let av, bv
-    if      (sortKey.value === 'executed') { av = a.executed_here;  bv = b.executed_here }
-    else if (sortKey.value === 'scope')    { av = a.scope;          bv = b.scope }
-    else if (sortKey.value === 'remaining'){ av = a.remaining;      bv = b.remaining }
-    else if (sortKey.value === 'progress') { av = a.progress_pct;   bv = b.progress_pct }
-    else if (sortKey.value === 'entries')  { av = a.entries_count;  bv = b.entries_count }
-    else if (sortKey.value === 'location') { av = a.location; bv = b.location; return sortDir.value === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av) }
-    else { av = 0; bv = 0 }
-    return sortDir.value === 'asc' ? av - bv : bv - av
-  })
-})
+const sortedRows = computed(() => allRows.value)
 
 // ── Stats ──────────────────────────────────────────────────────────────────────
-const stats = computed(() => {
-  const rows = filteredRows.value
-  const sections = rows.filter(r => r.location_type === 'section').length
-  const stations = rows.filter(r => r.location_type === 'station').length
-  const siCount  = rows.filter(r => r.category === 'supply_installation').length
-  const exCount  = rows.filter(r => r.category === 'execution').length
-  return { sections, stations, siCount, exCount }
-})
+const stats = computed(() => serverStats.value)
+
+// ── Load triggers ────────────────────────────────────────────────────────────
+// Registered here (not up near loadData/scheduleLoad) since selectedCategories
+// and sortKey/sortDir need to exist first.
+watch(selectedCategories, scheduleLoad, { deep: true })
+watch([sortKey, sortDir], scheduleLoad)
 
 // ── Expand toggle ──────────────────────────────────────────────────────────────
 const rowKey = (r) => `${r.location}__${r.work_item_id}`
@@ -169,8 +169,26 @@ const confirmPdfExport = async (includeEntries) => {
   await generateLocationPDF(includeEntries)
 }
 
+// PDF export must contain everything matching the current filter, not just
+// whatever page(s) happen to be loaded client-side — drain the remaining
+// pages first (large page_size to minimise round trips) if needed.
+const fetchAllForExport = async () => {
+  const EXPORT_PAGE_SIZE = 2000
+  let rows = []
+  let st = serverStats.value
+  let pageNum = 1
+  while (true) {
+    const res = await axios.get('/api/location-progress/data/', { params: buildParams(pageNum, EXPORT_PAGE_SIZE) })
+    rows = rows.concat(res.data.results)
+    st = res.data.stats
+    if (!res.data.next) break
+    pageNum += 1
+  }
+  return { rows, st }
+}
+
 const generateLocationPDF = async (includeEntries = true) => {
-  if (!filteredRows.value.length) return
+  if (!totalCount.value) return
   isGeneratingPDF.value = true
   try {
     const { jsPDF } = await import('jspdf')
@@ -186,8 +204,10 @@ const generateLocationPDF = async (includeEntries = true) => {
     const C_BLUE  = [0, 113, 227]
     const C_GRAY  = [107, 114, 128]
 
-    const rows  = sortedRows.value
-    const st    = stats.value
+    const needsDrain = hasMore.value
+    const drained = needsDrain ? await fetchAllForExport() : null
+    const rows = drained ? drained.rows : allRows.value
+    const st    = drained ? drained.st : serverStats.value
     const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 
     const addPageHeader = () => {
@@ -478,12 +498,12 @@ onBeforeUnmount(() => { document.removeEventListener('click', closeDropdown); cl
         <div class="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2">
           <div class="i-carbon-list text-gray-400 text-sm"></div>
           <span class="text-xs font-semibold text-gray-600">
-            {{ filteredRows.length }}
-            <span v-if="filteredRows.length < allRows.length" class="font-normal text-gray-400"> of {{ allRows.length }}</span>
+            {{ allRows.length }}
+            <span v-if="allRows.length < totalCount" class="font-normal text-gray-400"> of {{ totalCount }}</span>
             rows
           </span>
         </div>
-        <button @click="onExportClick" :disabled="isGeneratingPDF"
+        <button @click="onExportClick" :disabled="isGeneratingPDF || !totalCount"
           class="ml-auto flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all bg-white border-gray-200 text-gray-600 hover:border-[#1D5F5E] hover:text-[#1D5F5E] hover:bg-accent-soft disabled:opacity-50 disabled:cursor-not-allowed">
           <div :class="isGeneratingPDF ? 'i-carbon-circle-dash animate-spin' : 'i-carbon-document-pdf'" class="text-sm"></div>
           {{ isGeneratingPDF ? 'Generating…' : 'Export PDF' }}
@@ -504,15 +524,16 @@ onBeforeUnmount(() => { document.removeEventListener('click', closeDropdown); cl
       <p class="text-sm font-semibold text-gray-400">Loading location data…</p>
     </div>
 
-    <!-- Empty — no entries for selected work(s) -->
-    <div v-else-if="!isLoadingData && allRows.length === 0" class="flex-1 flex flex-col items-center justify-center py-24 text-center">
+    <!-- Empty — no entries for selected work(s), no filters active -->
+    <div v-else-if="!isLoadingData && totalCount === 0 && !itemSearch && !locationSearch && selectedCategories.length === 2"
+      class="flex-1 flex flex-col items-center justify-center py-24 text-center">
       <div class="i-carbon-location text-5xl text-gray-200 mb-4"></div>
       <p class="text-sm font-semibold text-gray-400">No location data for selected work(s).</p>
       <p class="text-xs text-gray-300 mt-1">Execution entries with a location will appear here.</p>
     </div>
 
-    <!-- No match -->
-    <div v-else-if="!isLoadingData && allRows.length > 0 && filteredRows.length === 0" class="flex-1 flex flex-col items-center justify-center py-24 text-center">
+    <!-- No match — some filter is active and zero rows matched -->
+    <div v-else-if="!isLoadingData && totalCount === 0" class="flex-1 flex flex-col items-center justify-center py-24 text-center">
       <div class="i-carbon-search text-5xl text-gray-200 mb-4"></div>
       <p class="text-sm font-semibold text-gray-400">No rows match your filters.</p>
       <p class="text-xs text-gray-300 mt-1">Try adjusting search or category filters.</p>
@@ -693,6 +714,20 @@ onBeforeUnmount(() => { document.removeEventListener('click', closeDropdown); cl
       </table>
     </div>
 
+    <!-- Footer -->
+    <div v-if="filteredRows.length > 0" class="px-6 py-3 border-t border-gray-100 bg-gray-50 rounded-b-2xl flex items-center justify-between gap-3">
+      <p class="text-[11px] text-gray-400 font-medium">
+        Showing {{ allRows.length }} of {{ totalCount }} {{ totalCount === 1 ? 'row' : 'rows' }}
+        across {{ selectedIds.length }} {{ selectedIds.length === 1 ? 'work' : 'works' }}
+      </p>
+      <button v-if="hasMore" @click="loadMore" :disabled="loadingMore"
+        class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-[11px] font-semibold text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all disabled:opacity-50 flex-shrink-0">
+        <div v-if="loadingMore" class="i-carbon-circle-dash animate-spin text-[11px]"></div>
+        <div v-else class="i-carbon-add text-[11px]"></div>
+        {{ loadingMore ? 'Loading…' : `Load more (${totalCount - allRows.length} remaining)` }}
+      </button>
+    </div>
+
     <!-- PDF Export Modal -->
     <Teleport to="body">
       <div v-if="showPdfModal" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" @click.self="showPdfModal = false">
@@ -703,7 +738,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', closeDropdown); cl
             </div>
             <div>
               <h3 class="text-base font-bold text-gray-900">Export PDF</h3>
-              <p class="text-xs text-gray-400">{{ filteredRows.length }} row{{ filteredRows.length !== 1 ? 's' : '' }} in current view</p>
+              <p class="text-xs text-gray-400">{{ totalCount }} row{{ totalCount !== 1 ? 's' : '' }} matching current filters</p>
             </div>
           </div>
           <p class="text-sm text-gray-600 mb-5">Include individual entries in the PDF?</p>
