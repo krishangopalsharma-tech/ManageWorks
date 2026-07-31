@@ -24,9 +24,11 @@ HIGH_CONFIDENCE = 0.70   # candidate considered a solid match
 LOW_CONFIDENCE  = 0.35   # claimed-schedule match considered suspicious
 HEAL_MARGIN     = 0.15   # best alternative must beat the current schedule's score by this much
 TIE_MARGIN      = 0.05   # candidates within this of each other -> ambiguous, don't auto-pick
-QTY_TOLERANCE   = 0.01   # 1% relative tolerance for qty match
-DESC_WEIGHT     = 0.6
-QTY_WEIGHT      = 0.4
+QTY_TOLERANCE   = 0.01   # 1% relative tolerance for qty/rate match
+DESC_WEIGHT     = 0.55
+QTY_WEIGHT       = 0.35
+UNIT_WEIGHT     = 0.05
+RATE_WEIGHT     = 0.05
 
 
 def _normalize_desc(s):
@@ -43,15 +45,31 @@ def _desc_similarity(a, b):
     return difflib.SequenceMatcher(None, na, nb).ratio()
 
 
-def _qty_similarity(parsed_qty, wi_qty):
+def _binary_tolerance_match(a, b):
     """
-    Binary, not continuous: Original Agmt Qty is a stable fingerprint copied from the same
-    LOA source as WorkItem.qty, so it should match closely or not at all — there's no real
-    middle ground worth scoring on a curve.
+    Binary, not continuous: both qty and rate are stable fingerprints copied from the same
+    LOA source as the WorkItem field they're compared against, so they should match closely
+    or not at all — there's no real middle ground worth scoring on a curve.
     """
-    if parsed_qty is None or not wi_qty:
+    if a is None or not b:
         return None
-    return 1.0 if abs(parsed_qty - wi_qty) / abs(wi_qty) <= QTY_TOLERANCE else 0.0
+    return 1.0 if abs(a - b) / abs(b) <= QTY_TOLERANCE else 0.0
+
+
+def _unit_similarity(a, b):
+    """Units are a short controlled vocabulary ("Numbers", "Metre") — exact match, no fuzzing."""
+    na, nb = (a or '').strip().lower(), (b or '').strip().lower()
+    if not na or not nb:
+        return None
+    return 1.0 if na == nb else 0.0
+
+
+def _wi_effective_rate(wi):
+    """Mirrors LOAItemLookupView's rate computation (views.py) — unit_rate_rs net of the below%."""
+    if not wi.unit_rate_rs:
+        return None
+    below = wi.unit_rate_below or 0.0
+    return wi.unit_rate_rs * (1 - below / 100)
 
 
 def _match_score(item, wi):
@@ -60,7 +78,9 @@ def _match_score(item, wi):
         return None
     parts = [
         (_desc_similarity(item.get('description'), wi.item_desc), DESC_WEIGHT),
-        (_qty_similarity(item.get('original_agmt_qty'), wi.qty), QTY_WEIGHT),
+        (_binary_tolerance_match(item.get('original_agmt_qty'), wi.qty), QTY_WEIGHT),
+        (_unit_similarity(item.get('unit'), wi.unit), UNIT_WEIGHT),
+        (_binary_tolerance_match(item.get('agreement_rate'), _wi_effective_rate(wi)), RATE_WEIGHT),
     ]
     available = [(v, w) for v, w in parts if v is not None]
     if not available:

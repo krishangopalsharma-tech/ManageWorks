@@ -10,8 +10,9 @@ logger = logging.getLogger(__name__)
 # letter/digit is assumed to be non-alphanumeric (a hyphen in every real bill seen so far); a bill
 # that ran the schedule code directly into the next word with no separator would not match this.
 SCHEDULE_RE = re.compile(r'Schedule\s+([A-Za-z]\d*)(?=[^A-Za-z0-9]|$)', re.IGNORECASE)
-# Matches item-type cell like "1 (I)" or "10 (I)"
-ITEM_NO_RE  = re.compile(r'^(\d+)\s*\([1Il]\)$', re.IGNORECASE)
+# Matches item-type cell like "1 (I)", "10 (I)", or a letter-prefixed convention like "NS01 (I)"
+# ("Non-Schedule" items in some LOAs) — the prefix is kept as part of the item identity.
+ITEM_NO_RE  = re.compile(r'^([A-Za-z]*\d+)\s*\([1Il]\)$', re.IGNORECASE)
 
 def _clean(val):
     if val is None:
@@ -182,16 +183,6 @@ def _parse_item_row(cells, current_schedule, warnings=None):
     if not sr.isdigit():
         return None
 
-    # Item No. cell must match "N (I)"
-    item_raw = cells[1].strip()
-    item_m = ITEM_NO_RE.match(item_raw)
-    if not item_m:
-        if item_raw and warnings is not None:
-            warnings.append(f'Row sr={sr}: Item No "{item_raw}" failed regex — skipped.')
-        return None
-
-    item_no = item_m.group(1)
-
     # Agreement Rate (col 4) must be numeric
     if not _is_numeric(cells[4]):
         return None
@@ -199,6 +190,24 @@ def _parse_item_row(cells, current_schedule, warnings=None):
     # Current Agmt Qty (col 6) must be numeric
     if not _is_numeric(cells[6]):
         return None
+
+    # Item No. cell should match "N (I)" / "NS01 (I)" etc. A digit Sr.No plus numeric rate and
+    # qty already make this structurally an item row regardless of the Item No. text's exact
+    # format — item-numbering conventions vary by railway zone/vendor and will keep changing,
+    # so an unrecognized format falls back to Sr.No as the item identity instead of dropping
+    # real billed data. The LOA cross-check (views.py) still verifies/corrects identity from
+    # description + qty afterward.
+    item_raw = cells[1].strip()
+    item_m = ITEM_NO_RE.match(item_raw)
+    if item_m:
+        item_no = item_m.group(1)
+    else:
+        item_no = sr
+        if warnings is not None:
+            warnings.append(
+                f'Row sr={sr}: Item No "{item_raw}" format not recognized — '
+                f'using Sr.No as item number, verify manually.'
+            )
 
     unit = _normalize_unit(cells[2])
     if len(unit) > 40:
