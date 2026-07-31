@@ -1,6 +1,18 @@
 import re
 import pdfplumber
 
+# TEMPORARY diagnostic logging — investigating a cross-schedule item mixup
+# reported 2026-07-31. Remove once root cause is found and fixed.
+_DEBUG_LOG = '/home/adi/ManageWorks/backend/pdf_parse_debug.log'
+
+
+def _dbg(msg):
+    try:
+        with open(_DEBUG_LOG, 'a') as f:
+            f.write(msg + '\n')
+    except Exception:
+        pass
+
 
 # Matches "Schedule A", "Schedule B", "Schedule A1", "Schedule B3", etc.
 # Letter + optional digits, must be followed by non-alphanumeric (word boundary) to avoid "Schedule AMOUNT"
@@ -284,13 +296,14 @@ def parse_bill_pdf(file_obj):
                     # Don't skip — items 39/40 may be on this same page
 
                 tables = page.extract_tables() or []
-                for table in tables:
-                    for row in (table or []):
+                for table_idx, table in enumerate(tables):
+                    for row_idx, row in enumerate(table or []):
                         if not row:
                             continue
 
                         cells = [_clean(c) for c in row]
                         row_text = ' '.join(cells)
+                        _dbg(f'p{page_num} t{table_idx} r{row_idx} sched={current_schedule} cells={cells!r}')
 
                         # ── Schedule section header ──────────────────────────
                         sched_m = SCHEDULE_RE.search(row_text)
@@ -300,9 +313,12 @@ def parse_bill_pdf(file_obj):
                         if sched_m:
                             first = cells[0].strip().lower()
                             if not first.startswith('total'):
+                                _dbg(f'  -> SCHEDULE HEADER: {current_schedule!r} -> {sched_m.group(1).upper()!r} (matched {sched_m.group(0)!r} in cells[0]={cells[0]!r})')
                                 current_schedule = sched_m.group(1).upper()
                                 last_item = None
                                 continue
+                            else:
+                                _dbg(f'  -> schedule pattern matched but cells[0] starts with "total", ignoring: {sched_m.group(0)!r}')
 
                         # ── Total row: skip ──────────────────────────────────
                         if cells[0].strip().lower().startswith('total'):
@@ -313,6 +329,7 @@ def parse_bill_pdf(file_obj):
                         if item:
                             result['items'].append(item)
                             last_item = item
+                            _dbg(f'  -> ITEM sch={item["schedule_name"]} no={item["item_number"]} amt_total={item["amt_total"]} rate={item["agreement_rate"]} qty={item["current_agmt_qty"]}')
                             continue
 
                         # ── Description continuation row ─────────────────────
