@@ -1,3 +1,7 @@
+import re
+import difflib
+import logging
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -10,6 +14,115 @@ from users.views import _is_super_admin
 from .models import BillRecord, BillItem
 from .serializers import BillRecordSerializer, BillItemSerializer
 from .pdf_parser import parse_bill_pdf
+
+logger = logging.getLogger(__name__)
+
+# Confidence thresholds for cross-validating a parsed item's schedule assignment against
+# WorkItem (Add Work LOA) data — a safety net independent of pdf_parser's own schedule
+# detection, using item description + Original Agmt Qty as fingerprints.
+HIGH_CONFIDENCE = 0.70   # candidate considered a solid match
+LOW_CONFIDENCE  = 0.35   # claimed-schedule match considered suspicious
+HEAL_MARGIN     = 0.15   # best alternative must beat the current schedule's score by this much
+TIE_MARGIN      = 0.05   # candidates within this of each other -> ambiguous, don't auto-pick
+QTY_TOLERANCE   = 0.01   # 1% relative tolerance for qty match
+DESC_WEIGHT     = 0.6
+QTY_WEIGHT      = 0.4
+
+
+def _normalize_desc(s):
+    s = (s or '').lower()
+    s = re.sub(r'[^a-z0-9 ]+', ' ', s)
+    return re.sub(r'\s+', ' ', s).strip()
+
+
+def _desc_similarity(a, b):
+    """None when either side has no text — that's "no signal", not a mismatch."""
+    na, nb = _normalize_desc(a), _normalize_desc(b)
+    if not na or not nb:
+        return None
+    return difflib.SequenceMatcher(None, na, nb).ratio()
+
+
+def _qty_similarity(parsed_qty, wi_qty):
+    """
+    Binary, not continuous: Original Agmt Qty is a stable fingerprint copied from the same
+    LOA source as WorkItem.qty, so it should match closely or not at all — there's no real
+    middle ground worth scoring on a curve.
+    """
+    if parsed_qty is None or not wi_qty:
+        return None
+    return 1.0 if abs(parsed_qty - wi_qty) / abs(wi_qty) <= QTY_TOLERANCE else 0.0
+
+
+def _match_score(item, wi):
+    """Weighted average over whichever signals are available. None if none are (undecidable)."""
+    if wi is None:
+        return None
+    parts = [
+        (_desc_similarity(item.get('description'), wi.item_desc), DESC_WEIGHT),
+        (_qty_similarity(item.get('original_agmt_qty'), wi.qty), QTY_WEIGHT),
+    ]
+    available = [(v, w) for v, w in parts if v is not None]
+    if not available:
+        return None
+    total_w = sum(w for _, w in available)
+    return sum(v * w for v, w in available) / total_w
+
+
+def _build_serial_index(loa_lookup):
+    """{normalized_serial: [(schedule, WorkItem), ...]} — reuses loa_lookup, no extra query."""
+    index = {}
+    for (sch, sno), wi in loa_lookup.items():
+        index.setdefault(sno, []).append((sch, wi))
+    return index
+
+
+def _resolve_schedule(item, loa_lookup, serial_index, warnings):
+    """
+    Cross-validate item's claimed schedule against every WorkItem sharing its item number
+    in any schedule. Self-heals item['schedule_name'] in place when a clearly better match
+    exists elsewhere; otherwise flags ambiguous/low-confidence cases without dropping data.
+    Returns the WorkItem to use for loa_contract_value/over_limit comparison, or None.
+    """
+    sno = _normalize_serial(item['item_number'])
+    claimed_sch = item['schedule_name']
+    current_wi = loa_lookup.get((claimed_sch, sno))
+    current_score = _match_score(item, current_wi)
+
+    candidates = serial_index.get(sno, [])
+    scored = sorted(
+        ((sch, wi, _match_score(item, wi)) for sch, wi in candidates),
+        key=lambda t: (t[2] is not None, t[2]),
+        reverse=True,
+    )
+    best_sch, best_wi, best_score = scored[0] if scored else (None, None, None)
+
+    if (best_wi is not None and best_sch != claimed_sch and best_score is not None
+            and best_score >= HIGH_CONFIDENCE
+            and best_score - (current_score or 0.0) >= HEAL_MARGIN):
+        runner_up_score = scored[1][2] if len(scored) > 1 else None
+        if runner_up_score is not None and best_score - runner_up_score < TIE_MARGIN:
+            msg = (f'Ambiguous schedule for item {sno}: "{claimed_sch}" claimed, but '
+                   f'"{best_sch}" ({best_score:.2f}) and "{scored[1][0]}" ({runner_up_score:.2f}) '
+                   f'both match closely — verify manually.')
+            warnings.append(msg)
+            logger.warning(msg)
+            return current_wi
+
+        msg = (f'Auto-corrected schedule for item {sno}: "{claimed_sch}" -> "{best_sch}" '
+               f'(match {best_score:.2f} vs {current_score or 0.0:.2f} at original schedule).')
+        warnings.append(msg)
+        logger.warning(msg)
+        item['schedule_name'] = best_sch
+        return best_wi
+
+    if current_wi is not None and current_score is not None and current_score < LOW_CONFIDENCE:
+        msg = (f'Low-confidence schedule match for {claimed_sch} Item {sno} '
+               f'(score {current_score:.2f}) — verify manually.')
+        warnings.append(msg)
+        logger.warning(msg)
+
+    return current_wi
 
 
 def _normalize_serial(sno):
@@ -33,21 +146,24 @@ def _build_loa_lookup(work):
 
 def _loa_cross_check(parsed, loa_lookup):
     """
-    Augment each parsed item with loa_contract_value from WorkItem.
+    Cross-validates each parsed item's schedule against WorkItem (LOA) data — self-healing
+    an item mislabeled into the wrong schedule when description+qty clearly point elsewhere
+    (see _resolve_schedule) — then augments it with loa_contract_value from WorkItem.
     Adds per-item warnings for overpayment and items missing from LOA.
-    Replaces grand-total warning with LOA-based comparison.
     """
     if not loa_lookup:
         return
 
+    serial_index = _build_serial_index(loa_lookup)
     missing_from_loa = []
     over_limit = []
     loa_matched_total = 0.0
 
     for item in parsed['items']:
-        sch = item['schedule_name'].upper()
+        item['schedule_name'] = item['schedule_name'].upper()
         sno = _normalize_serial(item['item_number'])
-        wi  = loa_lookup.get((sch, sno))
+        wi  = _resolve_schedule(item, loa_lookup, serial_index, parsed['warnings'])
+        sch = item['schedule_name']  # may now be the self-healed value
 
         if wi is None:
             item['loa_contract_value'] = None
@@ -268,16 +384,18 @@ class BillListCreateView(APIView):
             # Skip items with no contract data and no payment
             if rate == 0 and qty == 0 and amt == 0:
                 continue
+            raw_original_qty = item.get('original_agmt_qty')
             BillItem.objects.create(
-                bill_record      = bill,
-                schedule_name    = item.get('schedule_name', ''),
-                item_number      = item.get('item_number', ''),
-                description      = item.get('description', ''),
-                unit             = item.get('unit', ''),
-                agreement_rate   = rate,
-                current_agmt_qty = qty,
-                qty_upto_date    = float(item.get('qty_upto_date') or 0),
-                amt_total        = float(item.get('amt_total') or 0),
+                bill_record       = bill,
+                schedule_name     = item.get('schedule_name', ''),
+                item_number       = item.get('item_number', ''),
+                description       = item.get('description', ''),
+                unit              = item.get('unit', ''),
+                agreement_rate    = rate,
+                original_agmt_qty = float(raw_original_qty) if raw_original_qty not in (None, '') else None,
+                current_agmt_qty  = qty,
+                qty_upto_date     = float(item.get('qty_upto_date') or 0),
+                amt_total         = float(item.get('amt_total') or 0),
             )
 
         serializer = BillRecordSerializer(bill)
@@ -343,16 +461,18 @@ class BillDeleteView(APIView):
                 amt  = float(item.get('amt_total') or 0)
                 if rate == 0 and qty == 0 and amt == 0:
                     continue
+                raw_original_qty = item.get('original_agmt_qty')
                 BillItem.objects.create(
-                    bill_record      = bill,
-                    schedule_name    = item.get('schedule_name', ''),
-                    item_number      = item.get('item_number', ''),
-                    description      = item.get('description', ''),
-                    unit             = item.get('unit', ''),
-                    agreement_rate   = rate,
-                    current_agmt_qty = qty,
-                    qty_upto_date    = float(item.get('qty_upto_date') or 0),
-                    amt_total        = amt,
+                    bill_record       = bill,
+                    schedule_name     = item.get('schedule_name', ''),
+                    item_number       = item.get('item_number', ''),
+                    description       = item.get('description', ''),
+                    unit              = item.get('unit', ''),
+                    agreement_rate    = rate,
+                    original_agmt_qty = float(raw_original_qty) if raw_original_qty not in (None, '') else None,
+                    current_agmt_qty  = qty,
+                    qty_upto_date     = float(item.get('qty_upto_date') or 0),
+                    amt_total         = amt,
                 )
         return Response(BillRecordSerializer(bill).data)
 

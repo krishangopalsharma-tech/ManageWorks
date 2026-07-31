@@ -27,6 +27,7 @@ class BillItem(models.Model):
     description      = models.TextField(blank=True)
     unit             = models.CharField(max_length=100, blank=True)
     agreement_rate   = models.FloatField(default=0)
+    original_agmt_qty = models.FloatField(null=True, blank=True, default=None)  # col 5: Original Agmt Qty
     current_agmt_qty = models.FloatField(default=0)
     qty_upto_date    = models.FloatField(default=0)      # col 9: Qty Upto Date (executed)
     amt_total        = models.FloatField(default=0)      # Total Up to Date Amount

@@ -1,21 +1,14 @@
+import logging
 import re
 import pdfplumber
 
-# TEMPORARY diagnostic logging — investigating a cross-schedule item mixup
-# reported 2026-07-31. Remove once root cause is found and fixed.
-_DEBUG_LOG = '/home/adi/ManageWorks/backend/pdf_parse_debug.log'
-
-
-def _dbg(msg):
-    try:
-        with open(_DEBUG_LOG, 'a') as f:
-            f.write(msg + '\n')
-    except Exception:
-        pass
-
+logger = logging.getLogger(__name__)
 
 # Matches "Schedule A", "Schedule B", "Schedule A1", "Schedule B3", etc.
-# Letter + optional digits, must be followed by non-alphanumeric (word boundary) to avoid "Schedule AMOUNT"
+# Letter + optional digits, must be followed by non-alphanumeric (word boundary) to avoid "Schedule AMOUNT".
+# Generalizes to any future letter (C, D, ...) without change — only the separator right after the
+# letter/digit is assumed to be non-alphanumeric (a hyphen in every real bill seen so far); a bill
+# that ran the schedule code directly into the next word with no separator would not match this.
 SCHEDULE_RE = re.compile(r'Schedule\s+([A-Za-z]\d*)(?=[^A-Za-z0-9]|$)', re.IGNORECASE)
 # Matches item-type cell like "1 (I)" or "10 (I)"
 ITEM_NO_RE  = re.compile(r'^(\d+)\s*\([1Il]\)$', re.IGNORECASE)
@@ -214,17 +207,22 @@ def _parse_item_row(cells, current_schedule, warnings=None):
     amt_total     = _find_total_amt(cells)
     qty_upto_date = _to_float(cells[9]) if len(cells) > 9 and _is_numeric(cells[9]) else 0.0
     remarks       = _clean(cells[14]) if len(cells) > 14 else ''
+    # None (not 0.0) when blank/non-numeric — distinguishes "not present" from "genuinely
+    # zero" for the LOA cross-check, which treats a missing qty as no signal rather than a
+    # mismatch against every WorkItem.
+    original_agmt_qty = _to_float(cells[5]) if _is_numeric(cells[5]) else None
 
     return {
-        'schedule_name':    current_schedule,
-        'item_number':      item_no,
-        'description':      '',
-        'unit':             unit,
-        'agreement_rate':   _to_float(cells[4]),
-        'current_agmt_qty': _to_float(cells[6]),
-        'qty_upto_date':    qty_upto_date,
-        'amt_total':        amt_total,
-        'remarks':          remarks,
+        'schedule_name':      current_schedule,
+        'item_number':        item_no,
+        'description':        '',
+        'unit':                unit,
+        'agreement_rate':      _to_float(cells[4]),
+        'original_agmt_qty':   original_agmt_qty,
+        'current_agmt_qty':    _to_float(cells[6]),
+        'qty_upto_date':       qty_upto_date,
+        'amt_total':           amt_total,
+        'remarks':             remarks,
     }
 
 
@@ -255,6 +253,7 @@ def parse_bill_pdf(file_obj):
                 'description': str,
                 'unit': str,
                 'agreement_rate': float,
+                'original_agmt_qty': float or None,
                 'current_agmt_qty': float,
                 'amt_total': float,
                 'remarks': str,
@@ -285,6 +284,12 @@ def parse_bill_pdf(file_obj):
             current_schedule = 'UNKNOWN'
             last_item = None
             summary_page = None  # cache Schedule Summary page for cross-check
+            # Once True, stays True for the rest of the document. The trailing "Schedule
+            # Summary" table restates each schedule's totals using the same "Schedule X" text
+            # the header-detection below watches for — without this flag those summary rows
+            # get misread as real section-header transitions and can corrupt current_schedule
+            # for any item row that happens to follow on the same page.
+            in_summary_section = False
 
             # Pages 2 onwards: item tables
             for page_num, page in enumerate(pdf.pages[1:], start=2):
@@ -302,23 +307,32 @@ def parse_bill_pdf(file_obj):
                             continue
 
                         cells = [_clean(c) for c in row]
-                        row_text = ' '.join(cells)
-                        _dbg(f'p{page_num} t{table_idx} r{row_idx} sched={current_schedule} cells={cells!r}')
+                        logger.debug('p%s t%s r%s sched=%s cells=%r', page_num, table_idx, row_idx, current_schedule, cells)
+
+                        # ── Schedule Summary marker: stop treating "Schedule X" text as a
+                        #    section-header cue from here on (see in_summary_section comment
+                        #    above). Row-level, not page-level, since real item rows can still
+                        #    legitimately appear earlier on this same page.
+                        if cells[0].strip().lower().startswith('schedule summary'):
+                            in_summary_section = True
+                            continue
 
                         # ── Schedule section header ──────────────────────────
-                        sched_m = SCHEDULE_RE.search(row_text)
-                        if not sched_m:
-                            # Fallback: single-letter schedule like "Schedule A" or "Schedule B"
-                            sched_m = re.search(r'Schedule\s+([A-Za-z]\d*)(?=[^A-Za-z0-9]|$)', row_text, re.IGNORECASE)
-                        if sched_m:
-                            first = cells[0].strip().lower()
-                            if not first.startswith('total'):
-                                _dbg(f'  -> SCHEDULE HEADER: {current_schedule!r} -> {sched_m.group(1).upper()!r} (matched {sched_m.group(0)!r} in cells[0]={cells[0]!r})')
+                        # Anchored to the START of cells[0], not searched across the whole
+                        # row. Item descriptions routinely cross-reference another schedule
+                        # in prose (e.g. "...pipe GI is covered in schedule A.)" or "SPMS
+                        # charger is covered in schedule - A & VRLA battery...") — a row-wide
+                        # search treats that mention as a section-header transition and
+                        # silently mislabels every following item until the real header.
+                        # Every genuine header row observed puts "Schedule X" at the very
+                        # start of the first cell, so anchoring here is safe.
+                        if not in_summary_section:
+                            sched_m = SCHEDULE_RE.match(cells[0].strip())
+                            if sched_m:
+                                logger.debug('  -> SCHEDULE HEADER: %r -> %r', current_schedule, sched_m.group(1).upper())
                                 current_schedule = sched_m.group(1).upper()
                                 last_item = None
                                 continue
-                            else:
-                                _dbg(f'  -> schedule pattern matched but cells[0] starts with "total", ignoring: {sched_m.group(0)!r}')
 
                         # ── Total row: skip ──────────────────────────────────
                         if cells[0].strip().lower().startswith('total'):
@@ -329,11 +343,11 @@ def parse_bill_pdf(file_obj):
                         if item:
                             result['items'].append(item)
                             last_item = item
-                            _dbg(f'  -> ITEM sch={item["schedule_name"]} no={item["item_number"]} amt_total={item["amt_total"]} rate={item["agreement_rate"]} qty={item["current_agmt_qty"]}')
+                            logger.debug('  -> ITEM sch=%s no=%s amt_total=%s', item['schedule_name'], item['item_number'], item['amt_total'])
                             continue
 
                         # ── Description continuation row ─────────────────────
-                        if last_item and _is_description_row(cells):
+                        if last_item and not in_summary_section and _is_description_row(cells):
                             desc_text = ' '.join(c for c in cells if c.strip())
                             desc_text = desc_text.strip()
                             if desc_text:
