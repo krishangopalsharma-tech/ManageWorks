@@ -65,6 +65,12 @@ async function updateProfile(payload) {
   return data
 }
 
+async function changePassword(current_password, new_password) {
+  const { data } = await axios.post('/api/settings/profile/password/',
+    { current_password, new_password }, { headers: authHeaders() })
+  return data
+}
+
 export function useAuth() {
   return {
     state: readonly(state),
@@ -74,5 +80,6 @@ export function useAuth() {
     logout,
     forgotPassword,
     updateProfile,
+    changePassword,
   }
 }

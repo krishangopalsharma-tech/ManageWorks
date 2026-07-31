@@ -211,13 +211,17 @@ watch([progressMin, progressMax, includeExcess], scheduleLoad)
 watch([sortKey, sortDir], scheduleLoad)
 
 // ── Remaining quantity ─────────────────────────────────────────────────────
+// Round away binary-float subtraction noise (e.g. 2505 - 1763.33 === 741.6700000000001
+// in JS) — 3dp is plenty of precision for these units (cum, km, nos.).
+const round3 = (n) => Math.round((n + Number.EPSILON) * 1000) / 1000
+
 const remainingQty = (item) => {
   const req = item.qty || 0
   const cat = item.category || ''
-  if (cat === 'execution' || cat === 'supply_installation') return req - (item.executed_quantity || 0)
-  if (cat === 'supply') return req - (item.supplied_quantity || 0)
+  if (cat === 'execution' || cat === 'supply_installation') return round3(req - (item.executed_quantity || 0))
+  if (cat === 'supply') return round3(req - (item.supplied_quantity || 0))
   const done = isSchB(item) ? (item.executed_quantity || 0) : (item.supplied_quantity || 0)
-  return req - done
+  return round3(req - done)
 }
 
 // ── PDF Export ─────────────────────────────────────────────────────────────
@@ -334,7 +338,7 @@ const generateItemPDF = async (includeEntries = true) => {
         y = 16
       }
 
-      const remaining = (item.qty || 0) - done
+      const remaining = round3((item.qty || 0) - done)
 
       // Item header block
       autoTable(doc, {

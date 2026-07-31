@@ -24,7 +24,9 @@ def _sync_executed_quantity(work_item):
         .filter(work_item=work_item, entry_type='execution')
         .aggregate(t=Sum('quantity'))['t'] or 0
     )
-    work_item.executed_quantity = exec_total
+    # Postgres float8 SUM can leave binary-float noise (e.g. 811.9300000000001) —
+    # round before storing so it never reaches the UI.
+    work_item.executed_quantity = round(exec_total, 3)
     work_item.save(update_fields=['executed_quantity'])
 
 

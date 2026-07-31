@@ -35,6 +35,32 @@ const fmtCrPdf = (n) => {
   return `Rs.${Math.round(n)}`
 }
 
+// ── Real billed amounts (gates "Financial Progress" so it never shows ₹
+// earned for a LOA/item that has no uploaded bill — see financial_progress
+// app's LOATableView, which is the same source of truth the FinancialProgress
+// page uses) ──────────────────────────────────────────────────────────────
+const normSerial = (sno) => {
+  const n = parseInt(sno, 10)
+  return Number.isNaN(n) ? String(sno || '').trim() : String(n)
+}
+const billKey = (sch, sno) => `${String(sch || '').trim().toUpperCase()}|${normSerial(sno)}`
+
+const billMap = ref({})   // billKey → cumulative_amount actually billed
+const billedEarned = (item) => billMap.value[billKey(item.schedule, item.serial_number)] || 0
+
+const loadBillMap = async (workId) => {
+  billMap.value = {}
+  if (!workId) return
+  try {
+    const { data } = await axios.get('/api/financial-progress/loa-table/', { params: { work_id: workId } })
+    const map = {}
+    for (const i of (data.items || [])) {
+      map[billKey(i.schedule_name, i.item_number)] = i.cumulative_amount || 0
+    }
+    billMap.value = map
+  } catch { /* no bills uploaded / access denied — leave map empty, earned stays 0 */ }
+}
+
 // ── State ─────────────────────────────────────────────────────────────────
 const allWorks     = ref([])
 const selectedWork = ref(null)
@@ -226,6 +252,7 @@ const selectWork = (work) => {
   selectedWork.value = work
   srStats.value      = null
   loadSrStats(work?.id)
+  loadBillMap(work?.id)
 }
 
 const toggleExpand = (itemId) => {
@@ -257,8 +284,8 @@ const analytics = computed(() => {
     const contract = item.total_amount || 0
     const qty      = item.qty || 1
     const done     = isB ? (item.executed_quantity || 0) : (item.supplied_quantity || 0)
-    const pct      = Math.min(done / qty, 1)
-    const earned   = contract * pct
+    const pct      = Math.min(done / qty, 1)   // physical progress — still used for status buckets/insights below
+    const earned   = billedEarned(item)         // ₹ actually billed — 0 unless a bill covers this item
 
     contractTotal += contract
     earnedTotal   += earned
@@ -310,12 +337,7 @@ const analytics = computed(() => {
     .sort((a, b) => (b.total_amount || 0) - (a.total_amount || 0))
     .slice(0, 10)
     .map(i => {
-      const sch  = String(i.schedule || '').toUpperCase()
-      const isB  = sch.startsWith('B')
-      const qty  = i.qty || 1
-      const done = isB ? (i.executed_quantity || 0) : (i.supplied_quantity || 0)
-      const pct  = Math.min(done / qty, 1)
-      const earned = (i.total_amount || 0) * pct
+      const earned = billedEarned(i)
       const desc = String(i.item_desc || 'Item')
       return {
         desc:    desc.length > 48 ? desc.substring(0, 48) + '…' : desc,
@@ -614,6 +636,15 @@ watch([activeTab, selectedWork], () => {
   }
 })
 
+// billMap loads async (after selectedWork) — the first initCharts() run captures
+// earnedTotal=0 before it resolves; redraw once real billed data lands.
+watch(billMap, () => {
+  if (activeTab.value === 'analytics') {
+    destroyCharts()
+    initCharts()
+  }
+})
+
 watch(srStats, () => {
   if (activeTab.value === 'analytics') initSrCharts()
 })
@@ -824,7 +855,7 @@ const generateWorkPDF = async () => {
         const done = suppliedOrExecuted(item)
         const pct = Math.min(done / qty * 100, 999)
         const contract = item.total_amount || 0
-        const earned = contract * Math.min(done / qty, 1)
+        const earned = billedEarned(item)
         return [
           item.schedule || '',
           item.serial_number || '',

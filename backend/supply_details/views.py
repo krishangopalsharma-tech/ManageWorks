@@ -24,7 +24,9 @@ def _sync_supplied_quantity(work_item):
         .filter(work_item=work_item, entry_type='supply')
         .aggregate(t=Sum('quantity'))['t'] or 0
     )
-    work_item.supplied_quantity = supply_total
+    # Postgres float8 SUM can leave binary-float noise (e.g. 811.9300000000001) —
+    # round before storing so it never reaches the UI.
+    work_item.supplied_quantity = round(supply_total, 3)
     work_item.save(update_fields=['supplied_quantity'])
 
 

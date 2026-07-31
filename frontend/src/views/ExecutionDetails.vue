@@ -12,9 +12,13 @@ const normalizeLocation = (val) => {
 
 const execPct = (item) => { const r = item.qty || 0; if (!r) return 0; return Math.min(Math.round((item.executed_quantity || 0) / r * 100), 999) }
 
+// Round away binary-float summation noise (e.g. 10.1 + 20.2 === 30.299999999999997
+// in JS) — 3dp is plenty of precision for these units.
+const round3 = (n) => Math.round((n + Number.EPSILON) * 1000) / 1000
+
 const recalcExecuted = (item) => {
   const entries = (item.entries || []).filter(e => e.entry_type === 'execution')
-  item.executed_quantity = entries.reduce((s, e) => s + (e.quantity || 0), 0)
+  item.executed_quantity = round3(entries.reduce((s, e) => s + (e.quantity || 0), 0))
 }
 
 // ── State ──────────────────────────────────────────────────────────────────
