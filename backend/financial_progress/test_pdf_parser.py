@@ -97,6 +97,51 @@ def test_schedule_summary_marker_row_not_appended_to_description(monkeypatch):
     assert result['items'][0]['description'] == ''
 
 
+def test_multi_letter_schedule_header_recognized(monkeypatch):
+    # "Schedule NS-NON SCHEDULE ITEMS" — a two-letter code. The old single-letter-only regex
+    # failed to match this at all, so the header row was never recognized and NS items
+    # silently inherited whatever schedule came before them (the real production bug).
+    rows = [
+        _header_row('Schedule A-SUPPLY'),
+        _item_row(1, 1, 100, 5, amt_incl_special=500),
+        _header_row('Schedule NS-NON SCHEDULE ITEMS'),
+        _item_row(1, 'NS01', 100, 2, amt_incl_special=50),
+        _item_row(2, 'NS02', 200, 1, amt_incl_special=60),
+    ]
+    result = _parse(rows, monkeypatch)
+
+    assert [i['schedule_name'] for i in result['items']] == ['A', 'NS', 'NS']
+    assert [i['item_number'] for i in result['items']] == ['1', 'NS01', 'NS02']
+
+
+def test_letter_prefixed_item_number_parsed(monkeypatch):
+    # "Non-Schedule" (NS) items in some LOAs use a letter-prefixed item number instead of a
+    # plain digit — must not be dropped, and the prefix is kept as part of the identity.
+    rows = [
+        _header_row('Schedule NS-NON SCHEDULE ITEMS'),
+        _item_row(1, 'NS01', 100, 2, amt_incl_special=50),
+        _item_row(2, 'NS02', 200, 1, amt_incl_special=60),
+    ]
+    result = _parse(rows, monkeypatch)
+
+    assert [i['item_number'] for i in result['items']] == ['NS01', 'NS02']
+    assert not any('failed regex' in w for w in result['warnings'])
+
+
+def test_unrecognized_item_number_format_falls_back_to_sr_no():
+    # Structurally a valid item row (digit Sr.No, numeric rate + qty) but the Item No. cell
+    # matches neither the digit nor letter-prefix pattern — kept and flagged, not dropped.
+    cells = [
+        '5', '5/A (I)', 'Numbers', '10', '100',
+        '2', '2', '0', '0', '0', '0', '0', '200', '200', '',
+    ]
+    item = _parse_item_row(cells, 'A', warnings=(warnings := []))
+
+    assert item is not None
+    assert item['item_number'] == '5'
+    assert any('format not recognized' in w for w in warnings)
+
+
 def test_schedule_letter_generalizes_beyond_a_and_b(monkeypatch):
     rows = [
         _header_row('Schedule C-SUPPLY'),

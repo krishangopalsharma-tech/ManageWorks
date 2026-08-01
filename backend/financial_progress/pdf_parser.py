@@ -4,12 +4,13 @@ import pdfplumber
 
 logger = logging.getLogger(__name__)
 
-# Matches "Schedule A", "Schedule B", "Schedule A1", "Schedule B3", etc.
-# Letter + optional digits, must be followed by non-alphanumeric (word boundary) to avoid "Schedule AMOUNT".
-# Generalizes to any future letter (C, D, ...) without change — only the separator right after the
-# letter/digit is assumed to be non-alphanumeric (a hyphen in every real bill seen so far); a bill
-# that ran the schedule code directly into the next word with no separator would not match this.
-SCHEDULE_RE = re.compile(r'Schedule\s+([A-Za-z]\d*)(?=[^A-Za-z0-9]|$)', re.IGNORECASE)
+# Matches "Schedule A", "Schedule B", "Schedule A1", "Schedule B3", "Schedule NS", etc.
+# One-or-more letters + optional digits, must be followed by non-alphanumeric (word boundary)
+# to avoid "Schedule AMOUNT". Generalizes to any future code (C, D, NS, PH1, ...) without change
+# — only the separator right after the letters/digits is assumed to be non-alphanumeric (a
+# hyphen in every real bill seen so far); a bill that ran the schedule code directly into the
+# next word with no separator would not match this.
+SCHEDULE_RE = re.compile(r'Schedule\s+([A-Za-z]+\d*)(?=[^A-Za-z0-9]|$)', re.IGNORECASE)
 # Matches item-type cell like "1 (I)", "10 (I)", or a letter-prefixed convention like "NS01 (I)"
 # ("Non-Schedule" items in some LOAs) — the prefix is kept as part of the item identity.
 ITEM_NO_RE  = re.compile(r'^([A-Za-z]*\d+)\s*\([1Il]\)$', re.IGNORECASE)

@@ -232,3 +232,71 @@ class TestLoaCrossCheck:
         assert parsed['items'][0]['schedule_name'] == 'A'
         warnings_text = ' '.join(parsed['warnings'])
         assert 'Overpayment' in warnings_text and 'Sch A Item 5' in warnings_text
+
+    def test_true_duplicate_across_schedules_kept_as_is_when_current_already_ties_for_best(self):
+        # Two WorkItems identical on every scored signal (desc, qty, unit, rate) across
+        # different schedules — genuinely no data left to distinguish them. The parsed item
+        # correctly claims 'A' (i.e. the PDF's own section placement, which header-tracking
+        # already got right) — since 'A' already ties for the best possible score, there's
+        # nothing to heal and nothing ambiguous to flag.
+        WorkItem.objects.create(
+            work=self.work, schedule='A', serial_number='6',
+            item_desc='Supply of RJ-45 connectors as per Technical Specification.',
+            qty=220, unit='Numbers', unit_rate_rs=11.9, unit_rate_below=0, total_amount=2618,
+        )
+        WorkItem.objects.create(
+            work=self.work, schedule='B', serial_number='6',
+            item_desc='Supply of RJ-45 connectors as per Technical Specification.',
+            qty=220, unit='Numbers', unit_rate_rs=11.9, unit_rate_below=0, total_amount=2618,
+        )
+
+        parsed = {
+            'items': [{
+                'schedule_name': 'A',
+                'item_number': '6',
+                'description': 'Supply of RJ-45 connectors as per Technical Specification.',
+                'original_agmt_qty': 220,
+                'unit': 'Numbers',
+                'agreement_rate': 11.9,
+                'amt_total': 1000,
+            }],
+            'warnings': [],
+        }
+        loa_lookup = _build_loa_lookup(self.work)
+        _loa_cross_check(parsed, loa_lookup)
+
+        assert parsed['items'][0]['schedule_name'] == 'A'
+        assert not parsed['warnings']
+
+    def test_unit_or_rate_breaks_a_desc_qty_tie(self):
+        # Same description + qty across two schedules, but unit/rate differ — the parsed
+        # item's unit/rate matches schedule B specifically, so it's no longer a real tie.
+        WorkItem.objects.create(
+            work=self.work, schedule='A', serial_number='8',
+            item_desc='Supply of connectors as per specification.',
+            qty=50, unit='Numbers', unit_rate_rs=100, unit_rate_below=0, total_amount=5000,
+        )
+        WorkItem.objects.create(
+            work=self.work, schedule='B', serial_number='8',
+            item_desc='Supply of connectors as per specification.',
+            qty=50, unit='Metre', unit_rate_rs=200, unit_rate_below=0, total_amount=10000,
+        )
+
+        parsed = {
+            'items': [{
+                'schedule_name': 'C',  # wrongly claimed; no WorkItem exists at (C, 8)
+                'item_number': '8',
+                'description': 'Supply of connectors as per specification.',
+                'original_agmt_qty': 50,
+                'unit': 'Metre',
+                'agreement_rate': 200,
+                'amt_total': 1000,
+            }],
+            'warnings': [],
+        }
+        loa_lookup = _build_loa_lookup(self.work)
+        _loa_cross_check(parsed, loa_lookup)
+
+        assert parsed['items'][0]['schedule_name'] == 'B'
+        assert not any('Ambiguous' in w for w in parsed['warnings'])
+        assert any('Auto-corrected' in w for w in parsed['warnings'])
