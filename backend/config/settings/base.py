@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     'profile_settings',
     'supply_details',
     'execution_details',
+    'drive_sync',
 ]
 
 MIDDLEWARE = [

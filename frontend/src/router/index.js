@@ -16,6 +16,7 @@ import UserManagement          from '../views/UserManagement.vue'
 import InstallationCertificate from '../views/InstallationCertificate.vue'
 import SiteRegister       from '../views/SiteRegister.vue'
 import SmtpSettings        from '../views/SmtpSettings.vue'
+import DriveSyncSettings   from '../views/DriveSyncSettings.vue'
 import TelegramSettings    from '../views/TelegramSettings.vue'
 import TelegramLink           from '../views/TelegramLink.vue'
 import SiteRegisterParties   from '../views/SiteRegisterParties.vue'
@@ -42,6 +43,7 @@ const routes = [
   { path: '/settings/update-work',        name: 'Update Work',              component: UpdateWork },
   { path: '/settings/user-management',    name: 'User Management',          component: UserManagement,          meta: { adminOnly: true } },
   { path: '/settings/smtp',               name: 'SMTP Settings',            component: SmtpSettings,            meta: { superAdminOnly: true } },
+  { path: '/settings/drive-sync',         name: 'Drive Sync',               component: DriveSyncSettings,       meta: { superAdminOnly: true } },
   { path: '/settings/telegram',           name: 'Telegram Settings',        component: TelegramSettings,        meta: { superAdminOnly: true } },
   { path: '/settings/account',                name: 'My Account',                 component: Account },
   { path: '/settings/telegram-link',          name: 'Link Rly Official Telegram', component: TelegramLink },

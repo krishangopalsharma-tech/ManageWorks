@@ -3,6 +3,14 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
 import QRCode from 'qrcode'
+import { useAuth } from '../composables/useAuth'
+
+const { state: authState } = useAuth()
+// Editing/unlinking a supervisor's name/designation/mobile touches a shared
+// TelegramUserLink record that may be linked to other consignees' LOAs too —
+// backend restricts PATCH/DELETE on linked-users/ to admins only. Hide the
+// controls here rather than letting a consignee click Edit and hit a silent 403.
+const isAdmin = computed(() => authState.user?.role === 'admin' || authState.user?.is_staff)
 
 const BOT_USERNAME = 'ADISiteregister_bot'
 const BOT_URL      = `https://t.me/${BOT_USERNAME}`
@@ -100,8 +108,8 @@ async function saveEdit(u) {
     )
     editingLinkId.value = null
     showToast('Saved.')
-  } catch {
-    showToast('Save failed.', 'error')
+  } catch (err) {
+    showToast(err.response?.data?.error || 'Save failed.', 'error')
   } finally {
     saving.value = false
   }
@@ -119,8 +127,8 @@ async function unlinkFromAll(u) {
     tgUsers.value = tgUsers.value.filter(x => x.link_id !== u.link_id)
     editingLinkId.value = null
     showToast('Supervisor unlinked from all LOAs.')
-  } catch {
-    showToast('Unlink failed.', 'error')
+  } catch (err) {
+    showToast(err.response?.data?.error || 'Unlink failed.', 'error')
   } finally {
     unlinking.value = null
   }
@@ -370,10 +378,11 @@ onUnmounted(() => {
               <td class="px-5 py-3 text-gray-500">{{ u.mobile || '—' }}</td>
               <td class="px-5 py-3 font-mono text-gray-500">{{ u.telegram_user_id }}</td>
               <td class="px-5 py-3 text-right">
-                <button @click="startEdit(u)"
+                <button v-if="isAdmin" @click="startEdit(u)"
                   class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-gray-200 dark:border-[#3a3a3c] text-gray-500 hover:text-[#1D5F5E] hover:border-[#1D5F5E] transition-colors">
                   <div class="i-carbon-edit text-xs"></div> Edit
                 </button>
+                <span v-else class="text-[11px] text-gray-300" title="Only Admin can edit shared supervisor details">—</span>
               </td>
             </tr>
             <!-- Edit row -->

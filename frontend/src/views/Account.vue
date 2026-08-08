@@ -19,6 +19,12 @@ const changingPassword = ref(false)
 const savingPassword   = ref(false)
 const pwForm = ref({ current_password: '', new_password: '', confirm_password: '' })
 
+// Drive Sync
+const driveStatus  = ref(null)
+const editingDrive  = ref(false)
+const savingDrive   = ref(false)
+const driveForm     = ref({ workbills_folder_url: '', crn_folder_url: '' })
+
 function showToast(msg, type = 'success') {
   toast.value = { show: true, msg, type }
   setTimeout(() => { toast.value.show = false }, 3000)
@@ -35,6 +41,42 @@ async function load() {
     works.value = worksRes.data
   } catch { /* ignore */ } finally {
     loading.value = false
+  }
+  loadDriveStatus()
+}
+
+async function loadDriveStatus() {
+  try {
+    const { data } = await axios.get('/api/drive-sync/status/')
+    driveStatus.value = data
+  } catch { /* ignore */ }
+}
+
+function startEditDrive() {
+  driveForm.value = {
+    workbills_folder_url: driveStatus.value?.workbills_folder_url || '',
+    crn_folder_url:       driveStatus.value?.crn_folder_url || '',
+  }
+  editingDrive.value = true
+}
+
+function cancelEditDrive() {
+  editingDrive.value = false
+}
+
+async function saveDriveLinks() {
+  savingDrive.value = true
+  try {
+    const m = document.cookie.match(/csrftoken=([^;]+)/)
+    const csrf = m ? m[1] : ''
+    const { data } = await axios.post('/api/drive-sync/connect/', driveForm.value, { headers: { 'X-CSRFToken': csrf } })
+    driveStatus.value = { ...driveStatus.value, ...data }
+    editingDrive.value = false
+    showToast('Drive folders saved.')
+  } catch (err) {
+    showToast(err.response?.data?.error || 'Save failed.', 'error')
+  } finally {
+    savingDrive.value = false
   }
 }
 
@@ -252,6 +294,68 @@ onMounted(load)
               <button @click="savePassword" :disabled="savingPassword"
                 class="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#1D5F5E] text-white text-xs font-semibold hover:bg-[#174E4D] disabled:opacity-50 transition-colors">
                 <div v-if="savingPassword" class="i-carbon-circle-dash animate-spin text-xs"></div>
+                <div v-else class="i-carbon-checkmark text-xs"></div>
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Drive Sync card -->
+        <div class="bg-white dark:bg-[#1c1c1e] rounded-2xl border border-gray-100 dark:border-[#3a3a3c] shadow-sm overflow-hidden mb-6">
+          <div class="px-5 py-4 border-b border-gray-100 dark:border-[#2c2c2e] flex items-center gap-3">
+            <div class="i-carbon-cloud text-[#1D5F5E] text-lg"></div>
+            <div class="flex-1">
+              <h2 class="text-sm font-bold text-gray-700 dark:text-gray-200">Drive Sync</h2>
+              <p class="text-[11px] text-gray-400 mt-0.5">Auto-import bills &amp; receipt notes from your own Google Drive</p>
+            </div>
+            <button v-if="!editingDrive" @click="startEditDrive"
+              class="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-[#3a3a3c] text-gray-500 text-xs font-semibold hover:text-[#1D5F5E] hover:border-[#1D5F5E] transition-colors">
+              <div class="i-carbon-edit text-xs"></div> {{ driveStatus?.connected ? 'Edit' : 'Connect' }}
+            </button>
+          </div>
+
+          <div v-if="!editingDrive" class="px-5 py-3">
+            <div v-if="driveStatus?.connected" class="flex items-center gap-3 flex-wrap">
+              <span class="flex items-center gap-1.5 text-xs font-semibold text-green-700 bg-green-50 dark:bg-green-900/20 dark:text-green-400 px-2.5 py-1 rounded-full">
+                <div class="i-carbon-checkmark-filled text-sm"></div> Connected
+              </span>
+              <span class="text-xs text-gray-400">
+                Last synced: {{ driveStatus.last_synced_at ? new Date(driveStatus.last_synced_at).toLocaleString() : 'never yet' }}
+              </span>
+              <span v-if="driveStatus.needs_review_count" class="text-xs font-semibold text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-2.5 py-1 rounded-full">
+                {{ driveStatus.needs_review_count }} need{{ driveStatus.needs_review_count === 1 ? 's' : '' }} review
+              </span>
+            </div>
+            <span v-else class="text-sm text-gray-400">Not connected — click Connect to link your Drive folders.</span>
+          </div>
+
+          <div v-else class="divide-y divide-gray-50 dark:divide-[#2c2c2e]">
+            <div class="px-5 py-3 text-[11px] text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-[#2c2c2e]">
+              In your Google Drive, create two folders named exactly <span class="font-mono font-semibold">Workbills</span> and
+              <span class="font-mono font-semibold">CRN</span>. Share each as <span class="font-semibold">"Anyone with the link → Viewer"</span>,
+              then paste the two links below.
+            </div>
+            <div class="px-5 py-3 flex items-center gap-4">
+              <span class="text-xs text-gray-400 w-28 shrink-0">Workbills link</span>
+              <input v-model="driveForm.workbills_folder_url"
+                class="flex-1 text-sm px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-[#3a3a3c] bg-white dark:bg-[#2c2c2e] outline-none focus:border-[#1D5F5E]"
+                placeholder="https://drive.google.com/drive/folders/..." />
+            </div>
+            <div class="px-5 py-3 flex items-center gap-4">
+              <span class="text-xs text-gray-400 w-28 shrink-0">CRN link</span>
+              <input v-model="driveForm.crn_folder_url"
+                class="flex-1 text-sm px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-[#3a3a3c] bg-white dark:bg-[#2c2c2e] outline-none focus:border-[#1D5F5E]"
+                placeholder="https://drive.google.com/drive/folders/..." />
+            </div>
+            <div class="px-5 py-3 flex items-center justify-end gap-2">
+              <button @click="cancelEditDrive"
+                class="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-[#3a3a3c] text-gray-500 text-xs font-semibold hover:bg-gray-100 dark:hover:bg-[#3a3a3c] transition-colors">
+                Cancel
+              </button>
+              <button @click="saveDriveLinks" :disabled="savingDrive"
+                class="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#1D5F5E] text-white text-xs font-semibold hover:bg-[#174E4D] disabled:opacity-50 transition-colors">
+                <div v-if="savingDrive" class="i-carbon-circle-dash animate-spin text-xs"></div>
                 <div v-else class="i-carbon-checkmark text-xs"></div>
                 Save
               </button>

@@ -2,6 +2,7 @@
 import ManageWorksIcon from './ManageWorksIcon.vue'
 import { ref, watchEffect, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import axios from 'axios'
 import { useAuth } from '../composables/useAuth'
 import { useNotifications } from '../composables/useNotifications'
 
@@ -10,8 +11,43 @@ const route  = useRoute()
 const { state, logout } = useAuth()
 const { unreadCount, startPolling, stopPolling } = useNotifications()
 
-onMounted(() => startPolling(30000))
+onMounted(() => { startPolling(30000); loadDriveStatus() })
 onUnmounted(() => stopPolling())
+
+// ── Drive Sync button ───────────────────────────────────────────────────────
+const driveConnected    = ref(false)
+const driveNeedsReview  = ref(0)
+const syncing           = ref(false)
+const syncResultMsg     = ref('')
+const showSyncGuide     = ref(false)
+
+async function loadDriveStatus() {
+  try {
+    const { data } = await axios.get('/api/drive-sync/status/')
+    driveConnected.value   = data.connected
+    driveNeedsReview.value = data.needs_review_count || 0
+  } catch { /* ignore */ }
+}
+
+async function handleSyncData() {
+  if (!driveConnected.value || syncing.value) return
+  syncing.value = true
+  syncResultMsg.value = ''
+  try {
+    const m = document.cookie.match(/csrftoken=([^;]+)/)
+    const { data } = await axios.post('/api/drive-sync/run/', {}, { headers: { 'X-CSRFToken': m ? m[1] : '' } })
+    const total = (data.bills_synced || 0) + (data.receipts_synced || 0)
+    syncResultMsg.value = total
+      ? `Synced ${total}${data.needs_review ? `, ${data.needs_review} need review` : ''}`
+      : (data.needs_review ? `${data.needs_review} need review` : 'Up to date')
+    driveNeedsReview.value = data.needs_review || 0
+  } catch (err) {
+    syncResultMsg.value = err.response?.data?.error || 'Sync failed'
+  } finally {
+    syncing.value = false
+    setTimeout(() => { syncResultMsg.value = '' }, 5000)
+  }
+}
 
 const isAdmin        = computed(() => state.user?.role === 'admin' || state.user?.is_staff)
 const isSuperAdmin    = computed(() => state.user?.hrms_id === 'admin')
@@ -51,6 +87,7 @@ const menuItems = ref([
       { name: 'Update Work',     path: '/settings/update-work' },
       { name: 'User Management', path: '/settings/user-management', adminOnly: true },
       { name: 'SMTP Settings',   path: '/settings/smtp',            superAdminOnly: true },
+      { name: 'Drive Sync',      path: '/settings/drive-sync',      superAdminOnly: true },
       { name: 'Telegram Bot',    path: '/settings/telegram',        superAdminOnly: true },
       { name: 'Site Supervisors', path: '/settings/site-register-parties', consigneeOrAdmin: true },
       { name: 'Link Rly Official Telegram', path: '/settings/telegram-link' },
@@ -232,6 +269,38 @@ const itemTooltip = (item) => collapsed.value ? item.name : ''
       </div>
     </nav>
 
+    <!-- Sync Data -->
+    <div class="shrink-0 px-3 pb-2">
+      <div v-if="!collapsed" class="flex items-center justify-end mb-1 pr-1">
+        <button @click="showSyncGuide = true" title="How does Drive Sync work?"
+          class="flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold border border-gray-300 text-gray-400 hover:border-[#7C3AED] hover:text-[#7C3AED] transition-colors">
+          ?
+        </button>
+      </div>
+      <button
+        @click="handleSyncData"
+        :disabled="!driveConnected || syncing"
+        :title="driveConnected ? 'Sync bills & receipts from your Drive folders' : 'Connect your Drive folders in My Account first'"
+        class="relative w-full flex items-center rounded-xl border-2 font-bold text-sm transition-all select-none"
+        :class="[
+          collapsed ? 'justify-center px-0 py-2.5' : 'justify-center gap-2 px-4 py-2.5',
+          driveConnected
+            ? 'border-[#7C3AED] text-[#7C3AED] hover:bg-[#7C3AED]/10 cursor-pointer'
+            : 'border-gray-200 text-gray-300 cursor-not-allowed',
+        ]"
+      >
+        <div :class="syncing ? 'i-carbon-circle-dash animate-spin' : 'i-carbon-renew'" class="text-lg shrink-0"></div>
+        <span v-if="!collapsed">{{ syncing ? 'Syncing…' : 'Sync Data' }}</span>
+        <span v-if="!collapsed && driveNeedsReview > 0"
+          class="ml-auto text-xs font-bold rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center leading-none bg-amber-500 text-white">
+          {{ driveNeedsReview > 99 ? '99+' : driveNeedsReview }}
+        </span>
+        <span v-if="collapsed && driveNeedsReview > 0"
+          class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-500"></span>
+      </button>
+      <p v-if="!collapsed && syncResultMsg" class="text-[11px] text-gray-500 mt-1.5 px-1">{{ syncResultMsg }}</p>
+    </div>
+
     <!-- User Profile Area -->
     <div class="shrink-0 px-3 py-4" style="border-top: 1px solid var(--color-separator);">
       <!-- Collapsed: avatar + logout stacked -->
@@ -278,4 +347,49 @@ const itemTooltip = (item) => collapsed.value ? item.name : ''
       </div>
     </div>
   </aside>
+
+  <!-- Drive Sync guide modal -->
+  <Teleport to="body">
+    <div v-if="showSyncGuide" class="fixed inset-0 z-[100] flex items-center justify-center px-4"
+      style="background: rgba(0,0,0,0.4);" @click.self="showSyncGuide = false">
+      <div class="bg-white dark:bg-[#1c1c1e] rounded-2xl shadow-xl max-w-md w-full max-h-[85vh] overflow-y-auto">
+        <div class="px-6 py-4 border-b border-gray-100 dark:border-[#2c2c2e] flex items-center gap-3">
+          <div class="i-carbon-cloud text-[#7C3AED] text-xl"></div>
+          <h2 class="text-base font-bold text-gray-800 dark:text-white flex-1">How Drive Sync works</h2>
+          <button @click="showSyncGuide = false" class="text-gray-400 hover:text-gray-600">
+            <div class="i-carbon-close text-lg"></div>
+          </button>
+        </div>
+
+        <div class="px-6 py-5 flex flex-col gap-4">
+          <div v-for="(step, i) in [
+            'Open drive.google.com in your browser, signed into your own Google account.',
+            'Create two folders named exactly: Workbills and CRN.',
+            'Right-click Workbills → Share → change “General access” to “Anyone with the link” → set role to Viewer → Copy link.',
+            'Repeat the same for the CRN folder.',
+            'Go to Settings → My Account, scroll to Drive Sync, paste both links, click Save.',
+            'Come back here anytime and click Sync Data — or just wait, it also runs automatically every day at 7 AM.',
+          ]" :key="i" class="flex items-start gap-3">
+            <span class="shrink-0 w-6 h-6 rounded-full bg-[#7C3AED]/10 text-[#7C3AED] text-xs font-bold flex items-center justify-center mt-0.5">
+              {{ i + 1 }}
+            </span>
+            <p class="text-sm text-gray-700 dark:text-[#aeaeb2] leading-relaxed">{{ step }}</p>
+          </div>
+
+          <div class="mt-1 px-4 py-3 rounded-xl bg-gray-50 dark:bg-[#2c2c2e] text-xs text-gray-500 dark:text-[#8e8e93]">
+            Put bill PDFs in <span class="font-semibold">Workbills</span> and receipt/DMTR PDFs in
+            <span class="font-semibold">CRN</span>. New files get picked up next sync; already-processed
+            ones are skipped automatically.
+          </div>
+        </div>
+
+        <div class="px-6 py-4 border-t border-gray-100 dark:border-[#2c2c2e] flex justify-end">
+          <button @click="showSyncGuide = false"
+            class="px-5 py-2 rounded-xl bg-[#1D5F5E] hover:bg-[#174E4D] text-white text-sm font-semibold transition-colors">
+            Got it
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>
