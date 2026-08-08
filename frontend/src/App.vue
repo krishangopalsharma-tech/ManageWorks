@@ -26,9 +26,9 @@ const showSidebar = computed(() => !authRoutes.includes(route.path))
     <!-- Main Content -->
     <div class="flex-1 overflow-hidden" :class="showSidebar ? 'py-6 pr-6' : ''">
       <main class="h-full w-full overflow-y-auto" :class="showSidebar ? 'pl-2' : ''">
-        <router-view v-slot="{ Component }">
+        <router-view v-slot="{ Component, route }">
           <transition name="fade" mode="out-in">
-            <component :is="Component" />
+            <component :is="Component" :key="route.fullPath" />
           </transition>
         </router-view>
       </main>

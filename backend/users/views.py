@@ -191,6 +191,7 @@ class AllUsersView(APIView):
                 'hrms_id':         p.user.username,
                 'name':            p.user.first_name,
                 'designation':     p.designation,
+                'mobile_number':   p.mobile_number,
                 'role':            p.role,
                 'email':           p.user.email,
                 'telegram_linked': bool(

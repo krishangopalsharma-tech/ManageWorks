@@ -7,7 +7,7 @@ from rest_framework.exceptions import PermissionDenied
 
 from works.models import Work, WorkItem, WorkItemEntry
 from works.serializers import WorkItemEntrySerializer, WorkSerializer
-from works.utils import is_admin_user, is_assigned_consignee
+from works.utils import is_admin_user, is_assigned_consignee, can_see_all_entries
 from work_details.views import _base_queryset
 from users.views import _is_super_admin
 
@@ -56,13 +56,28 @@ class ExecutionWorkSearchView(generics.ListAPIView):
 
 
 class ExecutionWorkRetrieveView(generics.RetrieveAPIView):
+    """
+    Admin/Super Admin and the LOA's assigned consignee see every execution
+    entry on every item. Everyone else (a consignee submitting execution
+    entries on a LOA they're not assigned to) sees cumulative totals but
+    only their own entries — same privacy model as Item/Location Progress
+    and Work Details (works.utils.can_see_all_entries).
+    """
     serializer_class = WorkSerializer
     queryset = _base_queryset()
 
     def retrieve(self, request, *args, **kwargs):
         if not request.user.is_authenticated:
             return Response({'error': 'Login required.'}, status=status.HTTP_401_UNAUTHORIZED)
-        return super().retrieve(request, *args, **kwargs)
+        instance = self.get_object()
+        data = self.get_serializer(instance).data
+        if not can_see_all_entries(request.user, instance):
+            for item in data.get('items', []):
+                item['entries'] = [
+                    e for e in item.get('entries', [])
+                    if e.get('submitted_by') == request.user.id
+                ]
+        return Response(data)
 
 
 # ── Execution entry submission ─────────────────────────────────────────────────

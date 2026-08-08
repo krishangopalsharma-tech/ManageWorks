@@ -17,6 +17,26 @@ const allWorks      = ref([])
 const loading       = ref(true)
 const tab           = ref('approved')
 const toast         = ref({ show: false, msg: '', type: 'success' })
+const searchQuery   = ref('')
+
+// ── Search — name, User ID, email, designation, mobile number ──────────────
+const matchesSearch = (u, q) => (
+  (u.name || '').toLowerCase().includes(q) ||
+  (u.hrms_id || '').toLowerCase().includes(q) ||
+  (u.email || '').toLowerCase().includes(q) ||
+  (u.designation || '').toLowerCase().includes(q) ||
+  (u.mobile_number || '').toLowerCase().includes(q)
+)
+const filteredPending = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return pending.value
+  return pending.value.filter(u => matchesSearch(u, q))
+})
+const filteredApproved = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return approved.value
+  return approved.value.filter(u => matchesSearch(u, q))
+})
 
 // detail view
 const detailUser    = ref(null)   // selected consignee
@@ -392,17 +412,28 @@ onMounted(loadData)
       </div>
 
       <!-- Tabs -->
-      <div class="flex-shrink-0 flex gap-1 px-6 pt-4 pb-0">
-        <button v-for="t in ['pending', 'approved']" :key="t"
-          @click="tab = t"
-          class="px-5 py-2 rounded-lg text-sm font-semibold capitalize transition-all"
-          :class="tab === t ? 'bg-[#1D5F5E] text-white' : 'text-gray-500 hover:text-gray-700'">
-          {{ t }}
-          <span v-if="t === 'pending' && pending.length"
-            class="ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full bg-red-100 text-red-600 font-bold">
-            {{ pending.length }}
-          </span>
-        </button>
+      <div class="flex-shrink-0 flex items-center gap-3 px-6 pt-4 pb-0 flex-wrap">
+        <div class="flex gap-1">
+          <button v-for="t in ['pending', 'approved']" :key="t"
+            @click="tab = t"
+            class="px-5 py-2 rounded-lg text-sm font-semibold capitalize transition-all"
+            :class="tab === t ? 'bg-[#1D5F5E] text-white' : 'text-gray-500 hover:text-gray-700'">
+            {{ t }}
+            <span v-if="t === 'pending' && pending.length"
+              class="ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full bg-red-100 text-red-600 font-bold">
+              {{ pending.length }}
+            </span>
+          </button>
+        </div>
+
+        <div class="relative ml-auto w-full max-w-xs">
+          <div class="i-carbon-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></div>
+          <input v-model="searchQuery" type="text"
+            placeholder="Search name, User ID, email, designation, mobile…"
+            class="w-full pl-9 pr-8 py-2 rounded-lg border border-gray-200 bg-white text-sm outline-none focus:border-[#1D5F5E] focus:ring-2 focus:ring-[#1D5F5E]/10 transition-all" />
+          <button v-if="searchQuery" @click="searchQuery = ''"
+            class="i-carbon-close absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm"></button>
+        </div>
       </div>
 
       <!-- Loading -->
@@ -418,8 +449,11 @@ onMounted(loadData)
             <div class="i-carbon-checkmark-outline text-5xl text-gray-300 mx-auto mb-3"></div>
             <p class="text-sm text-gray-400">No pending registrations</p>
           </div>
+          <div v-else-if="!filteredPending.length" class="py-20 text-center">
+            <p class="text-sm text-gray-400">No pending registrations match "{{ searchQuery }}"</p>
+          </div>
           <div v-else class="flex flex-col gap-3 max-w-2xl">
-            <div v-for="u in pending" :key="u.id"
+            <div v-for="u in filteredPending" :key="u.id"
               class="bg-light-surface rounded-2xl soft-shadow p-5 flex items-center gap-4">
               <div class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
                 <div class="i-carbon-user text-xl text-gray-500"></div>
@@ -451,20 +485,24 @@ onMounted(loadData)
           <div v-if="!approved.length" class="py-20 text-center">
             <p class="text-sm text-gray-400">No approved users yet</p>
           </div>
-          <div v-else class="bg-light-surface rounded-2xl soft-shadow max-w-6xl overflow-x-auto">
-            <table class="w-full text-sm min-w-[820px]">
+          <div v-else-if="!filteredApproved.length" class="py-20 text-center">
+            <p class="text-sm text-gray-400">No users match "{{ searchQuery }}"</p>
+          </div>
+          <div v-else class="bg-light-surface rounded-2xl soft-shadow overflow-x-auto">
+            <table class="w-full text-sm min-w-[940px]">
               <thead>
                 <tr class="border-b border-gray-100">
                   <th class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-5 py-3">Name</th>
                   <th class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-5 py-3">User ID</th>
                   <th class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-5 py-3">Email</th>
+                  <th class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-5 py-3">Mobile Number</th>
                   <th class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-5 py-3">Designation</th>
                   <th class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-5 py-3">Role</th>
                   <th class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest px-5 py-3 whitespace-nowrap sticky right-0 bg-light-surface">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="u in approved" :key="u.id"
+                <tr v-for="u in filteredApproved" :key="u.id"
                   class="border-b border-gray-50 hover:bg-accent-soft/40 transition-colors cursor-pointer"
                   @click="openDetail(u)">
                   <td class="px-5 py-3.5">
@@ -478,6 +516,7 @@ onMounted(loadData)
                   </td>
                   <td class="px-5 py-3.5 text-gray-600 font-mono text-xs">{{ u.hrms_id }}</td>
                   <td class="px-5 py-3.5 text-gray-600 text-xs">{{ u.email || '—' }}</td>
+                  <td class="px-5 py-3.5 text-gray-600 font-mono text-xs">{{ u.mobile_number || '—' }}</td>
                   <td class="px-5 py-3.5 text-gray-600">{{ u.designation }}</td>
                   <td class="px-5 py-3.5">
                     <span class="text-[11px] font-bold px-2 py-0.5 rounded-full capitalize"

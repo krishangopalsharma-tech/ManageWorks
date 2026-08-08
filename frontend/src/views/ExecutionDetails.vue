@@ -321,6 +321,7 @@ const saveEditEntry = async () => {
                   <span class="text-xl font-bold text-gray-900 shrink-0">{{ selectedWork.loa_number || '—' }}</span>
                   <span class="text-sm font-semibold bg-sky-100 text-sky-950 px-3 py-1 rounded-full truncate max-w-[260px]">{{ selectedWork.contractor_name }}</span>
                   <span v-if="selectedWork.contractor_nickname" class="text-sm font-semibold bg-[#fac9b8] text-[#7c3d2a] px-3 py-1 rounded-full truncate max-w-[200px]">{{ selectedWork.contractor_nickname }}</span>
+                  <span v-if="selectedWork.tender_number" class="text-sm font-semibold bg-amber-100 text-emerald-900 px-3 py-1 rounded-full truncate max-w-[220px]">{{ selectedWork.tender_number }}</span>
                 </div>
                 <p v-if="selectedWork.name_of_work" class="text-xs text-gray-500 mt-1.5 leading-snug max-w-2xl">{{ selectedWork.name_of_work }}</p>
                 <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-2">
@@ -334,13 +335,12 @@ const saveEditEntry = async () => {
                 </p>
               </div>
             </div>
-            <div class="flex-shrink-0 flex items-center gap-2">
-              <div class="flex items-center bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 w-48 focus-within:ring-2 focus-within:ring-[#1D5F5E]/20 focus-within:border-[#1D5F5E] transition-all">
-                <div class="i-carbon-filter text-gray-400 mr-2 text-sm"></div>
-                <input v-model="itemFilter" type="text" placeholder="Filter items..."
-                  class="bg-transparent outline-none w-full text-xs text-gray-700 placeholder-gray-400 font-medium">
-              </div>
-            </div>
+          </div>
+
+          <div class="flex items-center bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 mt-4 w-full focus-within:ring-2 focus-within:ring-[#1D5F5E]/20 focus-within:border-[#1D5F5E] transition-all">
+            <div class="i-carbon-filter text-gray-400 mr-2.5 text-base"></div>
+            <input v-model="itemFilter" type="text" placeholder="Filter items..."
+              class="bg-transparent outline-none w-full text-sm text-gray-700 placeholder-gray-400 font-medium">
           </div>
         </div>
 

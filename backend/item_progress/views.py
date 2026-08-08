@@ -1,8 +1,8 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from django.db.models import Q, F, Case, When, FloatField, Sum, Count
-from django.db.models.functions import Length, Upper, Trim, Least, Round
+from django.db.models import Q, F, Case, When, FloatField, Sum, Count, Value
+from django.db.models.functions import Length, Upper, Trim, Least, Round, Coalesce
 from works.models import Work, WorkItem
 from works.utils import contractor_nickname as _nickname, can_see_all_entries
 from works.pagination import ProgressPageNumberPagination
@@ -127,7 +127,12 @@ class ItemSearchView(APIView):
             default=F('supplied_quantity'),
             output_field=FloatField(),
         )
-        queryset = queryset.annotate(done_qty=done_expr)
+        # Coalesce to 0 — supplied_quantity/executed_quantity are NULL (not 0) until
+        # an item's first entry. Left as NULL, done_qty/100 is NULL, and Postgres's
+        # LEAST(NULL, 999.0) ignores the NULL and returns 999.0 — silently marking
+        # every never-touched item as "999% / excess" and letting it slip past the
+        # progress_min filter via the include_excess OR-clause.
+        queryset = queryset.annotate(done_qty=Coalesce(done_expr, Value(0.0), output_field=FloatField()))
         queryset = queryset.annotate(
             progress_pct_calc=Case(
                 When(qty__gt=0, then=Least(Round(F('done_qty') / F('qty') * 100.0), 999.0)),

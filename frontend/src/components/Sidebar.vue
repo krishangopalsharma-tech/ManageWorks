@@ -82,26 +82,38 @@ watchEffect(() => {
   }
 })
 
+// Clicking the page you're already on is a no-op for Vue Router (same path =
+// no navigation, so the page component never resets). Force a real
+// navigation by changing the query so the page remounts fresh — paired with
+// :key="route.fullPath" on <router-view> in App.vue.
+const navigateTo = (path) => {
+  if (route.path === path) {
+    router.push({ path, query: { _r: Date.now() } })
+  } else {
+    router.push(path)
+  }
+}
+
 const handleItemClick = (item) => {
   if (collapsed.value) {
     // In collapsed mode: groups just navigate to first visible sub-item
     if (item.subItems) {
       const first = visibleSubItems(item)[0]
-      if (first?.path) router.push(first.path)
+      if (first?.path) navigateTo(first.path)
     } else if (item.path) {
-      router.push(item.path)
+      navigateTo(item.path)
     }
     return
   }
   if (item.subItems) {
     item.expanded = !item.expanded
   } else if (item.path) {
-    router.push(item.path)
+    navigateTo(item.path)
   }
 }
 
 const handleSubItemClick = (_, sub) => {
-  if (sub.path) router.push(sub.path)
+  if (sub.path) navigateTo(sub.path)
 }
 
 async function handleLogout() {

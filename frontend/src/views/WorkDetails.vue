@@ -1462,12 +1462,6 @@ const generateWorkPDF = async () => {
 
                         <!-- Lot history table -->
                         <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                          <div class="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
-                            <div class="i-carbon-list text-gray-400 text-sm"></div>
-                            <h4 class="text-xs font-bold text-gray-600 uppercase tracking-wide">
-                              Lot History — {{ item.entries.length }} {{ item.entries.length === 1 ? 'entry' : 'entries' }}
-                            </h4>
-                          </div>
                           <div class="overflow-x-auto">
                             <table class="w-full text-xs min-w-[600px]">
                               <thead class="bg-gray-50 text-[10px] text-gray-400 font-bold uppercase tracking-widest">
@@ -1499,8 +1493,8 @@ const generateWorkPDF = async () => {
                                     {{ entry.quantity }} <span class="text-gray-400 font-normal">{{ item.unit }}</span>
                                   </td>
                                   <td class="px-4 py-2.5 text-gray-400 whitespace-nowrap">
-                                    <span v-if="entry.date_of_receipt" class="block font-medium text-gray-600">{{ fmtDate(entry.date_of_receipt) }}</span>
-                                    <span class="text-[10px]">{{ fmtDateTime(entry.submitted_at) }}</span>
+                                    <span v-if="entry.date_of_receipt" class="font-medium text-gray-600">{{ fmtDate(entry.date_of_receipt) }}</span>
+                                    <span v-else class="text-[10px]">{{ fmtDateTime(entry.submitted_at) }}</span>
                                   </td>
                                   <td v-if="item.category !== 'execution'" class="px-4 py-2.5 text-gray-600 font-medium">{{ entry.receive_note_no || '—' }}</td>
                                   <td v-if="item.category !== 'execution'" class="px-4 py-2.5 text-gray-600 font-medium">{{ entry.challan_no || '—' }}</td>
