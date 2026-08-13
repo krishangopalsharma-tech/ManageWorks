@@ -10,23 +10,28 @@ rly_main_menu           ← rly official: New Entry / Recent Entries
 rly_loa_search          ← type last-5 digits of LOA or contractor nickname
 rly_loa_list            ← select from matched LOA list
 rly_choose_type         ← ITEM or GENERAL instruction
-rly_item_input          ← type item ref e.g. A-12 or A1-14
-rly_location            ← type station/section name or skip
-rly_type_text           ← type instruction text; also accepts photo/document; /done to finish
+rly_item_input          ← type item ref, serial number, or description keyword
+rly_item_list           ← select from multiple item matches
+rly_location            ← type station/section name, tap a recent one, or skip
+rly_type_text           ← type instruction text, or skip (attachments are a separate step next)
+rly_attach              ← send photo/document(s), or tap Done/Back
 rly_confirm             ← review + confirm send
 ss_main_menu            ← contractor: New Entry / Open Entries / Recent Entries
 ss_new_loa_search       ← contractor new entry: search LOA (own LOAs only)
 ss_new_loa_list         ← contractor: pick from list
 ss_new_choose_type      ← contractor: ITEM or GENERAL
-ss_new_item_input       ← contractor: type item ref
-ss_new_location         ← contractor: type station/section name or skip
+ss_new_item_input       ← contractor: type item ref, serial number, or description keyword
+ss_new_item_list        ← contractor: select from multiple item matches
+ss_new_location         ← contractor: type station/section name, tap a recent one, or skip
 ss_new_recipients       ← contractor: consignee only OR add extra officials
 ss_new_add_rcpts        ← contractor: type numbers to select extra officials
-ss_new_type_text        ← contractor: type message + attachments; /done to finish
+ss_new_type_text        ← contractor: type message, or skip (attachments are a separate step next)
+ss_new_attach           ← contractor: send photo/document(s), or tap Done/Back
 ss_new_confirm          ← contractor: review + confirm send
 ss_select_thread
 ss_thread_action
-ss_type_reply           ← also accepts photo/document; /done to finish
+ss_type_reply           ← type reply text, or skip (attachments are a separate step next)
+ss_reply_attach         ← send photo/document(s), or tap Done/Back
 ss_confirm_reply
 rly_reassign_search     ← rly official: type name/HRMS/designation to find new consignee
 rly_reassign_list       ← select from multiple matches
@@ -80,7 +85,10 @@ CATEGORY_LABELS = {
     'general_remark':      '💬 General Remark',
 }
 REMOVE_KEYBOARD   = {"remove_keyboard": True}
-TEXT_INPUT_STATES = {'rly_type_text', 'ss_type_reply', 'ss_new_type_text'}
+TEXT_INPUT_STATES = {
+    'rly_type_text', 'ss_type_reply', 'ss_new_type_text',
+    'rly_attach', 'ss_reply_attach', 'ss_new_attach',
+}
 
 
 # ── Telegram API helpers ─────────────────────────────────────────────────────
@@ -520,6 +528,89 @@ def _parse_item_ref(text: str):
     return m.group(1).upper(), m.group(2)
 
 
+def _search_items(work_id, text: str) -> list:
+    """Match a LOA's items by exact ref (A-12), a bare serial number, or a
+    keyword from the item description — so a supervisor doesn't have to
+    remember the exact schedule-code format to find an item."""
+    qs = WorkItem.objects.filter(work_id=work_id)
+    schedule, serial = _parse_item_ref(text)
+    if schedule:
+        return [it for it in qs.filter(schedule__iexact=schedule)
+                if (it.serial_number or '').strip() == serial]
+    t = text.strip()
+    if t.isdigit():
+        matches = [it for it in qs if (it.serial_number or '').strip() == t]
+        if matches:
+            return matches
+    return list(qs.filter(item_desc__icontains=t)[:25])
+
+
+def _item_label(item) -> str:
+    ref   = f"{item.schedule}-{item.serial_number}"
+    desc  = (item.item_desc or '').strip()
+    brief = desc[:60] + ('…' if len(desc) > 60 else '')
+    return f"{ref} — {brief}" if brief else ref
+
+
+def _apply_item_selection(session: BotSession, item):
+    desc       = (item.item_desc or '').strip()
+    brief_desc = desc[:120] + ('…' if len(desc) > 120 else '')
+    full_ref   = f"{item.schedule}-{item.serial_number}"
+    session.context.update({
+        "work_item_id":     item.id,
+        "work_item_ref":    full_ref,
+        "work_item_desc":   f"{full_ref} — {brief_desc}",
+        "instruction_type": "item",
+    })
+
+
+def _show_item_list(token: str, session: BotSession, items: list, list_state: str):
+    lines = [f"<b>Select item</b> ({len(items)} found):\n"]
+    for i, it in enumerate(items, 1):
+        lines.append(f"{i}. {_item_label(it)}")
+    session.context["item_choices"] = [it.id for it in items]
+    session.state = list_state
+    session.save(update_fields=["state", "context", "updated_at"])
+    sendt(token, session, "\n".join(lines),
+         keyboard=number_keyboard(len(items), extras=["◀ Back", "❌ Cancel"]))
+
+
+def _normalize_location(val: str) -> str:
+    """Mirrors the web app's normalizeLocation (ExecutionDetails.vue) so a
+    location entered via bot or web collapses to the same canonical string —
+    uppercase, and a two-token station pair sorted+hyphenated so direction
+    doesn't matter ('Vatva Maninagar' == 'Maninagar Vatva')."""
+    if not val:
+        return ''
+    parts = [p for p in re.split(r'[\s-]+', val.strip().upper()) if p]
+    if len(parts) == 2:
+        return '-'.join(sorted(parts))
+    return ' '.join(parts)
+
+
+def _recent_locations(work_id, limit: int = 3) -> list:
+    """Last few distinct locations used on this LOA, most recent first —
+    shown as quick-pick buttons so repeat entries are a tap, not typing."""
+    if not work_id:
+        return []
+    raw = (
+        SiteRegisterThread.objects
+        .filter(work_id=work_id)
+        .exclude(location='')
+        .order_by('-created_at')
+        .values_list('location', flat=True)[:20]
+    )
+    seen, out = set(), []
+    for loc in raw:
+        key = (loc or '').strip().upper()
+        if key and key not in seen:
+            seen.add(key)
+            out.append(loc)
+        if len(out) >= limit:
+            break
+    return out
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # RLY OFFICIAL FLOW
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -634,21 +725,22 @@ def handle_rly_loa_search(token: str, session: BotSession, text: str):
         _show_loa_list(token, session, matches)
         return
 
-    if t.isalpha():
+    if re.match(r'^[A-Za-z][A-Za-z\s]*$', t):
         nickname  = t.upper()
         all_works = list(Work.objects.order_by('contractor_name', 'loa_number'))
         matched   = [w for w in all_works
-                     if _contractor_nickname(w.contractor_name or '') == nickname]
+                     if _contractor_nickname(w.contractor_name or '') == nickname
+                     or t.lower() in (w.contractor_name or '').lower()]
         if not matched:
             sendt(token, session,
-                 f"⚠️ No contractor with nickname <code>{nickname}</code> found.\n"
-                 "Try again with a different nickname or type last 5 digits of LOA.")
+                 f"⚠️ No contractor matching <code>{t}</code> found.\n"
+                 "Try again with a different name/nickname or type last 5 digits of LOA.")
             return
         _show_loa_list(token, session, matched)
         return
 
     sendt(token, session,
-         "⚠️ Type <b>digits only</b> for LOA suffix or <b>letters only</b> for nickname.")
+         "⚠️ Type <b>digits only</b> for LOA suffix, or a <b>contractor name/nickname</b>.")
 
 
 def handle_rly_loa_list(token: str, session: BotSession, text: str):
@@ -687,10 +779,9 @@ def handle_rly_choose_type(token: str, session: BotSession, text: str):
         session.save(update_fields=["state", "updated_at"])
         sendt(token, session,
              "📦 <b>Item-wise Instruction</b>\n\n"
-             "Type the item reference:\n"
-             "• <code>A-12</code>  → Schedule A, Item 12\n"
-             "• <code>A1-14</code> → Schedule A1, Item 14",
-             remove_kb=True)
+             "Type the item reference (<code>A-12</code>), a serial number, "
+             "or a keyword from the item description.",
+             keyboard=[["◀ Back"], ["❌ Cancel"]])
     elif t.startswith("2") or "general" in t.lower():
         session.context["instruction_type"] = "general"
         session.context.pop("work_item_id", None)
@@ -702,35 +793,44 @@ def handle_rly_choose_type(token: str, session: BotSession, text: str):
 
 
 def handle_rly_item_input(token: str, session: BotSession, text: str):
-    schedule, serial = _parse_item_ref(text)
-    if not schedule:
-        sendt(token, session,
-             "⚠️ Invalid format.\nUse <code>A-12</code> or <code>A1-14</code>.")
+    if text.strip() == "◀ Back":
+        show_instruction_type(token, session)
         return
-    candidates = list(WorkItem.objects.filter(
-        work_id=session.context["work_id"],
-        schedule__iexact=schedule,
-    ))
-    item = None
-    for it in candidates:
-        if (it.serial_number or '').strip() == serial:
-            item = it
-            break
-    if not item:
+    matches = _search_items(session.context["work_id"], text)
+    if not matches:
         sendt(token, session,
-             f"⚠️ Item <code>{text.strip()}</code> not found in this LOA.\nTry again.")
+             f"⚠️ No item matches <code>{text.strip()}</code>.\n"
+             "Try the item ref (A-12), a serial number, or a keyword from the description.")
         return
+    if len(matches) == 1:
+        _apply_item_selection(session, matches[0])
+        session.save(update_fields=["context", "updated_at"])
+        _show_location_prompt(token, session, 'rly_location')
+        return
+    _show_item_list(token, session, matches, 'rly_item_list')
 
-    desc       = (item.item_desc or '').strip()
-    brief_desc = desc[:120] + ('…' if len(desc) > 120 else '')
-    full_ref   = f"{item.schedule}-{item.serial_number}"
 
-    session.context.update({
-        "work_item_id":   item.id,
-        "work_item_ref":  full_ref,
-        "work_item_desc": f"{full_ref} — {brief_desc}",
-        "instruction_type": "item",
-    })
+def handle_rly_item_list(token: str, session: BotSession, text: str):
+    if text.strip() == "◀ Back":
+        session.state = "rly_item_input"
+        session.save(update_fields=["state", "updated_at"])
+        sendt(token, session,
+             "📦 <b>Item-wise Instruction</b>\n\n"
+             "Type the item reference (<code>A-12</code>), a serial number, "
+             "or a keyword from the item description.",
+             keyboard=[["◀ Back"], ["❌ Cancel"]])
+        return
+    try:
+        idx = int(text.strip()) - 1
+    except ValueError:
+        sendt(token, session, "⚠️ Send the item number.")
+        return
+    choices = session.context.get("item_choices", [])
+    if not (0 <= idx < len(choices)):
+        sendt(token, session, f"⚠️ Enter 1–{len(choices)}.")
+        return
+    item = WorkItem.objects.get(pk=choices[idx])
+    _apply_item_selection(session, item)
     session.save(update_fields=["context", "updated_at"])
     _show_location_prompt(token, session, 'rly_location')
 
@@ -742,24 +842,32 @@ def _show_location_prompt(token: str, session: BotSession, next_state: str):
     type_line = ""
     if ctx.get("work_item_id"):
         type_line = f"\n<b>Item:</b> {ctx['work_item_desc']}"
+
+    recent = _recent_locations(ctx.get('work_id'))
+    hint = "\n\n<i>Tap a recent location below, or type a new one.</i>" if recent else ""
+    keyboard = [[loc] for loc in recent] + [["⏭ Skip"], ["❌ Cancel"]]
+
     sendt(token, session,
          f"<b>LOA:</b> {ctx['loa_number']}{type_line}\n\n"
          "📍 <b>Enter location</b>\n"
          "<i>Station name or section where this applies</i>\n"
-         "<i>e.g. Vatva Station, Vatva–Maninagar Section</i>\n\n"
+         "<i>e.g. Vatva Station, Vatva–Maninagar Section</i>"
+         f"{hint}\n\n"
          "Tap <b>⏭ Skip</b> to leave blank.",
-         keyboard=[["⏭ Skip"]])
+         keyboard=keyboard)
 
 
 def handle_rly_location(token: str, session: BotSession, text: str):
-    location = '' if text.strip() in ('⏭ Skip', '/skip') else text.strip()
+    t = text.strip()
+    location = '' if t in ('⏭ Skip', '/skip') else _normalize_location(t)
     session.context['location'] = location
     session.save(update_fields=["context", "updated_at"])
     show_text_prompt(token, session)
 
 
 def handle_ss_location(token: str, session: BotSession, text: str):
-    location = '' if text.strip() in ('⏭ Skip', '/skip') else text.strip()
+    t = text.strip()
+    location = '' if t in ('⏭ Skip', '/skip') else _normalize_location(t)
     session.context['location'] = location
     session.save(update_fields=["context", "updated_at"])
     show_ss_recipients(token, session)
@@ -772,10 +880,23 @@ def show_text_prompt(token: str, session: BotSession):
     sendt(token, session,
          f"<b>LOA:</b> {ctx['loa_number']}\n"
          f"<b>Type:</b> {instr_type} Instruction{item_line}\n\n"
-         "✏️ <b>Type your instruction</b> (you can also send photos/documents).\n"
-         "Tap <b>Done</b> after attachments to finish without text.",
-         keyboard=[["✅ Done — Proceed"], ["❌ Cancel"]])
+         "✏️ <b>Type your instruction</b>\n"
+         "<i>Tap Skip to leave blank — you'll attach photos/documents next.</i>",
+         keyboard=[["⏭ Skip"], ["◀ Back"], ["❌ Cancel"]])
     session.state = "rly_type_text"
+    session.save(update_fields=["state", "updated_at"])
+
+
+def show_rly_attach_prompt(token: str, session: BotSession, just_added: bool = False):
+    if just_added:
+        n    = len(session.context.get("attachments", []))
+        body = f"📎 Attachment {n} saved.\n\nSend another file, or tap Done to proceed."
+    else:
+        body = ("📎 <b>Attach photos or documents</b> (optional).\n\n"
+                "Send a file, or tap Done to proceed without one.")
+    sendt(token, session, body,
+         keyboard=[["✅ Done — Proceed"], ["◀ Back"], ["❌ Cancel"]])
+    session.state = "rly_attach"
     session.save(update_fields=["state", "updated_at"])
 
 
@@ -875,29 +996,42 @@ def do_create_thread(token: str, upload_chat_id: str, session: BotSession, user)
 
 def handle_rly_type_text(token: str, session: BotSession,
                          text: str | None, attachment: dict | None):
+    if text and text.strip() == "◀ Back":
+        _show_location_prompt(token, session, 'rly_location')
+        return
     if attachment:
-        atts    = session.context.setdefault("attachments", [])
+        # user jumped ahead and sent a file already — accept it, hop to attach step
+        atts = session.context.setdefault("attachments", [])
         atts.append(attachment)
-        n       = len(atts)
-        caption = text or ""
-        if caption:
-            session.context["text"] = caption
+        if text:
+            session.context["text"] = text
         session.save(update_fields=["context", "updated_at"])
-        sendt(token, session,
-             f"📎 Attachment {n} saved."
-             + (f" Caption: <i>{caption[:60]}</i>" if caption else "")
-             + "\n\nSend more files or type your instruction. Tap Done to proceed.",
-             keyboard=[["✅ Done — Proceed"], ["❌ Cancel"]])
+        show_rly_attach_prompt(token, session, just_added=True)
         return
 
-    if text:
+    if text and text.strip() not in ("⏭ Skip", "/skip"):
         session.context["text"] = text
         session.save(update_fields=["context", "updated_at"])
-    elif not session.context.get("text") and not session.context.get("attachments"):
-        sendt(token, session,
-             "⚠️ Send your instruction text or at least one attachment first.")
-        return
 
+    show_rly_attach_prompt(token, session)
+
+
+def handle_rly_attach(token: str, session: BotSession,
+                      text: str | None, attachment: dict | None):
+    if text and text.strip() == "◀ Back":
+        show_text_prompt(token, session)
+        return
+    if attachment:
+        atts = session.context.setdefault("attachments", [])
+        atts.append(attachment)
+        session.save(update_fields=["context", "updated_at"])
+        show_rly_attach_prompt(token, session, just_added=True)
+        return
+    if not session.context.get("text") and not session.context.get("attachments"):
+        sendt(token, session,
+             "⚠️ Add at least a message or one attachment before proceeding.",
+             keyboard=[["◀ Back"], ["❌ Cancel"]])
+        return
     show_rly_confirm(token, session)
 
 
@@ -982,17 +1116,19 @@ def handle_ss_new_loa_search(token: str, session: BotSession, user, text: str):
             return
         _ss_show_loa_list(token, session, matches)
         return
-    if t.isalpha():
+    if re.match(r'^[A-Za-z][A-Za-z\s]*$', t):
         nickname  = t.upper()
         all_works = list(Work.objects.filter(id__in=work_ids).order_by('contractor_name', 'loa_number'))
-        matched   = [w for w in all_works if _contractor_nickname(w.contractor_name or '') == nickname]
+        matched   = [w for w in all_works
+                     if _contractor_nickname(w.contractor_name or '') == nickname
+                     or t.lower() in (w.contractor_name or '').lower()]
         if not matched:
             sendt(token, session,
-                 f"⚠️ No contractor with nickname <code>{nickname}</code> in your LOAs.\nTry digits or different nickname.")
+                 f"⚠️ No contractor matching <code>{t}</code> in your LOAs.\nTry digits or a different name/nickname.")
             return
         _ss_show_loa_list(token, session, matched)
         return
-    sendt(token, session, "⚠️ Type <b>digits only</b> for LOA suffix or <b>letters only</b> for nickname.")
+    sendt(token, session, "⚠️ Type <b>digits only</b> for LOA suffix, or a <b>contractor name/nickname</b>.")
 
 
 def handle_ss_new_loa_list(token: str, session: BotSession, user, text: str):
@@ -1029,10 +1165,9 @@ def handle_ss_new_choose_type(token: str, session: BotSession, text: str):
         session.save(update_fields=["state", "updated_at"])
         sendt(token, session,
              "📦 <b>Item-wise Entry</b>\n\n"
-             "Type the item reference:\n"
-             "• <code>A-12</code>  → Schedule A, Item 12\n"
-             "• <code>A1-14</code> → Schedule A1, Item 14",
-             remove_kb=True)
+             "Type the item reference (<code>A-12</code>), a serial number, "
+             "or a keyword from the item description.",
+             keyboard=[["◀ Back"], ["❌ Cancel"]])
     elif t.startswith("2") or "general" in t.lower():
         session.context["instruction_type"] = "general"
         session.context.pop("work_item_id", None)
@@ -1044,29 +1179,44 @@ def handle_ss_new_choose_type(token: str, session: BotSession, text: str):
 
 
 def handle_ss_new_item_input(token: str, session: BotSession, text: str):
-    schedule, serial = _parse_item_ref(text)
-    if not schedule:
-        sendt(token, session, "⚠️ Invalid format.\nUse <code>A-12</code> or <code>A1-14</code>.")
+    if text.strip() == "◀ Back":
+        show_ss_choose_type(token, session)
         return
-    candidates = list(WorkItem.objects.filter(
-        work_id=session.context["work_id"], schedule__iexact=schedule))
-    item = None
-    for it in candidates:
-        if (it.serial_number or '').strip() == serial:
-            item = it; break
-    if not item:
+    matches = _search_items(session.context["work_id"], text)
+    if not matches:
         sendt(token, session,
-             f"⚠️ Item <code>{text.strip()}</code> not found in this LOA.\nTry again.")
+             f"⚠️ No item matches <code>{text.strip()}</code>.\n"
+             "Try the item ref (A-12), a serial number, or a keyword from the description.")
         return
-    desc       = (item.item_desc or '').strip()
-    brief_desc = desc[:120] + ('…' if len(desc) > 120 else '')
-    full_ref   = f"{item.schedule}-{item.serial_number}"
-    session.context.update({
-        "work_item_id":     item.id,
-        "work_item_ref":    full_ref,
-        "work_item_desc":   f"{full_ref} — {brief_desc}",
-        "instruction_type": "item",
-    })
+    if len(matches) == 1:
+        _apply_item_selection(session, matches[0])
+        session.save(update_fields=["context", "updated_at"])
+        _show_location_prompt(token, session, 'ss_new_location')
+        return
+    _show_item_list(token, session, matches, 'ss_new_item_list')
+
+
+def handle_ss_new_item_list(token: str, session: BotSession, text: str):
+    if text.strip() == "◀ Back":
+        session.state = "ss_new_item_input"
+        session.save(update_fields=["state", "updated_at"])
+        sendt(token, session,
+             "📦 <b>Item-wise Entry</b>\n\n"
+             "Type the item reference (<code>A-12</code>), a serial number, "
+             "or a keyword from the item description.",
+             keyboard=[["◀ Back"], ["❌ Cancel"]])
+        return
+    try:
+        idx = int(text.strip()) - 1
+    except ValueError:
+        sendt(token, session, "⚠️ Send the item number.")
+        return
+    choices = session.context.get("item_choices", [])
+    if not (0 <= idx < len(choices)):
+        sendt(token, session, f"⚠️ Enter 1–{len(choices)}.")
+        return
+    item = WorkItem.objects.get(pk=choices[idx])
+    _apply_item_selection(session, item)
     session.save(update_fields=["context", "updated_at"])
     _show_location_prompt(token, session, 'ss_new_location')
 
@@ -1157,34 +1307,57 @@ def show_ss_new_text_prompt(token: str, session: BotSession):
     sendt(token, session,
          f"<b>LOA:</b> {ctx['loa_number']}\n"
          f"<b>Type:</b> {entry_type}{item_line}\n\n"
-         "✏️ <b>Type your message</b> (you can also send photos/documents).\n"
-         "Tap Done to proceed after attachments.",
-         remove_kb=True)
+         "✏️ <b>Type your message</b>\n"
+         "<i>Tap Skip to leave blank — you'll attach photos/documents next.</i>",
+         keyboard=[["⏭ Skip"], ["❌ Cancel"]])
     session.state = "ss_new_type_text"
+    session.save(update_fields=["state", "updated_at"])
+
+
+def show_ss_new_attach_prompt(token: str, session: BotSession, just_added: bool = False):
+    if just_added:
+        n    = len(session.context.get("attachments", []))
+        body = f"📎 Attachment {n} saved.\n\nSend another file, or tap Done to proceed."
+    else:
+        body = ("📎 <b>Attach photos or documents</b> (optional).\n\n"
+                "Send a file, or tap Done to proceed without one.")
+    sendt(token, session, body,
+         keyboard=[["✅ Done — Proceed"], ["◀ Back"], ["❌ Cancel"]])
+    session.state = "ss_new_attach"
     session.save(update_fields=["state", "updated_at"])
 
 
 def handle_ss_new_type_text(token: str, session: BotSession,
                              text: str | None, attachment: dict | None):
     if attachment:
-        atts    = session.context.setdefault("attachments", [])
+        atts = session.context.setdefault("attachments", [])
         atts.append(attachment)
-        n       = len(atts)
-        caption = text or ""
-        if caption:
-            session.context["text"] = caption
+        if text:
+            session.context["text"] = text
         session.save(update_fields=["context", "updated_at"])
-        sendt(token, session,
-             f"📎 Attachment {n} saved."
-             + (f" Caption: <i>{caption[:60]}</i>" if caption else "")
-             + "\n\nSend more files or type your message. Tap Done to proceed.",
-             keyboard=[["✅ Done — Proceed"], ["❌ Cancel"]])
+        show_ss_new_attach_prompt(token, session, just_added=True)
         return
-    if text:
+    if text and text.strip() not in ("⏭ Skip", "/skip"):
         session.context["text"] = text
         session.save(update_fields=["context", "updated_at"])
-    elif not session.context.get("text") and not session.context.get("attachments"):
-        sendt(token, session, "⚠️ Send your message or at least one attachment first.")
+    show_ss_new_attach_prompt(token, session)
+
+
+def handle_ss_new_attach(token: str, session: BotSession,
+                          text: str | None, attachment: dict | None):
+    if text and text.strip() == "◀ Back":
+        show_ss_new_text_prompt(token, session)
+        return
+    if attachment:
+        atts = session.context.setdefault("attachments", [])
+        atts.append(attachment)
+        session.save(update_fields=["context", "updated_at"])
+        show_ss_new_attach_prompt(token, session, just_added=True)
+        return
+    if not session.context.get("text") and not session.context.get("attachments"):
+        sendt(token, session,
+             "⚠️ Add at least a message or one attachment before proceeding.",
+             keyboard=[["◀ Back"], ["❌ Cancel"]])
         return
     show_ss_new_confirm(token, session)
 
@@ -1559,10 +1732,23 @@ def show_thread_actions(token: str, session: BotSession, thread: SiteRegisterThr
 
 def show_ss_reply_prompt(token: str, session: BotSession):
     sendt(token, session,
-         "✏️ <b>Type your reply</b> (you can also send photos/documents).\n"
-         "Tap <b>Done</b> after attachments to finish without text.",
-         keyboard=[["✅ Done — Proceed"], ["❌ Cancel"]])
+         "✏️ <b>Type your reply</b>\n"
+         "<i>Tap Skip to leave blank — you'll attach photos/documents next.</i>",
+         keyboard=[["⏭ Skip"], ["❌ Cancel"]])
     session.state = "ss_type_reply"
+    session.save(update_fields=["state", "updated_at"])
+
+
+def show_ss_reply_attach_prompt(token: str, session: BotSession, just_added: bool = False):
+    if just_added:
+        n    = len(session.context.get("attachments", []))
+        body = f"📎 Attachment {n} saved.\n\nSend another file, or tap Done to proceed."
+    else:
+        body = ("📎 <b>Attach photos or documents</b> (optional).\n\n"
+                "Send a file, or tap Done to proceed without one.")
+    sendt(token, session, body,
+         keyboard=[["✅ Done — Proceed"], ["◀ Back"], ["❌ Cancel"]])
+    session.state = "ss_reply_attach"
     session.save(update_fields=["state", "updated_at"])
 
 
@@ -1715,28 +1901,37 @@ def handle_ss_thread_action(token: str, session: BotSession, user, text: str):
 def handle_ss_type_reply(token: str, session: BotSession,
                          text: str | None, attachment: dict | None):
     if attachment:
-        atts    = session.context.setdefault("attachments", [])
+        atts = session.context.setdefault("attachments", [])
         atts.append(attachment)
-        n       = len(atts)
-        caption = text or ""
-        if caption:
-            session.context["reply_text"] = caption
+        if text:
+            session.context["reply_text"] = text
         session.save(update_fields=["context", "updated_at"])
-        sendt(token, session,
-             f"📎 Attachment {n} saved."
-             + (f" Caption: <i>{caption[:60]}</i>" if caption else "")
-             + "\n\nSend more files or type your reply. Tap Done to proceed.",
-             keyboard=[["✅ Done — Proceed"], ["❌ Cancel"]])
+        show_ss_reply_attach_prompt(token, session, just_added=True)
         return
 
-    if text:
+    if text and text.strip() not in ("⏭ Skip", "/skip"):
         session.context["reply_text"] = text
         session.save(update_fields=["context", "updated_at"])
-    elif not session.context.get("reply_text") and not session.context.get("attachments"):
-        sendt(token, session,
-             "⚠️ Send reply text or at least one attachment first.")
-        return
 
+    show_ss_reply_attach_prompt(token, session)
+
+
+def handle_ss_reply_attach(token: str, session: BotSession,
+                            text: str | None, attachment: dict | None):
+    if text and text.strip() == "◀ Back":
+        show_ss_reply_prompt(token, session)
+        return
+    if attachment:
+        atts = session.context.setdefault("attachments", [])
+        atts.append(attachment)
+        session.save(update_fields=["context", "updated_at"])
+        show_ss_reply_attach_prompt(token, session, just_added=True)
+        return
+    if not session.context.get("reply_text") and not session.context.get("attachments"):
+        sendt(token, session,
+             "⚠️ Add at least a reply or one attachment before proceeding.",
+             keyboard=[["◀ Back"], ["❌ Cancel"]])
+        return
     show_ss_confirm(token, session)
 
 
@@ -2344,14 +2539,9 @@ def dispatch_callback(token: str, cq: dict):
 
         sr_num  = _thread_sr_number(thread)
         session = get_session(chat_id)
-        session.state   = "ss_type_reply"
         session.context = {"thread_id": thread_pk, "sr_number": sr_num, "attachments": [], "_flow_msgs": []}
-        session.save(update_fields=["state", "context", "updated_at"])
-        sendt(token, session,
-             f"↩️ <b>Reply to {sr_num}</b>\n\n"
-             "✏️ Type your reply (you can also send photos/documents).\n"
-             "Tap <b>Done</b> after attachments to finish without text.",
-             keyboard=[["✅ Done — Proceed"], ["❌ Cancel"]])
+        session.save(update_fields=["context", "updated_at"])
+        show_ss_reply_prompt(token, session)
 
     elif data.startswith("reassign:"):
         if role not in ('rly_official', 'admin'):
@@ -2469,10 +2659,14 @@ def dispatch(token: str, upload_chat_id: str, update: dict):
         handle_rly_choose_type(token, session, text or "")
     elif session.state == "rly_item_input":
         handle_rly_item_input(token, session, text or "")
+    elif session.state == "rly_item_list":
+        handle_rly_item_list(token, session, text or "")
     elif session.state == "rly_location":
         handle_rly_location(token, session, text or "")
     elif session.state == "rly_type_text":
         handle_rly_type_text(token, session, text, attachment)
+    elif session.state == "rly_attach":
+        handle_rly_attach(token, session, text, attachment)
     elif session.state == "rly_confirm":
         handle_rly_confirm(token, upload_chat_id, session, user, text or "")
 
@@ -2489,6 +2683,8 @@ def dispatch(token: str, upload_chat_id: str, update: dict):
         handle_ss_new_choose_type(token, session, text or "")
     elif session.state == "ss_new_item_input":
         handle_ss_new_item_input(token, session, text or "")
+    elif session.state == "ss_new_item_list":
+        handle_ss_new_item_list(token, session, text or "")
     elif session.state == "ss_new_location":
         handle_ss_location(token, session, text or "")
     elif session.state == "ss_new_recipients":
@@ -2497,6 +2693,8 @@ def dispatch(token: str, upload_chat_id: str, update: dict):
         handle_ss_add_rcpts(token, session, text or "")
     elif session.state == "ss_new_type_text":
         handle_ss_new_type_text(token, session, text, attachment)
+    elif session.state == "ss_new_attach":
+        handle_ss_new_attach(token, session, text, attachment)
     elif session.state == "ss_new_confirm":
         handle_ss_new_confirm(token, upload_chat_id, session, user, text or "")
 
@@ -2507,6 +2705,8 @@ def dispatch(token: str, upload_chat_id: str, update: dict):
         handle_ss_thread_action(token, session, user, text or "")
     elif session.state == "ss_type_reply":
         handle_ss_type_reply(token, session, text, attachment)
+    elif session.state == "ss_reply_attach":
+        handle_ss_reply_attach(token, session, text, attachment)
     elif session.state == "ss_confirm_reply":
         handle_ss_confirm_reply(token, upload_chat_id, session, user, text or "")
 

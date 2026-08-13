@@ -363,17 +363,18 @@ const analytics = computed(() => {
     return parseFloat((cumulative / 100000).toFixed(2))
   })
 
-  const schAPct    = schAContract > 0 ? schAEarned / schAContract * 100 : 0
-  const schBPct    = schBContract > 0 ? schBEarned / schBContract * 100 : 0
   const overallPct = contractTotal > 0 ? earnedTotal / contractTotal * 100 : 0
-  // Qty-based (avg of per-item ratios) — used for donut display, matches dashboard
+  // Physical quantity progress (avg of per-item supplied-or-executed ÷ qty ratios)
+  // — drives both the Sch A/B summary cards and the Sch A/B donuts. Actual ₹
+  // billing (schAEarned/schAContract etc.) is reserved for Financial Progress
+  // only — it isn't used for these two, on purpose.
   const schAQtyPct = schAQtyCount > 0 ? schAQtySum / schAQtyCount * 100 : 0
   const schBQtyPct = schBQtyCount > 0 ? schBQtySum / schBQtyCount * 100 : 0
 
   // Insights
   const insights = []
-  if (schAPct > schBPct + 30 && schBCount > 0)
-    insights.push({ type: 'warn', text: `Supply (${schAPct.toFixed(1)}%) is significantly ahead of execution (${schBPct.toFixed(1)}%). Idle inventory may be sitting on site.` })
+  if (schAQtyPct > schBQtyPct + 30 && schBCount > 0)
+    insights.push({ type: 'warn', text: `Supply (${schAQtyPct.toFixed(1)}%) is significantly ahead of execution (${schBQtyPct.toFixed(1)}%). Idle inventory may be sitting on site.` })
   if (schACount > 0 && statusA['Not Started'] > schACount * 0.4)
     insights.push({ type: 'warn', text: `${statusA['Not Started']} of ${schACount} Schedule A items (${Math.round(statusA['Not Started'] / schACount * 100)}%) have zero supply recorded.` })
   if (schBCount > 0 && statusB['Not Started'] > schBCount * 0.5)
@@ -411,7 +412,7 @@ const analytics = computed(() => {
     contractTotal, earnedTotal, pendingTotal: contractTotal - earnedTotal,
     schAContract, schAEarned, schACount,
     schBContract, schBEarned, schBCount,
-    schAPct, schBPct, overallPct,
+    overallPct,
     schAQtyPct, schBQtyPct,
     statusA, statusB,
     top10, brands,
@@ -475,7 +476,7 @@ const initCharts = async () => {
       ],
     }],
     graphic: [
-      { type: 'text', left: 'center', top: '34%', style: { text: `${a.schAQtyPct.toFixed(0)}%`, fill: TEAL, fontSize: 22, fontWeight: 700, textAlign: 'center' } },
+      { type: 'text', left: 'center', top: '34%', style: { text: `${a.schAQtyPct.toFixed(2)}%`, fill: TEAL, fontSize: 22, fontWeight: 700, textAlign: 'center' } },
       { type: 'text', left: 'center', top: '50%', style: { text: 'supply', fill: '#9ca3af', fontSize: 10, textAlign: 'center' } },
     ],
   })
@@ -495,7 +496,7 @@ const initCharts = async () => {
       ],
     }],
     graphic: [
-      { type: 'text', left: 'center', top: '34%', style: { text: `${a.schBQtyPct.toFixed(0)}%`, fill: AMBER, fontSize: 22, fontWeight: 700, textAlign: 'center' } },
+      { type: 'text', left: 'center', top: '34%', style: { text: `${a.schBQtyPct.toFixed(2)}%`, fill: AMBER, fontSize: 22, fontWeight: 700, textAlign: 'center' } },
       { type: 'text', left: 'center', top: '50%', style: { text: 'execution', fill: '#9ca3af', fontSize: 10, textAlign: 'center' } },
     ],
   })
@@ -742,8 +743,8 @@ const generateWorkPDF = async () => {
         fmtCrPdf(a.contractTotal),
         fmtCrPdf(a.earnedTotal),
         fmtCrPdf(a.pendingTotal),
-        `${a.schAPct.toFixed(1)}%  (${a.schACount} items)`,
-        `${a.schBPct.toFixed(1)}%  (${a.schBCount} items)`,
+        `${a.schAQtyPct.toFixed(2)}%  (${a.schACount} items)`,
+        `${a.schBQtyPct.toFixed(2)}%  (${a.schBCount} items)`,
         String(a.totalEntries),
       ]],
       headStyles: { fillColor: C_TEAL, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold', halign: 'center' },
@@ -1155,13 +1156,13 @@ const generateWorkPDF = async () => {
             <div class="bg-gray-50 border border-gray-200 rounded-xl p-3 relative overflow-hidden">
               <div class="absolute top-0 left-0 right-0 h-0.5 bg-data-supply"></div>
               <div class="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-0.5 mb-1.5">Supply (Sch A)</div>
-              <div class="text-base font-extrabold text-data-supply leading-tight">{{ analytics?.schAPct?.toFixed(1) }}%</div>
+              <div class="text-base font-extrabold text-data-supply leading-tight">{{ analytics?.schAQtyPct?.toFixed(2) }}%</div>
               <div class="text-[10px] text-gray-400 mt-0.5">{{ analytics?.schACount }} items</div>
             </div>
             <div class="bg-gray-50 border border-gray-200 rounded-xl p-3 relative overflow-hidden">
               <div class="absolute top-0 left-0 right-0 h-0.5 bg-data-exec"></div>
               <div class="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-0.5 mb-1.5">Execution (Sch B)</div>
-              <div class="text-base font-extrabold text-data-exec leading-tight">{{ analytics?.schBPct?.toFixed(1) }}%</div>
+              <div class="text-base font-extrabold text-data-exec leading-tight">{{ analytics?.schBQtyPct?.toFixed(2) }}%</div>
               <div class="text-[10px] text-gray-400 mt-0.5">{{ analytics?.schBCount }} items</div>
             </div>
             <div class="bg-gray-50 border border-gray-200 rounded-xl p-3 relative overflow-hidden">
@@ -1177,7 +1178,7 @@ const generateWorkPDF = async () => {
             <div class="col-span-12 lg:col-span-3 bg-white border border-gray-200 rounded-xl p-4">
               <div class="flex justify-between items-baseline mb-0.5">
                 <h3 class="text-sm font-bold text-gray-900">Schedule A — Supply</h3>
-                <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Value %</span>
+                <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Qty %</span>
               </div>
               <p class="text-[11px] text-gray-400 mb-2">Supply progress across Schedule A items.</p>
               <div id="chart-sch-a" style="height:220px"></div>
@@ -1185,7 +1186,7 @@ const generateWorkPDF = async () => {
             <div class="col-span-12 lg:col-span-3 bg-white border border-gray-200 rounded-xl p-4">
               <div class="flex justify-between items-baseline mb-0.5">
                 <h3 class="text-sm font-bold text-gray-900">Schedule B — Execution</h3>
-                <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Value %</span>
+                <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Qty %</span>
               </div>
               <p class="text-[11px] text-gray-400 mb-2">Execution progress across Schedule B items.</p>
               <div id="chart-sch-b" style="height:220px"></div>
